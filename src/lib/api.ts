@@ -1,0 +1,190 @@
+/**
+ * API client.
+ *
+ * Every call is relative ("/api/...") — in dev Vite proxies it to the Express
+ * backend, and in production Express serves both from the same origin. The
+ * browser never needs to know where the backend lives.
+ *
+ * Two deployment shapes are supported:
+ *
+ *   1. Same-origin (default): Express serves the built site *and* the API.
+ *      `VITE_API_BASE` may point the browser at a different API host instead.
+ *   2. Static preview (GitHub Pages): there is no server at all, so the build
+ *      ships a read-only catalogue snapshot and every write is refused in the
+ *      browser with an honest message rather than a stack of failed requests.
+ *      `VITE_STATIC_PREVIEW=1` turns that on; it is never set for the real site.
+ */
+import type { Catalog, Order } from './types';
+
+const env = import.meta.env ?? {};
+
+/**
+ * Where the built site is mounted.
+ *
+ *   - Express serves from the domain root: BASE_URL is "/".
+ *   - GitHub Pages serves a project site from a sub-folder. The preview build is
+ *     made with a *relative* base ("./") on purpose, so the same folder works
+ *     whether Pages publishes it at /heritagebites/ or /heritagebites/web/ —
+ *     including the case where the repository root is published and the built
+ *     site sits one level down. With a relative base the mount point can only be
+ *     worked out at runtime — from the bundle's own resolved URL.
+ */
+function runtimeBase(): string {
+  const configured = String(env.BASE_URL ?? '');
+  if (configured && configured !== './' && configured !== '.') return configured;
+  if (typeof window === 'undefined') return '/';
+
+  /*
+   * The reliable answer comes from the bundle's own request URL. With a
+   * relative base the shell says `./assets/index-abc.js`, and the browser
+   * resolves that against the *document's* directory — so where the app is
+   * actually mounted can be read straight back off the resolved script URL.
+   * The route in the address bar is irrelevant, which matters on Pages: a deep
+   * link like /heritagebites/web/quest has no trailing slash and would
+   * otherwise look like a directory.
+   */
+  const script = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]');
+  if (script?.src) {
+    try {
+      const { pathname } = new URL(script.src);
+      const cut = pathname.indexOf('/assets/');
+      if (cut >= 0) return `${pathname.slice(0, cut)}/`;
+    } catch {
+      /* fall through to the path-based guess */
+    }
+  }
+
+  /* Last resort: the document's own directory. */
+  const path = window.location.pathname.replace(/\/[^/]*\.[a-z0-9]+$/i, '/').replace(/\/?$/, '/');
+  return path;
+}
+
+export const BASE_URL: string = runtimeBase();
+
+/** Optional absolute API origin, e.g. https://api.heritagebites.co.za. */
+const API_ORIGIN: string = String(env.VITE_API_BASE ?? '').replace(/\/+$/, '');
+
+/** True only for the static GitHub Pages build. */
+export const STATIC_PREVIEW: boolean = String(env.VITE_STATIC_PREVIEW ?? '') === '1';
+
+/**
+ * In a preview the site still needs the catalogue to look like itself. It is
+ * exported read-only at build time (`npm run build:pages`) and served as a
+ * plain file next to the app.
+ */
+const STATIC_CATALOG = `${BASE_URL.replace(/\/$/, '')}/api/catalog.json`;
+
+export const PREVIEW_NOTICE =
+  'This is a preview of the Heritage Bites site, so ordering and messages are switched off for now. ' +
+  'Please call or WhatsApp us on +27 67 013 7587 and we will take it from there.';
+
+/** Public paths stay relative; `/api` calls can be pointed at another origin. */
+const resolve = (path: string) => (path.startsWith('/api') ? `${API_ORIGIN}${path}` : path);
+
+export class ApiError extends Error {
+  status: number;
+  errors: string[];
+  code?: string;
+  requiresAction?: boolean;
+  redirectUrl?: string;
+
+  constructor(status: number, message: string, errors: string[] = [], extra: Record<string, unknown> = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.errors = errors.length ? errors : [message];
+    this.code = extra.code as string | undefined;
+    this.requiresAction = extra.requiresAction as boolean | undefined;
+    this.redirectUrl = extra.redirectUrl as string | undefined;
+  }
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  /*
+   * Nothing on a static build can be saved, charged or tracked: there is no
+   * server to do it. Failing here — with an explanation and the WhatsApp number
+   * — is better than a silent 404, and better than pretending a quest or an
+   * order was recorded.
+   */
+  if (STATIC_PREVIEW && (init.method ?? 'GET').toUpperCase() !== 'GET') {
+    throw new ApiError(503, PREVIEW_NOTICE, [PREVIEW_NOTICE], { preview: true });
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(resolve(path), {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },
+    });
+  } catch {
+    throw new ApiError(0, 'We could not reach the Heritage Bites kitchen. Please check your connection and try again.');
+  }
+
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    const body = (data ?? {}) as Record<string, unknown>;
+    const errors = Array.isArray(body.errors) ? (body.errors as string[]) : [];
+    const message = errors[0] || (typeof body.error === 'string' ? body.error : `Request failed (${res.status})`);
+    throw new ApiError(res.status, message, errors, body);
+  }
+
+  return data as T;
+}
+
+/* ------------------------------ Public -------------------------------- */
+
+export const api = {
+  catalog: () => request<Catalog>(STATIC_PREVIEW ? STATIC_CATALOG : '/api/catalog'),
+
+  search: (q: string) =>
+    request<{ results: { id: string; name: string; localName: string; price: number; image: string; category: string; available: boolean }[]; q: string }>(
+      `/api/search?q=${encodeURIComponent(q)}`,
+    ),
+
+  /**
+   * Server-authoritative quote. The client shows live totals, but this is what
+   * actually gets charged — the server re-prices every line from its own menu.
+   */
+  quote: (payload: { items: unknown[]; fulfilment: string }) =>
+    request<{
+      lines: { itemId: string; name: string; unitPrice: number; qty: number; options: { label: string }[]; lineTotal: number }[];
+      totals: { subtotal: number; delivery: number; discount: number; total: number; currency: string };
+    }>('/api/quote', { method: 'POST', body: JSON.stringify(payload) }),
+
+  placeOrder: (payload: unknown) => request<{ order: Order; loyalty: unknown; trackingToken: string }>('/api/orders', { method: 'POST', body: JSON.stringify(payload) }),
+
+  trackOrder: (code: string, token: string) => request<{ order: Order }>(`/api/orders/${encodeURIComponent(code)}?token=${encodeURIComponent(token)}`),
+
+  cancelOrder: (code: string, token: string) => request<{ order: Order }>(`/api/orders/${encodeURIComponent(code)}/cancel`, { method: 'POST', body: JSON.stringify({ token }) }),
+
+  passport: (phone: string) =>
+    request<{
+      found: boolean;
+      name?: string;
+      stamps: number;
+      orders: number;
+      lifetime?: number;
+      untilFree?: number;
+      cardsCompleted?: number;
+    }>('/api/passport', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    }),
+
+  contact: (payload: unknown) =>
+    request<{ ok: boolean; id: string; delivered: boolean }>('/api/contact', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /** A customer quest: a request for a dish, not an order. */
+  quest: (payload: unknown) =>
+    request<{ ok: boolean; id: string; delivered: boolean }>('/api/quests', { method: 'POST', body: JSON.stringify(payload) }),
+
+  health: () => request<{ ok: boolean; paymentDriver: string; orders: number }>('/api/health'),
+
+};

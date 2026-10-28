@@ -1,0 +1,204 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { api } from '../lib/api';
+import { clockTime, timeAgo, zar } from '../lib/format';
+import { Badge, Button, LinkButton, SectionLabel, Spinner } from '../components/ui';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { useCatalog } from '../store/catalog';
+import type { Order } from '../lib/types';
+
+export default function OrderStatus() {
+  const { code = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const trackingToken = searchParams.get('token') ?? '';
+  const [order, setOrder] = useState<Order | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const settings = useCatalog((s) => s.data?.settings);
+
+  /* The order code in the tab title means two tracking tabs stay tellable
+     apart, which matters when someone has ordered for more than one table. */
+  useDocumentTitle(order ? `Order ${order.code}` : `Order ${code || 'tracking'}`);
+
+  const refresh = useCallback(async () => {
+    try {
+      const r = await api.trackOrder(code, trackingToken);
+      setOrder(r.order);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load that order.');
+    }
+  }, [code, trackingToken]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const cancel = async () => {
+    if (!order || !window.confirm('Cancel this order? This cannot be undone.')) return;
+    setCancelling(true);
+    try {
+      const r = await api.cancelOrder(order.code, trackingToken);
+      setOrder(r.order);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not cancel.');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  if (error && !order) {
+    return (
+      <section className="mx-auto max-w-lg px-4 py-24 text-center">
+        <p className="text-4xl">🔍</p>
+        <h1 className="mt-4 font-display text-3xl font-semibold">We could not find that order</h1>
+        <p className="mt-3 text-ink/60">{error}</p>
+        <LinkButton to="/menu" className="mt-6">Back to the menu</LinkButton>
+      </section>
+    );
+  }
+
+  if (!order) return <Spinner label="Fetching your order…" />;
+
+  const updateMessage = encodeURIComponent(`Hi Heritage Bites, please send me WhatsApp updates for order ${order.code}.`);
+  const updateRequest = `https://wa.me/${(settings?.whatsapp ?? '27670137587').replace(/\D/g, '')}?text=${updateMessage}`;
+  return (
+    <section className="mx-auto max-w-5xl px-4 py-12">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <SectionLabel>Order tracking</SectionLabel>
+          <h1 className="font-display text-4xl font-semibold md:text-5xl">{order.code}</h1>
+          <p className="mt-2 text-sm text-ink/55">
+            Placed {timeAgo(order.createdAt)} · {order.fulfilmentLabel} · {order.items.reduce((n, i) => n + i.qty, 0)} items
+          </p>
+          {order.serviceWindow && (
+            <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-full border border-ink/15 bg-white px-3 py-1 text-[12px] font-medium text-ink/70">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-ochre-deep">
+                {order.serviceWindow.isPreOrder ? 'Pre-order' : 'Service window'}
+              </span>
+              {order.serviceWindow.label}
+            </p>
+          )}
+        </div>
+        <div className="text-right">
+          <Badge tone={order.status === 'cancelled' ? 'chili' : order.status === 'completed' ? 'ink' : 'ochre'}>{order.statusMeta.label}</Badge>
+          <p className="mt-2 font-display text-3xl font-bold">{zar(order.totals.total)}</p>
+          <p className="text-[11px] text-ink/50">
+            {order.payment.status === 'approved' ? `Paid · ${order.payment.brand?.toUpperCase()} ****${order.payment.last4}` : 'Payment on collection/delivery'}
+          </p>
+        </div>
+      </div>
+
+      {/* Order journey: the status is not advanced automatically in this build. */}
+      <div className="mt-8 rounded-3xl border-2 border-ink/10 bg-white p-6">
+        <h2 className="mb-3 font-display text-2xl font-semibold">Order journey</h2>
+        <p className="mb-6 text-sm text-ink/65" aria-live="polite">{order.statusMeta.note}</p>
+
+        <ol className="relative space-y-6 border-l-2 border-ink/12 pl-8">
+          {order.timeline.map((t) => (
+            <li key={t.status} className="relative">
+              <span
+                className={`absolute -left-[41px] top-1 grid h-6 w-6 place-items-center rounded-full border-2 ${
+                  t.current ? 'animate-pulse-ring border-ochre bg-ochre' : t.done ? 'border-ink bg-ink' : 'border-ink/20 bg-bone'
+                }`}
+              >
+                {t.done && !t.current && <span className="text-[10px] font-bold text-bone">✓</span>}
+                {t.current && <span className="h-2 w-2 rounded-full bg-ink" />}
+              </span>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className={`font-semibold ${t.done ? '' : 'text-ink/40'}`}>{t.label}</p>
+                {t.at && <span className="font-mono text-[11px] text-ink/45">{clockTime(t.at)}</span>}
+              </div>
+              <p className={`text-[13px] ${t.done ? 'text-ink/60' : 'text-ink/35'}`}>{t.note}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="mt-6 grid gap-6 md:grid-cols-[1.3fr_1fr]">
+        {/* Items */}
+        <div className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+          <h2 className="font-display text-xl font-semibold">What you ordered</h2>
+          <ul className="mt-4 divide-y divide-ink/8">
+            {order.items.map((it, i) => (
+              <li key={i} className="flex items-start justify-between gap-4 py-3">
+                <span>
+                  <span className="block text-sm font-semibold">{it.qty} × {it.name}</span>
+                  {it.options.length > 0 && <span className="block text-[11px] text-ink/50">{it.options.map((o) => o.label).join(' · ')}</span>}
+                </span>
+                <span className="font-mono text-sm">{zar(it.lineTotal)}</span>
+              </li>
+            ))}
+          </ul>
+          <dl className="mt-4 space-y-1 border-t border-ink/10 pt-3 text-sm">
+            <div className="flex justify-between text-ink/60"><dt>Subtotal</dt><dd className="font-mono">{zar(order.totals.subtotal)}</dd></div>
+            {order.totals.delivery > 0 && <div className="flex justify-between text-ink/60"><dt>Delivery</dt><dd className="font-mono">{zar(order.totals.delivery)}</dd></div>}
+            {order.totals.discount > 0 && <div className="flex justify-between text-ochre-deep"><dt>Discount</dt><dd className="font-mono">−{zar(order.totals.discount)}</dd></div>}
+            <div className="flex justify-between border-t border-ink/10 pt-2 text-base font-bold"><dt>Total</dt><dd className="font-mono">{zar(order.totals.total)}</dd></div>
+          </dl>
+        </div>
+
+        {/* Actions */}
+        <div className="space-y-4">
+          <div className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+            <h2 className="font-display text-xl font-semibold">{order.fulfilment === 'delivery' ? 'Delivery details' : 'Collection details'}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink/70">
+              {order.fulfilment === 'delivery'
+                ? `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout. Delivery is included in the plate price.`
+                : 'Collection is from our shadow kitchen at Standard Bank, Rosebank and Sandton. We confirm the exact collection point by WhatsApp.'}
+            </p>
+            <p className="mt-3 text-sm text-ink/70">
+              <strong>{order.customer.name}</strong>
+              <br />
+              <a href={`tel:${order.customer.phone}`} className="font-mono text-xs hover:text-ochre-deep">{order.customer.phone}</a>
+            </p>
+          </div>
+
+          <div className="rounded-3xl border-2 border-ink/10 bg-ink p-6 text-bone">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre">Need an update?</p>
+            <p className="mt-2 text-sm text-bone/70">Your order is saved here. Automated kitchen updates are unavailable; WhatsApp updates are manual, not automatic. Message or call us for an update.</p>
+            <a
+              href={updateRequest}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-4 py-2.5 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"
+            >
+              Request WhatsApp updates
+            </a>
+            <a
+              href={order.whatsapp}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-ochre"
+            >
+              Message us about {order.code}
+            </a>
+            <a href={`tel:${order.phone.replace(/\s/g, '')}`} className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-ochre">
+              Call {order.phone}
+            </a>
+          </div>
+
+          {order.canCancel && (
+            <Button variant="outline" block onClick={cancel} disabled={cancelling}>
+              {cancelling ? 'Cancelling…' : 'Cancel this order'}
+            </Button>
+          )}
+          {order.payment.status === 'approved' && order.status !== 'cancelled' && (
+            <p className="rounded-2xl border border-ochre/50 bg-ochre/10 p-4 text-sm text-ink/75">
+              This order has been paid. To discuss a cancellation or refund, contact us by phone or WhatsApp; refunds are not processed automatically here.
+            </p>
+          )}
+          {order.loyalty.pointsEarned > 0 && (
+            <div className="rounded-3xl border-2 border-ochre bg-ochre/10 p-5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre-deep">Loyalty card</p>
+              <p className="mt-2 text-sm text-ink/70">
+                This order earned <strong>{order.loyalty.pointsEarned} stamp{order.loyalty.pointsEarned === 1 ? '' : 's'}</strong>.
+              </p>
+              <Link to="/passport" className="mt-2 inline-block text-sm font-semibold text-ochre-deep hover:underline">View your loyalty card</Link>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}

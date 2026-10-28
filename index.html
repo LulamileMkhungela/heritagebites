@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en-ZA">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#16100C" />
+    <title>Heritage Bites — Traditional &amp; Contemporary Plates</title>
+    <meta
+      name="description"
+      content="Traditional South African plates from R100 and contemporary plates from R130 — mogodu, tshotlo, tlhakwana, smiley, wings, short rib and lamb stew. Thursdays and Fridays, delivery in Rosebank and Sandton."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!--
+      Typefaces are self-hosted from /fonts (declared in src/index.css). The
+      site makes no third-party font request, so it renders identically on a
+      network that blocks Google, and first paint no longer waits on a
+      stylesheet from another origin.
+      The first Fraunces rule above is a variable-range declaration; the explicit
+      weight rules after it exist because the latin subsets are static files.
+    -->
+    <link rel="preload" href="/fonts/fraunces-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/manrope-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <meta property="og:title" content="Heritage Bites — Every Bite Tells a Story" />
+    <meta
+      property="og:description"
+      content="Traditional plates R100, contemporary plates R130, delivery included. Thursdays and Fridays in Rosebank and Sandton."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://heritagebites.co.za/" />
+    <meta property="og:image" content="https://heritagebites.co.za/img/hero-feast.jpg" />
+    <meta property="og:locale" content="en_ZA" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://heritagebites.co.za/" />
+
+    <!-- Brand information without a physical location. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Restaurant",
+        "name": "Heritage Bites",
+        "slogan": "Every Bite Tells a Story",
+        "description": "Traditional and contemporary South African plates. Thursdays and Fridays, 12:00 to 13:30, with delivery in Rosebank and Sandton.",
+        "url": "https://heritagebites.co.za/",
+        "telephone": "+27670137587",
+        "email": "heritagebitesfood@gmail.com",
+        "foundingDate": "2025",
+        "servesCuisine": "South African",
+        "priceRange": "R100–R130",
+        "areaServed": ["Rosebank", "Sandton"],
+        "openingHoursSpecification": [
+          {
+            "@type": "OpeningHoursSpecification",
+            "dayOfWeek": ["Thursday", "Friday"],
+            "opens": "12:00",
+            "closes": "13:30"
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <!--
+      This file is the *source* entry: it points at /src/main.tsx, which only
+      Vite can serve. If it is ever opened directly by a browser — which is what
+      happens when GitHub Pages publishes the repository root instead of the
+      built folder — nothing can mount, and the visitor gets a white screen with
+      no explanation.
+
+      So: when this document is being served unbundled, hand over to the built
+      preview in ./web/. The check is deliberately narrow.
+
+        - `script[src$=".tsx"]` only exists before a build. In the built site
+          Vite has already rewritten it to /assets/index-*.js, so this never
+          fires on the Express host.
+        - `@vite/client` means the dev server is serving us, where /src/main.tsx
+          is perfectly valid and redirecting would be wrong.
+    -->
+    <script>
+      (function () {
+        var dev = document.querySelector('script[src*="@vite/client"]');
+        var unbundled = document.querySelector('script[src$=".tsx"]');
+        if (!dev && unbundled) window.location.replace('./web/');
+      })();
+    </script>
+    <noscript>
+      <p style="font-family: system-ui, sans-serif; padding: 2rem">
+        Heritage Bites needs JavaScript. You can also reach us on
+        <a href="https://wa.me/27670137587">WhatsApp</a> or
+        <a href="tel:+27670137587">+27 67 013 7587</a>.
+      </p>
+    </noscript>
+  </body>
+</html>
