@@ -263,6 +263,7 @@ npm run test:interaction # exercise storefront, contact, checkout and order flow
 npm run test:a11y        # route-level accessibility audit
 npm run test:pages       # the GitHub Pages preview (needs `npm run build:pages` + `preview:pages`)
 npm run test:mobile      # phone layout: 12 routes × 4 widths, real Chromium
+npm run backup           # gzipped copy of the runtime JSON store (orders, stamps, outbox)
 npm run verify           # all of the above
 npm run build            # TypeScript and production build
 ```
@@ -339,7 +340,8 @@ Before relying on this as a live restaurant ordering system, complete the items 
 2. Set the live Yoco keys so card payments are real.
 3. Decide who watches the order inbox during the service window, or commission a protected order queue.
 4. Confirm the exact collection point and the Formspree inbox owner.
-5. Production data storage, backups, monitoring, rate limiting and deployment/security review.
-6. Supply the real Uber Eats and Mr D store URLs when available; the current settings are blank and disabled.
+5. Production data storage and monitoring: point `HB_DATA_DIR` at a persistent disk, schedule `npm run backup` off the machine, watch `/api/health`, and set `HB_TRUST_PROXY=1` if the host puts a proxy in front. Rate limiting, gzip and the security headers are already wired; a Content-Security-Policy is the one hardening item still open (it needs nonces threaded through the build, and a bad policy fails silently).
+6. Deployment and security review of the live configuration.
+7. Supply the real Uber Eats and Mr D store URLs when available; the current settings are blank and disabled.
 
 The Figma file itself was not accessible in this workspace. The colour pass used palette values sampled from the uploaded reference screenshots; it does not claim a layout or pixel-for-pixel match to the inaccessible source file.

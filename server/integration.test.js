@@ -31,6 +31,13 @@ process.env.HB_PUSH_DRY_RUN = 'true';
 // Keep the contact endpoint offline: the Formspree call is exercised by its own
 // unit test with a stub, never against the real inbox from a test run.
 process.env.HB_CONTACT_FORMSPREE_URL = '';
+/*
+ * The suite is one client on one address and places more orders in a minute than
+ * any real customer would, so every rate limit is multiplied rather than turned
+ * off: the middleware stays wired and under test, only the allowance is raised.
+ * The limiter itself has its own tests, including one that proves a 429 arrives.
+ */
+process.env.HB_RATE_LIMIT_MULTIPLIER = '50';
 // Tests run against a throwaway data directory so they never touch the demo
 // dataset that the storefront shows.
 const TMP = mkdtempSync(join(tmpdir(), 'hb-test-'));

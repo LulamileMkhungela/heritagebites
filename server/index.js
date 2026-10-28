@@ -7,6 +7,7 @@
  */
 import 'dotenv/config';
 import express from 'express';
+import compression from 'compression';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -28,6 +29,7 @@ import {
   saveSubscription,
 } from './lib/web-push.js';
 import { deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
+import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
 
 const PORT = Number(process.env.PORT || 4000);
@@ -78,7 +80,86 @@ const hasValidTrackingToken = (order, token) => {
 };
 
 const app = express();
+
+/*
+ * Behind a host's reverse proxy every connection appears to come from 127.0.0.1,
+ * which would make every visitor share one rate-limit bucket. Asking Express to
+ * read X-Forwarded-For is only safe when the deployment says there really is a
+ * proxy in front of it, so it is opt-in rather than assumed.
+ */
+if (process.env.HB_TRUST_PROXY === '1') app.set('trust proxy', 1);
+
+/*
+ * gzip. The JavaScript bundle is ~325kB uncompressed and ~94kB gzipped, and this
+ * audience is on mobile data in South Africa, where that difference is the
+ * customer's airtime. The dev server compresses already; the production process
+ * did not, which meant the live site shipped the bigger number.
+ */
+app.use(compression({ threshold: 1024 }));
+
+/*
+ * Security headers.
+ *
+ * Deliberately conservative and hand-written rather than a helmet default: a
+ * mis-set Content-Security-Policy does not throw, it silently breaks the site in
+ * whichever browser is strictest. The two that matter here are HSTS (this site
+ * takes card orders, so plain HTTP must never be offered after the first visit)
+ * and frame-ancestors/X-Frame-Options (a login-free order page inside someone
+ * else's frame is a clickjacking surface).
+ *
+ * There is no CSP yet. The built index.html carries an inline JSON-LD block and
+ * the app uses inline styles, so a real policy needs nonces threaded through the
+ * build. Doing that badly is worse than not doing it; it is listed as follow-up.
+ */
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  /*
+   * Only over HTTPS, and only for a year at a time: HSTS on a domain that is
+   * later served over plain HTTP locks customers out with no way to click past it.
+   */
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
 app.use(express.json({ limit: '256kb' }));
+
+/* ---------------------------- Rate limits ------------------------------ */
+/*
+ * Limits on the endpoints that cost something: money (orders), disk (the JSON
+ * store grows with every order, quest and enquiry), or trust (the loyalty lookup
+ * takes a phone number and returns someone's stamp count, so it is also an
+ * enumeration surface).
+ *
+ * The numbers are deliberately loose, for a reason worth writing down: South
+ * African mobile networks put many customers behind one carrier-grade NAT
+ * address, so a limit tuned to "one person" would lock out a whole shopping
+ * centre. These are tuned to "one busy shopfront", which a script still cannot
+ * reach. Anything that trips a limit gets a 429 and a Retry-After, never a silent
+ * drop, and the client already degrades gracefully (the search palette falls back
+ * to filtering the catalogue it has).
+ *
+ * Read-only endpoints are capped mostly to stop a scraper copying the catalogue
+ * or hammering search, and /api/health is left uncapped because an uptime monitor
+ * polling it every minute is exactly the traffic that should always succeed.
+ */
+const LIMITS = {
+  catalogue: rateLimit({ windowMs: 60_000, max: scaledMax(180), name: 'catalogue' }),
+  search: rateLimit({ windowMs: 60_000, max: scaledMax(180), name: 'search' }),
+  quote: rateLimit({ windowMs: 60_000, max: scaledMax(120), name: 'quote' }),
+  order: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(20), name: 'order' }),
+  orderRead: rateLimit({ windowMs: 60_000, max: scaledMax(120), name: 'order-read' }),
+  cancel: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(10), name: 'cancel' }),
+  loyalty: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(30), name: 'loyalty' }),
+  contact: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(8), name: 'contact' }),
+  quest: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(8), name: 'quest' }),
+  push: rateLimit({ windowMs: 60_000, max: scaledMax(30), name: 'push' }),
+};
 
 /* ------------------------------ Helpers ------------------------------- */
 
@@ -398,7 +479,7 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-app.get('/api/catalog', (_req, res) => {
+app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
   const settings = get('settings');
   res.json({
     categories: get('categories'),
@@ -420,7 +501,7 @@ app.get('/api/catalog', (_req, res) => {
 });
 
 /** Search backs the command-palette: name, local name, language, tags, story. */
-app.get('/api/search', (req, res) => {
+app.get('/api/search', LIMITS.search, (req, res) => {
   const q = String(req.query.q ?? '').trim().toLowerCase();
   const menu = get('menu');
   if (!q) return res.json({ results: [], q });
@@ -444,7 +525,7 @@ app.get('/api/search', (req, res) => {
   res.json({ results, q });
 });
 
-app.post('/api/quote', (req, res) => {
+app.post('/api/quote', LIMITS.quote, (req, res) => {
   const { items, fulfilment, code } = req.body ?? {};
   const { lines, errors, totals, discount } = quote(items, { fulfilment, code });
   if (errors.length) return res.status(422).json({ errors });
@@ -465,7 +546,7 @@ function cardFieldsSent(payment) {
   return Boolean(payment?.card || payment?.token);
 }
 
-app.post('/api/orders', async (req, res) => {
+app.post('/api/orders', LIMITS.order, async (req, res) => {
   const { items, fulfilment = 'collection', customer = {}, code = '', payment = {}, channel = 'card' } = req.body ?? {};
 
   const { lines, errors, totals, discount } = quote(items, { fulfilment, code });
@@ -675,7 +756,7 @@ app.post('/api/orders', async (req, res) => {
   res.status(201).json({ order: publicOrder(order), loyalty: next, trackingToken });
 });
 
-app.get('/api/orders/:code', (req, res) => {
+app.get('/api/orders/:code', LIMITS.orderRead, (req, res) => {
   const order = get('orders').find((o) => o.code.toLowerCase() === String(req.params.code).toLowerCase());
   if (!order || !hasValidTrackingToken(order, String(req.query.token ?? ''))) {
     return res.status(404).json({ error: 'That secure tracking link is invalid or has expired.' });
@@ -684,7 +765,7 @@ app.get('/api/orders/:code', (req, res) => {
   res.json({ order: publicOrder(order) });
 });
 
-app.post('/api/orders/:code/cancel', (req, res) => {
+app.post('/api/orders/:code/cancel', LIMITS.cancel, (req, res) => {
   const orders = get('orders');
   const idx = orders.findIndex((o) => o.code.toLowerCase() === String(req.params.code).toLowerCase());
   if (idx < 0 || !hasValidTrackingToken(orders[idx], String(req.body?.token ?? ''))) {
@@ -714,7 +795,7 @@ app.post('/api/orders/:code/cancel', (req, res) => {
 
 /* ----------------------------- Loyalty card -------------------------- */
 
-app.post('/api/passport', (req, res) => {
+app.post('/api/passport', LIMITS.loyalty, (req, res) => {
   const key = String(req.body?.phone ?? '').replace(/\D/g, '');
   if (key.length < 9) return res.status(422).json({ error: 'Please enter a valid South African cell number.' });
   const record = get('stamps')[key];
@@ -742,7 +823,7 @@ app.post('/api/passport', (req, res) => {
 
 /* -------------------------------- Contact ----------------------------- */
 
-app.post('/api/contact', async (req, res) => {
+app.post('/api/contact', LIMITS.contact, async (req, res) => {
   const { name, phone, email, subject, message } = req.body ?? {};
   if (!name?.trim() || !message?.trim()) return res.status(422).json({ errors: ['Please add your name and a message.'] });
 
@@ -774,7 +855,7 @@ app.post('/api/contact', async (req, res) => {
  */
 const QUEST_DAYS = ['either', 'Thursday', 'Friday'];
 
-app.post('/api/quests', async (req, res) => {
+app.post('/api/quests', LIMITS.quest, async (req, res) => {
   const { name, phone, email, dish, serviceDay = 'either', plates, notes } = req.body ?? {};
   const errors = [];
 
@@ -807,9 +888,8 @@ app.post('/api/quests', async (req, res) => {
 /*
  * Push routes.
  *
- * All three are rate-limited by the same rule the rest of the public API uses:
- * they are small, typed, and reject anything unexpected. The important boundary is
- * authorisation, not rate:
+ * All three are rate-limited (see LIMITS above) and they are small, typed, and
+ * reject anything unexpected. The important boundary is authorisation, not rate:
  *
  *   /api/push/order-subscribe  needs the order code AND its tracking token, so a
  *                              device can only ever subscribe to one order it can
@@ -828,7 +908,7 @@ app.get('/api/push/config', (_req, res) => {
   });
 });
 
-app.post('/api/push/order-subscribe', (req, res) => {
+app.post('/api/push/order-subscribe', LIMITS.push, (req, res) => {
   const config = pushConfig();
   if (!config) return res.status(503).json({ error: 'Order alerts are not switched on for this site.' });
 
@@ -860,7 +940,7 @@ app.post('/api/push/order-subscribe', (req, res) => {
   res.status(201).json({ ok: true, scope: 'order', code: order.code });
 });
 
-app.post('/api/push/owner-subscribe', (req, res) => {
+app.post('/api/push/owner-subscribe', LIMITS.push, (req, res) => {
   const config = pushConfig();
   if (!config) return res.status(503).json({ error: 'Order alerts are not switched on for this site.' });
 
@@ -885,7 +965,7 @@ app.post('/api/push/owner-subscribe', (req, res) => {
   res.status(201).json({ ok: true, scope: 'owner' });
 });
 
-app.post('/api/push/unsubscribe', (req, res) => {
+app.post('/api/push/unsubscribe', LIMITS.push, (req, res) => {
   const endpoint = String(req.body?.endpoint ?? '');
   /*
    * Deliberately unauthenticated: a device may revoke itself at any time, which is

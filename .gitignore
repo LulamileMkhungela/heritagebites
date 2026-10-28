@@ -19,3 +19,6 @@ tsconfig.tsbuildinfo
 
 # Generated intermediate for the PDF builder
 docs/.statement.html
+
+# Local data backups (contain customer records — never commit them)
+backups/
