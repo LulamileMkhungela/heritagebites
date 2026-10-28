@@ -45,11 +45,18 @@ say(`  owner email:          ${n.ownerEmail ? 'configured' : 'NOT CONFIGURED'}`)
 say(`  customer email:       ${n.customerEmail
   ? `configured (${n.customerEmailDedicated ? 'own verified domain' : "shared with the owner's account"})`
   : 'NOT CONFIGURED'}`);
-say(`  web push:             ${n.push?.configured
-  ? `ready — ${n.push.ownerDevices} kitchen device(s), ${n.push.customerDevices} customer device(s)`
-  : n.push?.vapid
-    ? 'keys set but NO owner key, so no kitchen device can enrol'
-    : 'NOT CONFIGURED (HB_VAPID_PUBLIC_KEY / HB_VAPID_PRIVATE_KEY)'}`);
+const PUSH_REASON = {
+  ready: () => 'ready',
+  'missing-keys': () => 'NOT CONFIGURED (run `npm run push:keys`)',
+  'invalid-keys': () => 'BROKEN — HB_VAPID_* is not a valid key pair, so every push would fail',
+  'invalid-subject': () => 'BROKEN — HB_VAPID_SUBJECT must be a mailto: or https: URL',
+  'no-owner-key': () => 'keys set but NO HB_OWNER_PUSH_KEY, so no kitchen device can enrol',
+  disabled: () => 'switched OFF (HB_PUSH_ENABLED=false)',
+};
+const pushLine = (n.push?.reason && PUSH_REASON[n.push.reason]?.()) ?? 'unknown state';
+say(`  web push:             ${pushLine}${n.push?.configured
+  ? ` — ${n.push.ownerDevices} kitchen device(s), ${n.push.customerDevices} customer device(s)`
+  : ''}`);
 say(`  tracking link origin: ${n.publicUrl ?? 'unknown'}`);
 say('');
 say(`  outbox:               ${outbox.pending ?? 0} pending · ${outbox.retrying ?? 0} retrying · `
@@ -57,6 +64,16 @@ say(`  outbox:               ${outbox.pending ?? 0} pending · ${outbox.retrying
 
 if (!n.ownerEmail && !n.push?.configured) {
   problems.push('No channel can reach the kitchen: set HB_SMTP_* (owner email) and/or the Web Push keys plus HB_OWNER_PUSH_KEY.');
+}
+if (n.push?.reason === 'invalid-keys' || n.push?.reason === 'invalid-subject') {
+  problems.push(`Push keys are present but unusable (${n.push.reason}). Run \`npm run push:keys\` and replace both halves.`);
+}
+if (n.push?.reason === 'no-owner-key') {
+  problems.push('Push keys are fine but HB_OWNER_PUSH_KEY is missing, so the kitchen phone can never enrol.');
+}
+if ((n.push?.failingOwnerDevices ?? 0) > 0) {
+  problems.push(`${n.push.failingOwnerDevices} kitchen device(s) have failed three or more sends in a row — `
+    + 'the browser subscription is probably dead. Open /alerts on that device and enrol it again.');
 }
 if (n.push?.configured && (n.push.ownerDevices ?? 0) === 0) {
   problems.push('Push is configured but no kitchen device has enrolled: open /alerts on the kitchen phone or tablet and enrol it.');

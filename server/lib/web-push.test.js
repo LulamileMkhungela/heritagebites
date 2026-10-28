@@ -93,6 +93,48 @@ describe('configuration', () => {
     });
   });
 
+  test('garbage keys switch push off instead of quietly failing on every send', async () => {
+    await withEnv({ ...CONFIGURED, HB_VAPID_PUBLIC_KEY: 'truncated-key', HB_VAPID_PRIVATE_KEY: 'also-wrong' }, () => {
+      assert.equal(pushConfig(), null, 'a pasted half-key must not look configured');
+      const status = pushStatus();
+      assert.equal(status.configured, false);
+      assert.equal(status.vapid, false);
+      assert.equal(status.reason, 'invalid-keys');
+    });
+  });
+
+  test('a public key of the right length but the wrong shape is refused', async () => {
+    /* 65 bytes, but not an uncompressed point: the leading byte must be 0x04. */
+    const wrongShape = Buffer.alloc(65, 7).toString('base64url');
+    await withEnv({ ...CONFIGURED, HB_VAPID_PUBLIC_KEY: wrongShape }, () => {
+      assert.equal(pushConfig(), null);
+      assert.equal(pushStatus().reason, 'invalid-keys');
+    });
+  });
+
+  test('a real generated pair is accepted', async () => {
+    await withEnv(CONFIGURED, () => {
+      assert.ok(pushConfig());
+      assert.equal(pushStatus().reason, 'ready');
+      assert.equal(pushStatus().configured, true);
+    });
+  });
+
+  test('the reason names the exact thing that is missing', async () => {
+    await withEnv({ HB_VAPID_PUBLIC_KEY: undefined, HB_VAPID_PRIVATE_KEY: undefined }, () => {
+      assert.equal(pushStatus().reason, 'missing-keys');
+    });
+    await withEnv({ HB_VAPID_PUBLIC_KEY: publicKey, HB_VAPID_PRIVATE_KEY: privateKey, HB_OWNER_PUSH_KEY: undefined }, () => {
+      assert.equal(pushStatus().reason, 'no-owner-key');
+    });
+    await withEnv({ ...CONFIGURED, HB_VAPID_SUBJECT: 'not-a-url' }, () => {
+      assert.equal(pushStatus().reason, 'invalid-subject');
+    });
+    await withEnv({ ...CONFIGURED, HB_PUSH_ENABLED: 'false' }, () => {
+      assert.equal(pushStatus().reason, 'disabled');
+    });
+  });
+
   test('owner enrolment needs a key of real length', async () => {
     await withEnv({ HB_OWNER_PUSH_KEY: 'short' }, () => {
       assert.equal(ownerKey(), null, 'a guessable key is no key at all');
@@ -225,6 +267,53 @@ describe('delivery', () => {
       const [kept] = store.load('pushSubscriptions', []);
       assert.ok(kept, 'a 503 is not permanent; the device stays enrolled');
       assert.equal(kept.failures, 1);
+    });
+  });
+
+  test('a device that keeps failing is counted so a monitor notices it is deaf', async () => {
+    await withEnv(CONFIGURED, async () => {
+      saveSubscription(makeSub(1), { role: 'owner' });
+      const [target] = store.load('pushSubscriptions', []);
+      const error = Object.assign(new Error('400 invalid keys'), { statusCode: 400 });
+
+      for (let i = 0; i < 3; i += 1) {
+        /* Reclaim the record each round: deliver() does not mutate the caller's copy. */
+        const [current] = store.load('pushSubscriptions', []);
+        await deliver([current], pushPayload('owner-new-order', order), async () => { throw error; });
+      }
+
+      const status = pushStatus();
+      assert.equal(status.failingOwnerDevices, 1);
+      assert.equal(status.ownerDevices, 1, 'it is still enrolled');
+      assert.equal(status.reason, 'ready');
+      assert.ok(target);
+    });
+  });
+
+  test('a healthy send clears the failure count', async () => {
+    await withEnv(CONFIGURED, async () => {
+      saveSubscription(makeSub(1), { role: 'owner' });
+      const failing = Object.assign(new Error('nope'), { statusCode: 500 });
+      let [current] = store.load('pushSubscriptions', []);
+      await deliver([current], pushPayload('owner-new-order', order), async () => { throw failing; });
+      assert.equal(store.load('pushSubscriptions', [])[0].failures, 1);
+
+      [current] = store.load('pushSubscriptions', []);
+      await deliver([current], pushPayload('owner-new-order', order), async () => ({ ok: true }));
+      assert.equal(store.load('pushSubscriptions', [])[0].failures, 0);
+    });
+  });
+
+  test('a device is dropped after twenty failures rather than retried forever', async () => {
+    await withEnv(CONFIGURED, async () => {
+      saveSubscription(makeSub(1), { role: 'owner' });
+      const error = Object.assign(new Error('permanently rejected'), { statusCode: 400 });
+      for (let i = 0; i < 20; i += 1) {
+        const [current] = store.load('pushSubscriptions', []);
+        if (!current) break;
+        await deliver([current], pushPayload('owner-new-order', order), async () => { throw error; });
+      }
+      assert.equal(store.load('pushSubscriptions', []).length, 0, 'a dead endpoint must not be kept forever');
     });
   });
 

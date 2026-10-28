@@ -37,6 +37,35 @@ const money = (value) => `R${Number(value || 0).toFixed(2)}`;
  * to every browser — but the private half signs each push, so a leaked pair lets
  * anyone send notifications to your subscribers.
  */
+function decodeBase64Url(value) {
+  const normalised = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalised + '='.repeat((4 - (normalised.length % 4)) % 4);
+  const raw = Buffer.from(padded, 'base64');
+  return raw.length ? raw : null;
+}
+
+/**
+ * Are these a plausible VAPID pair?
+ *
+ * A pasted key that is truncated, wrapped by a shell, or belongs to a different
+ * pair produces a server that *looks* configured — health green, owner enrols
+ * happily — and then fails on every send. That is the exact silent failure this
+ * build is supposed to prevent, so the keys are checked structurally here rather
+ * than discovered at the first order.
+ *
+ * A VAPID public key is an uncompressed P-256 point (65 bytes, leading 0x04) and
+ * the private key is the 32-byte scalar. This does not prove the halves match —
+ * only a real send can — but it catches every mistake people actually make.
+ */
+function validVapidPair(publicKey, privateKey) {
+  const pub = decodeBase64Url(publicKey);
+  const priv = decodeBase64Url(privateKey);
+  if (!pub || !priv) return false;
+  return pub.length === 65 && pub[0] === 4 && priv.length === 32;
+}
+
+let warnedInvalidKeys = false;
+
 export function pushConfig() {
   if (process.env.HB_PUSH_ENABLED === 'false') return null;
 
@@ -48,7 +77,29 @@ export function pushConfig() {
   /* `mailto:` or an https: URL; the push service rejects anything else. */
   if (!/^(mailto:|https:)/.test(subject)) return null;
 
+  if (!validVapidPair(publicKey, privateKey)) {
+    if (!warnedInvalidKeys) {
+      warnedInvalidKeys = true;
+      console.error('[push] HB_VAPID_PUBLIC_KEY / HB_VAPID_PRIVATE_KEY are not a valid VAPID pair — '
+        + 'push is treated as OFF. Run `npm run push:keys` and replace both values.');
+    }
+    return null;
+  }
+
   return { publicKey, privateKey, subject };
+}
+
+/** Why push is (not) available, for health and the monitor to report. */
+function pushReason() {
+  if (process.env.HB_PUSH_ENABLED === 'false') return 'disabled';
+  const publicKey = process.env.HB_VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.HB_VAPID_PRIVATE_KEY?.trim();
+  const subject = process.env.HB_VAPID_SUBJECT?.trim() || 'mailto:heritagebitesfood@gmail.com';
+  if (!publicKey || !privateKey) return 'missing-keys';
+  if (!/^(mailto:|https:)/.test(subject)) return 'invalid-subject';
+  if (!validVapidPair(publicKey, privateKey)) return 'invalid-keys';
+  if (!ownerKey()) return 'no-owner-key';
+  return 'ready';
 }
 
 /** Who may enrol a device as an owner device. Without it, nobody can. */
@@ -267,10 +318,35 @@ function markSent(id) {
   )));
 }
 
+/**
+ * How many consecutive failed sends before a subscription is treated as dead.
+ *
+ * Browsers report a dead subscription with 404/410 and that is removed at once.
+ * Everything else — a 400 from a malformed key, a device whose keys were rotated
+ * without a new subscription, a push service that keeps rejecting the endpoint —
+ * arrives as a transient-looking error forever. Left alone it is a kitchen phone
+ * that silently stops buzzing, so a device that fails this many times in a row is
+ * dropped and logged loudly.
+ */
+const GIVE_UP_AFTER = 20;
+
 function markFailed(id) {
-  store.update(SUB_STORE, [], (list) => list.map((entry) => (
-    entry.id === id ? { ...entry, failures: (entry.failures ?? 0) + 1 } : entry
-  )));
+  store.update(SUB_STORE, [], (list) => {
+    const next = [];
+    for (const entry of list) {
+      if (entry.id !== id) {
+        next.push(entry);
+        continue;
+      }
+      const failures = (entry.failures ?? 0) + 1;
+      if (failures >= GIVE_UP_AFTER) {
+        console.error(`[push] dropping a ${entry.role} device after ${failures} failed sends — it must be enrolled again`);
+        continue;
+      }
+      next.push({ ...entry, failures });
+    }
+    return next;
+  });
 }
 
 /** Notify every enrolled owner device about a new order. */
@@ -334,12 +410,26 @@ export async function confirmOrderSubscription(record, order, send) {
 export function pushStatus() {
   const config = pushConfig();
   const all = subscriptions();
+  const reason = pushReason();
   return {
     configured: Boolean(config && ownerKey()),
     /* Keys present but no owner key means nobody can enrol an owner device. */
     vapid: Boolean(config),
     ownerKeySet: Boolean(ownerKey()),
+    /*
+     * Why it is off, precisely: missing-keys, invalid-keys, invalid-subject,
+     * no-owner-key, disabled, or ready. Without this, a truncated key pasted into
+     * a host looks identical to a working one until the first order.
+     */
+    reason,
     ownerDevices: all.filter((entry) => entry.role === 'owner').length,
     customerDevices: all.filter((entry) => entry.role === 'customer').length,
+    /*
+     * Devices that have failed several sends in a row. A kitchen phone in this
+     * state is enrolled but not receiving, which is the hardest failure to notice
+     * by hand — so it is counted here for the monitor to shout about.
+     */
+    failingOwnerDevices: all.filter((entry) => entry.role === 'owner' && (entry.failures ?? 0) >= 3).length,
+    failingCustomerDevices: all.filter((entry) => entry.role === 'customer' && (entry.failures ?? 0) >= 3).length,
   };
 }

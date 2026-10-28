@@ -10,7 +10,7 @@ import { join } from 'node:path';
  */
 process.env.NODE_ENV = 'test';
 process.env.HB_DATA_DIR = mkdtempSync(join(tmpdir(), 'hb-notify-test-'));
-for (const key of ['HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL', 'HB_VAPID_PUBLIC_KEY', 'HB_VAPID_PRIVATE_KEY', 'HB_OWNER_PUSH_KEY', 'HB_PUBLIC_URL', 'HB_CUSTOMER_SMTP_HOST', 'HB_CUSTOMER_SMTP_PORT', 'HB_CUSTOMER_SMTP_USER', 'HB_CUSTOMER_SMTP_PASS', 'HB_CUSTOMER_SMTP_FROM', 'HB_CUSTOMER_EMAIL_ENABLED']) {
+for (const key of ['HB_VAPID_PUBLIC_KEY', 'HB_VAPID_PRIVATE_KEY', 'HB_VAPID_SUBJECT', 'HB_PUSH_ENABLED', 'HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL', 'HB_VAPID_PUBLIC_KEY', 'HB_VAPID_PRIVATE_KEY', 'HB_OWNER_PUSH_KEY', 'HB_PUBLIC_URL', 'HB_CUSTOMER_SMTP_HOST', 'HB_CUSTOMER_SMTP_PORT', 'HB_CUSTOMER_SMTP_USER', 'HB_CUSTOMER_SMTP_PASS', 'HB_CUSTOMER_SMTP_FROM', 'HB_CUSTOMER_EMAIL_ENABLED']) {
   delete process.env[key];
 }
 
@@ -19,7 +19,6 @@ const {
   formatCustomerReceipt,
   enqueueOrderAlert,
   processNextOrderAlert,
-  processNextTelegramAlert,
   customerEmailConfig,
   emailConfig,
   notifyStatus,
@@ -405,6 +404,46 @@ describe('outbox visibility', () => {
       await processNextOrderAlert({ sendMail: async () => { throw new Error('mailbox unavailable'); } }, { from: 'a@b.c', to: 'kitchen@example.com' });
       assert.equal(notifyStatus().outbox.failed, 1);
       assert.equal(notifyStatus().healthy, false, 'a permanent failure must make the check shout');
+    });
+  });
+});
+
+describe('broken push counts against health', () => {
+  test('push keys that were set but are unusable make the status unhealthy', async () => {
+    await withEnv({ ...SMTP_ENV, HB_VAPID_PUBLIC_KEY: 'bad', HB_VAPID_PRIVATE_KEY: 'bad' }, () => {
+      const status = notifyStatus();
+      assert.equal(status.ownerEmail, true, 'email still works');
+      assert.equal(status.push.reason, 'invalid-keys');
+      assert.equal(status.healthy, false, 'but the kitchen phone will never buzz, so this is not healthy');
+    });
+  });
+
+  test('an enrolled kitchen device that keeps failing makes the status unhealthy', async () => {
+    const { privateKey: priv, publicKey: pub } = (await import('web-push')).default.generateVAPIDKeys();
+    store.save('pushSubscriptions', [{
+      id: 'deaf', role: 'owner', orderCode: null,
+      endpoint: 'https://push.example.test/deaf',
+      keys: { p256dh: 'a', auth: 'b' },
+      createdAt: new Date().toISOString(), failures: 5,
+    }]);
+    await withEnv({
+      ...SMTP_ENV,
+      HB_VAPID_PUBLIC_KEY: pub,
+      HB_VAPID_PRIVATE_KEY: priv,
+      HB_OWNER_PUSH_KEY: 'k'.repeat(32),
+    }, () => {
+      const status = notifyStatus();
+      assert.equal(status.push.failingOwnerDevices, 1);
+      assert.equal(status.healthy, false, 'enrolled but deaf is not healthy');
+    });
+    store.save('pushSubscriptions', []);
+  });
+
+  test('push that was never configured does not block an email-only setup', async () => {
+    await withEnv({ ...SMTP_ENV, HB_VAPID_PUBLIC_KEY: undefined, HB_VAPID_PRIVATE_KEY: undefined }, () => {
+      const status = notifyStatus();
+      assert.equal(status.push.reason, 'missing-keys');
+      assert.equal(status.healthy, true, 'email reaches the kitchen, so this is honest and healthy');
     });
   });
 });

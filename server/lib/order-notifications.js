@@ -34,7 +34,6 @@ const POLL_MS = Math.max(1000, Number(process.env.HB_ORDER_EMAIL_POLL_MS) || 500
 const STALE_SENDING_MS = 2 * 60 * 1000;
 const RETRY_DELAYS = [30_000, 2 * 60_000, 10 * 60_000, 60 * 60_000, 6 * 60 * 60_000];
 const DEFAULT_PUBLIC_URL = 'https://heritagebites.co.za';
-const TELEGRAM_LIMIT = 4096;
 
 /** Channels that are delivered by the SMTP transport. */
 export const EMAIL_CHANNELS = ['owner-email', 'customer-email'];
@@ -329,6 +328,16 @@ export function notifyStatus() {
     return Number.isFinite(since) && Date.now() - since > staleMs;
   }).length;
 
+  /*
+   * Push that was attempted and is broken counts against health even when email
+   * works. Someone set the keys and believes the kitchen phone buzzes; a green
+   * dashboard would keep that belief alive until an order goes unheard.
+   * Missing keys are different — push may simply not be in use yet.
+   */
+  const pushBroken = ['invalid-keys', 'invalid-subject', 'no-owner-key'].includes(push.reason)
+    /* An enrolled kitchen device that keeps failing is enrolled but deaf. */
+    || (push.failingOwnerDevices ?? 0) > 0;
+
   return {
     ownerEmail: Boolean(owner),
     customerEmail: Boolean(customer),
@@ -345,7 +354,8 @@ export function notifyStatus() {
      * want of configuration, or after any job has given up. It is deliberately
      * strict, because a quiet kitchen is worse than a noisy monitor.
      */
-    healthy: Boolean(owner || push.configured) && waitingConfig === 0 && failed === 0 && stuck === 0,
+    healthy: (Boolean(owner || push.configured) && !pushBroken)
+      && waitingConfig === 0 && failed === 0 && stuck === 0,
     outbox: {
       waitingConfig,
       pending: jobs.filter((job) => job.status === 'pending' || job.status === 'sending').length,
