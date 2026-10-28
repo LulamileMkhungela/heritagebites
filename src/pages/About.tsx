@@ -49,9 +49,9 @@ export default function About() {
             <div className="relative">
               <img src={asset('/img/tshotlo.jpg')} alt="Tshotlo, slow-cooked pounded beef" className="aspect-[4/5] w-full rounded-[2rem] border-2 border-ink object-cover" />
               <div className="absolute -bottom-6 -left-6 hidden rounded-3xl border-2 border-ink bg-ochre p-5 md:block">
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em]">Established</p>
+                <p className="font-mono text-xs uppercase tracking-[0.2em]">Established</p>
                 <p className="font-display text-5xl font-bold">{s?.established ?? 2025}</p>
-                <p className="mt-1 text-[11px] text-ink/60">Our beginning</p>
+                <p className="mt-1 text-xs text-ink/60">Our beginning</p>
               </div>
             </div>
           </Reveal>
@@ -142,7 +142,7 @@ export default function About() {
             ].map((e) => (
               <li key={e.t} className="relative">
                 <span className="absolute -left-[41px] top-1.5 h-3 w-3 rounded-full border-2 border-ink bg-ochre" />
-                <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">{e.y}</p>
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">{e.y}</p>
                 <h3 className="mt-1 font-display text-2xl font-semibold">{e.t}</h3>
                 <p className="mt-1 text-[14px] leading-relaxed text-ink/65">{e.d}</p>
               </li>

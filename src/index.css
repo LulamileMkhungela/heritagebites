@@ -229,3 +229,46 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Responsive safety net                                               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Grid tracks may shrink below their content.
+ *
+ * A grid that only declares columns at a breakpoint (`grid gap-6 md:grid-cols-2`)
+ * has no explicit template on a phone, so the single implicit column is sized
+ * `auto` — which means "at least as wide as the widest card". One card with a
+ * price, a title and a button then measures ~350px at a 320px viewport and the
+ * whole page scrolls sideways, which is the most common mobile layout bug there
+ * is. Sizing the implicit columns `minmax(0, 1fr)` caps every track at the
+ * container and lets the text inside wrap instead.
+ */
+.grid {
+  grid-auto-columns: minmax(0, 1fr);
+}
+
+/*
+ * Height of the sticky site header, measured in the browser (71px on phones,
+ * 75px from `sm` up, where the wordmark's tagline appears). The menu's sticky
+ * category bar parks itself just underneath it, so the two numbers have to
+ * agree or a sliver of scrolling content shows through the seam.
+ */
+:root {
+  --hb-header: 71px;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --hb-header: 75px;
+  }
+}
+
+/*
+ * Note: there is deliberately no `overflow-x: hidden` on <html> or <body> here.
+ * It is the usual "fix" for sideways scrolling and it works by hiding the
+ * symptom — the content is still too wide, it is just unreachable now. It also
+ * breaks `position: sticky`. scripts/mobile-audit.mjs measures real element
+ * widths, so the layout has to actually fit.
+ */

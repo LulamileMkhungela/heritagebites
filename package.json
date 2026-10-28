@@ -19,6 +19,7 @@
     "test:interaction": "node scripts/interaction-smoke.mjs",
     "test:a11y": "node scripts/a11y-audit.mjs",
     "test:pages": "node scripts/pages-smoke.mjs",
+    "test:mobile": "node scripts/mobile-audit.mjs",
     "verify": "npm run test && npm run test:render && npm run test:interaction && npm run test:a11y",
     "push:keys": "node scripts/push-keys.mjs",
     "notify:check": "node scripts/notification-check.mjs"

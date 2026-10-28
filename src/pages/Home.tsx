@@ -67,7 +67,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
 
       <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-20 md:grid-cols-[1.15fr_.85fr] md:py-28 lg:py-32">
         <div>
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-bone/25 px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-ochre">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-bone/25 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ochre">
             <span className="h-1.5 w-1.5 rounded-full bg-ochre" />
             Est. {s?.established ?? 2025} · Every Bite Tells a Story
           </div>
@@ -99,7 +99,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             ].map(([v, k]) => (
               <div key={k}>
                 <dt className="font-display text-3xl font-bold text-ochre">{v}</dt>
-                <dd className="text-[11px] uppercase tracking-wider text-bone/50">{k}</dd>
+                <dd className="text-xs uppercase tracking-wider text-bone/50">{k}</dd>
               </div>
             ))}
           </dl>
@@ -107,7 +107,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
 
         <Reveal delay={150}>
           <div className="rounded-3xl border border-bone/20 bg-bone/5 p-6 backdrop-blur">
-            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ochre">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">
               {service?.headline ?? 'Order your way'}
             </p>
             <p className="mt-3 text-sm leading-relaxed text-bone/70">{service?.message}</p>
@@ -123,7 +123,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
                     <Link to={row.to} className="group flex items-center justify-between gap-3 rounded-2xl border border-bone/15 px-4 py-3 transition-colors hover:border-ochre hover:bg-bone/10">
                       <span>
                         <span className="block text-sm font-semibold">{row.t}</span>
-                        <span className="block text-[11px] text-bone/55">{row.d}</span>
+                        <span className="block text-xs text-bone/55">{row.d}</span>
                       </span>
                       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 text-ochre transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M5 12h14M13 6l6 6-6 6" />
@@ -133,7 +133,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
                     <a href={row.href} target="_blank" rel="noreferrer" className="group flex items-center justify-between gap-3 rounded-2xl border border-bone/15 px-4 py-3 transition-colors hover:border-ochre hover:bg-bone/10">
                       <span>
                         <span className="block text-sm font-semibold">{row.t}</span>
-                        <span className="block text-[11px] text-bone/55">{row.d}</span>
+                        <span className="block text-xs text-bone/55">{row.d}</span>
                       </span>
                       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 text-ochre transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M7 17 17 7M8 7h9v9" />
@@ -143,15 +143,15 @@ function Hero({ onOrder }: { onOrder: () => void }) {
                     <div aria-disabled="true" className="flex items-center justify-between gap-3 rounded-2xl border border-bone/10 px-4 py-3 text-bone/55">
                       <span>
                         <span className="block text-sm font-semibold text-bone/75">{row.t}</span>
-                        <span className="block text-[11px]">{row.d}</span>
+                        <span className="block text-xs">{row.d}</span>
                       </span>
-                      <span className="font-mono text-[10px] uppercase tracking-wider">Soon</span>
+                      <span className="font-mono text-xs uppercase tracking-wider">Soon</span>
                     </div>
                   )}
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-[11px] leading-relaxed text-bone/45">
+            <p className="mt-4 text-xs leading-relaxed text-bone/45">
               Delivery is included in the plate price. Direct app links will appear here when the restaurant provides them.
             </p>
           </div>

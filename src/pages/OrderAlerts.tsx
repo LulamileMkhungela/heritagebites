@@ -124,7 +124,7 @@ export default function OrderAlerts() {
           <Button type="submit" block className="mt-4" disabled={busy || key.trim().length < 16}>
             {busy ? 'Enrolling…' : 'Turn on kitchen alerts for this device'}
           </Button>
-          <p className="mt-3 text-[11px] leading-relaxed text-ink/50">
+          <p className="mt-3 text-xs leading-relaxed text-ink/50">
             This page is protected by that key, not by a login: anyone who has it can enrol a device,
             and every enrolled device receives every order. Rotate the key on the host to revoke access,
             then remove the old devices from here.

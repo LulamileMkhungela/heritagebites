@@ -262,8 +262,21 @@ npm run test:render      # render each public route against the live API
 npm run test:interaction # exercise storefront, contact, checkout and order flows
 npm run test:a11y        # route-level accessibility audit
 npm run test:pages       # the GitHub Pages preview (needs `npm run build:pages` + `preview:pages`)
+npm run test:mobile      # phone layout: 12 routes × 4 widths, real Chromium
 npm run verify           # all of the above
 npm run build            # TypeScript and production build
+```
+
+`npm run test:mobile` is the one that answers "does this work on a phone?". It
+drives a real browser at 320, 360, 390 and 414 CSS px wide, with a two-item
+basket seeded so the header is at its widest, and fails the run if any page is
+wider than the screen. It also reports tap targets under 44px (the iOS/Android
+minimum) and text under 12px. A page that scrolls sideways on a phone is a bug,
+not a preference — that is why this exits non-zero.
+
+```bash
+HB_BASE=http://127.0.0.1:4000 npm run test:mobile   # sits on a dev/preview server
+HB_MOBILE_SHOTS=1 npm run test:mobile               # also writes docs/screens/mobile-*.png
 ```
 
 Refresh screenshots after product or UI changes with a built site and API available at port 4000:

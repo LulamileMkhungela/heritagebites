@@ -122,14 +122,14 @@ export default function Quest() {
                     <article key={category.id} className="rounded-3xl border-2 border-ink/10 bg-white p-5">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <h3 className="font-display text-xl font-semibold">{category.name}</h3>
-                        <p className="font-mono text-[11px] uppercase tracking-wider text-ochre-deep">{category.tagline}</p>
+                        <p className="font-mono text-xs uppercase tracking-wider text-ochre-deep">{category.tagline}</p>
                       </div>
                       <p className="mt-1.5 text-[13px] leading-relaxed text-ink/55">{category.blurb}</p>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
                         {(plate?.groups ?? []).map((group) => (
                           <div key={group.id} className="rounded-2xl bg-bone/60 p-3">
-                            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/45">{groupHeading(group.label)}</p>
+                            <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink/45">{groupHeading(group.label)}</p>
                             <p className="mt-1.5 text-[13px] leading-snug text-ink/75">
                               {group.items.map((item) => item.label).join(' · ')}
                             </p>
@@ -141,7 +141,7 @@ export default function Quest() {
                 })}
               </div>
 
-              <p className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-ink/45">
+              <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-ink/45">
                 <span aria-hidden="true" className="mt-px">ℹ</span>
                 <span>
                   Nothing in this list opens. There are no dish pages here on purpose — it is a quick look at what the pots
@@ -257,7 +257,7 @@ export default function Quest() {
                     {state === 'sending' ? 'Sending…' : 'Send my quest'}
                   </Button>
 
-                  <p className="text-[11px] leading-relaxed text-ink/40">
+                  <p className="text-xs leading-relaxed text-ink/40">
                     A quest does not place an order. If we can cook it, we come back to you first with the date and what it
                     costs, and you decide from there. We only use these details to answer you — see our{' '}
                     <Link to="/policies" className="font-semibold text-ink/60 underline">privacy policy</Link>.

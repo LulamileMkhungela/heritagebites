@@ -175,7 +175,7 @@ export default function MenuPage() {
               >
                 <img src={plate.image} alt="" className="h-24 w-24 shrink-0 rounded-2xl object-cover" loading="lazy" />
                 <span className="min-w-0 flex-1">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre-deep">Build your plate</span>
+                  <span className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Build your plate</span>
                   <span className="mt-0.5 block font-display text-xl font-semibold">{plate.name} · {zar(plate.price)}</span>
                   <span className="mt-1 block text-[12px] leading-snug text-ink/60">{plate.blurb}</span>
                 </span>
@@ -189,7 +189,7 @@ export default function MenuPage() {
       </section>
 
       {/* Category navigation stays visible and follows the section being read. */}
-      <div className="sticky top-[76px] z-30 border-b-2 border-ink/10 bg-bone/95 backdrop-blur">
+      <div className="sticky top-[var(--hb-header)] z-30 border-b-2 border-ink/10 bg-bone/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 py-3">
           <nav className="no-scrollbar flex gap-2 overflow-x-auto" aria-label="Meal categories">
             {sections.map((section) => (
@@ -210,7 +210,7 @@ export default function MenuPage() {
                 type="button"
                 onClick={() => setFilter(filter === item.id ? 'all' : item.id)}
                 aria-pressed={filter === item.id}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filter === item.id ? 'bg-ink text-bone' : 'border border-ink/15 text-ink/60 hover:border-ink/40'}`}
+                className={`inline-flex min-h-11 items-center rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${filter === item.id ? 'bg-ink text-bone' : 'border border-ink/15 text-ink/60 hover:border-ink/40'}`}
               >
                 {item.label}
               </button>
@@ -219,7 +219,7 @@ export default function MenuPage() {
               value={q}
               onChange={(event) => setQ(event.target.value)}
               placeholder="Search meals…"
-              className="ml-auto w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre sm:w-auto"
+              className="ml-auto min-h-11 w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre sm:w-auto"
               aria-label="Search meals"
             />
           </div>
@@ -279,7 +279,7 @@ export default function MenuPage() {
                         loading="lazy"
                         className="aspect-[4/3] w-full object-cover opacity-85 grayscale-[0.15]"
                       />
-                      <span className="absolute left-2 top-2 rounded-full bg-ink/85 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-bone">
+                      <span className="absolute left-2 top-2 rounded-full bg-ink/85 px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-[0.12em] text-bone">
                         Coming soon
                       </span>
                     </div>
@@ -328,15 +328,15 @@ function CatChip({ active, onClick, label, count, soon }: { active: boolean; onC
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${active ? 'bg-ink text-bone' : 'bg-white text-ink/70 hover:bg-white'} ${soon && !active ? 'border border-dashed border-ink/25' : ''}`}
+      className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${active ? 'bg-ink text-bone' : 'bg-white text-ink/70 hover:bg-white'} ${soon && !active ? 'border border-dashed border-ink/25' : ''}`}
     >
       {label}
       {soon && (
-        <span className={`font-mono text-[9px] font-bold uppercase tracking-[0.1em] ${active ? 'text-ochre' : 'text-ochre-deep/70'}`}>
+        <span className={`font-mono text-xs font-bold uppercase tracking-[0.1em] ${active ? 'text-ochre' : 'text-ochre-deep/70'}`}>
           soon
         </span>
       )}
-      <span className={`font-mono text-[11px] ${active ? 'text-ochre' : 'text-ink/40'}`}>{count}</span>
+      <span className={`font-mono text-xs ${active ? 'text-ochre' : 'text-ink/40'}`}>{count}</span>
     </button>
   );
 }
@@ -417,7 +417,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                         className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                       >
                         <span>{it.label}</span>
-                        <span className="font-mono text-[11px] text-ink/40">Included</span>
+                        <span className="font-mono text-xs text-ink/40">Included</span>
                       </button>
                     );
                   })}
@@ -429,7 +429,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
 
         <footer className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-ink/10 bg-bone p-5">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-wider text-ink/45">Plate price, delivery included</p>
+            <p className="font-mono text-xs uppercase tracking-wider text-ink/45">Plate price, delivery included</p>
             <p className="font-display text-3xl font-bold">{zar(total)}</p>
           </div>
           <div className="flex items-center gap-3">
