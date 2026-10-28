@@ -184,7 +184,10 @@ function LiveCheckout() {
     if (!customer.name.trim()) e.name = 'We need a name for the order.';
     if (!customer.phone.trim()) e.phone = 'We need a number to reach you on.';
     else if (normalisePhone(customer.phone).length < 11) e.phone = 'Please enter a valid South African cell number.';
-    if (customer.email && !/^\\S+@\\S+\\.\\S+$/.test(customer.email)) e.email = 'That email does not look right.';
+    const emailGiven = customer.email.trim();
+    if (emailGiven && !/^\S+@\S+\.\S+$/.test(emailGiven)) e.email = 'That email does not look right.';
+    /* Card orders need somewhere to send the receipt; cash does not. */
+    else if (!emailGiven && method2 === 'card') e.email = 'We need an email to send your card receipt to.';
     if (fulfilment === 'delivery') {
       if (!customer.suburb.trim()) e.suburb = 'Which delivery area are you in?';
       if (!customer.address.trim()) e.address = 'Where should we deliver?';
@@ -312,7 +315,11 @@ function LiveCheckout() {
               <Field label="Cell number" hint="so we can contact you" error={errors.phone}>
                 <input className={inputCls} value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="tel" placeholder="+27 82 000 0000" />
               </Field>
-              <Field label="Email" hint="for your receipt" error={errors.email}>
+              <Field
+                label="Email"
+                hint={method2 === 'card' ? 'required — your receipt goes here' : 'optional'}
+                error={errors.email}
+              >
                 <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
               </Field>
               {fulfilment === 'delivery' && (
@@ -347,7 +354,9 @@ function LiveCheckout() {
             <p className="mt-3 text-[11px] leading-relaxed text-ink/50">
               {customer.email.trim()
                 ? 'We email your receipt and a private tracking link to that address as soon as the order is placed. '
-                : 'Add an email and we will send your receipt and a private tracking link. '}
+                : method2 === 'card'
+                  ? 'A card order needs an email address — it is the only place your receipt can go. '
+                  : 'Add an email and we will send your receipt and a private tracking link. '}
               The kitchen gets the order the moment you place it; WhatsApp replies come from a person, so they are not instant.
             </p>
           </fieldset>

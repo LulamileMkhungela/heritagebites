@@ -525,7 +525,7 @@ await step('the loyalty card looks up stamps by cell number', async () => {
     body: JSON.stringify({
       channel: 'card',
       fulfilment: 'collection',
-      customer: { name: 'Passport Test', phone: loyal },
+      customer: { name: 'Passport Test', phone: loyal, email: 'passport@example.co.za' },
       items: [{ itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } }],
       payment: { method: 'card', card: { number: '4242424242424242', expiry: '12/32', cvc: '123', holder: 'P TEST' } },
     }),
@@ -626,6 +626,25 @@ await step('validation blocks an empty order', async () => {
   return 'blocked with a message';
 });
 
+await step('a card order without an email is blocked, because the receipt has nowhere to go', async () => {
+  const ordersBefore = await orderCount();
+
+  const byPlaceholder = (re) => [...s1.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
+  s1.setInput(byPlaceholder(/Thabo Mahlangu/), 'Interaction Test');
+  s1.setInput(byPlaceholder(/\+27 82/), '+27 82 000 7777');
+  s1.setInput(byPlaceholder(/4242 4242/), '4242 4242 4242 4242');
+  s1.setInput(byPlaceholder(/MM\/YY/), '12/32');
+  s1.setInput(byPlaceholder(/^123$/), '123');
+  s1.setInput(byPlaceholder(/T MAHLANGU/), 'I TEST');
+
+  s1.click(s1.byText('button[type="submit"]', /Place order/i)[0]);
+  await s1.waitFor(() => /need an email/i.test(s1.text()), 'email requirement', 10000);
+
+  const ordersAfter = await orderCount();
+  if (ordersAfter !== ordersBefore) throw new Error(`an order was created without an email: ${ordersBefore} -> ${ordersAfter}`);
+  return 'blocked with an email requirement';
+});
+
 await step('a declined card is refused and does not create an order', async () => {
   const ordersBefore = await orderCount();
 
@@ -633,6 +652,7 @@ await step('a declined card is refused and does not create an order', async () =
   const byPlaceholder = (re) => [...fields].find((f) => re.test(f.placeholder ?? ''));
   s1.setInput(byPlaceholder(/Thabo Mahlangu/), 'Interaction Test');
   s1.setInput(byPlaceholder(/\+27 82/), '+27 82 000 7777');
+  s1.setInput(byPlaceholder(/you@example/), 'interaction@example.co.za');
   s1.setInput(byPlaceholder(/4242 4242/), '4000 0000 0000 0002'); // declined
   s1.setInput(byPlaceholder(/MM\/YY/), '12/32');
   s1.setInput(byPlaceholder(/^123$/), '123');
@@ -711,6 +731,15 @@ await step('an approved card places the order and lands on the tracking page', a
   s1.__code = code;
   s1.__trackingToken = trackingToken;
   return code;
+});
+
+await step('the receipt says where it was emailed, masked', async () => {
+  if (!/Receipt (emailed to|on its way to)/i.test(s1.text())) {
+    throw new Error('the order page does not confirm the receipt destination');
+  }
+  if (!/i\*+@example\.co\.za/.test(s1.text())) throw new Error('the masked receipt address is missing');
+  if (/interaction@example\.co\.za/.test(s1.text())) throw new Error('the full email address is exposed on the page');
+  return 'masked receipt address shown';
 });
 
 await step('the tracking page offers manual WhatsApp updates, an order ticket and a shareable receipt', async () => {

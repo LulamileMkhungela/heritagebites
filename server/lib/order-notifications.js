@@ -234,32 +234,74 @@ export function trackingUrlFor(order, token) {
   return `${publicBaseUrl()}/order/${encodeURIComponent(order.code)}?token=${encodeURIComponent(token)}`;
 }
 
-export function emailConfig() {
-  if (process.env.HB_ORDER_EMAIL_ENABLED === 'false') return null;
+/**
+ * Read one SMTP block, e.g. HB_SMTP_* or HB_CUSTOMER_SMTP_*.
+ * Returns null unless every value needed to send is present.
+ */
+function readSmtp(prefix) {
+  const host = process.env[`${prefix}HOST`]?.trim();
+  const port = Number(process.env[`${prefix}PORT`] || 465);
+  const user = process.env[`${prefix}USER`]?.trim();
+  const pass = process.env[`${prefix}PASS`];
+  const from = process.env[`${prefix}FROM`]?.trim() || user;
+  const secureRaw = process.env[`${prefix}SECURE`];
 
-  const host = process.env.HB_SMTP_HOST?.trim();
-  const port = Number(process.env.HB_SMTP_PORT || 465);
-  const user = process.env.HB_SMTP_USER?.trim();
-  const pass = process.env.HB_SMTP_PASS;
-  const from = process.env.HB_SMTP_FROM?.trim() || user;
-  const settings = store.load('settings', {}) ?? {};
-  const settingsEmail = typeof settings.email === 'string' ? settings.email.trim() : '';
-  const to = process.env.HB_ORDER_ALERT_EMAIL?.trim() || settingsEmail;
-
-  if (!host || !Number.isInteger(port) || port < 1 || port > 65535 || !user || !pass || !from || !to) return null;
+  if (!host || !Number.isInteger(port) || port < 1 || port > 65535 || !user || !pass || !from) return null;
 
   return {
     host,
     port,
-    secure: process.env.HB_SMTP_SECURE === undefined
-      ? port === 465
-      : process.env.HB_SMTP_SECURE === 'true',
+    secure: secureRaw === undefined ? port === 465 : secureRaw === 'true',
     user,
     pass,
     from,
-    to,
-    /* The customer receipt is on the same free SMTP account; this only turns it off. */
-    customer: process.env.HB_CUSTOMER_EMAIL_ENABLED !== 'false',
+  };
+}
+
+/** The kitchen ticket: the owner's own inbox, on the owner's SMTP account. */
+export function emailConfig() {
+  if (process.env.HB_ORDER_EMAIL_ENABLED === 'false') return null;
+
+  const smtp = readSmtp('HB_SMTP_');
+  if (!smtp) return null;
+
+  const settings = store.load('settings', {}) ?? {};
+  const settingsEmail = typeof settings.email === 'string' ? settings.email.trim() : '';
+  const to = process.env.HB_ORDER_ALERT_EMAIL?.trim() || settingsEmail;
+  if (!to) return null;
+
+  return { ...smtp, to };
+}
+
+/**
+ * Customer receipts, which may use a different account from the kitchen ticket.
+ *
+ * Deliverability is the reason this is separate. The owner's inbox is a Gmail
+ * address, and mail sent from gmail.com while its links point at
+ * heritagebites.co.za is the classic shape of spoofed mail: a fair share of
+ * receipts end up in spam. A transactional provider with a verified sending
+ * domain (Brevo's free plan is 300 emails/day, no card) lands far more reliably.
+ *
+ * So: HB_SMTP_* carries the kitchen ticket on Gmail, and if HB_CUSTOMER_SMTP_* is
+ * set, receipts go out through the verified provider instead. Without it, both
+ * channels share the owner's account — still free, just more likely to be
+ * filtered.
+ */
+export function customerEmailConfig() {
+  if (process.env.HB_ORDER_EMAIL_ENABLED === 'false') return null;
+  if (process.env.HB_CUSTOMER_EMAIL_ENABLED === 'false') return null;
+
+  /* A dedicated block wins; otherwise inherit the owner's credentials. */
+  const dedicated = readSmtp('HB_CUSTOMER_SMTP_');
+  const smtp = dedicated ?? readSmtp('HB_SMTP_');
+  if (!smtp) return null;
+
+  const owner = emailConfig();
+  return {
+    ...smtp,
+    /** Where a reply to a receipt should land. */
+    replyTo: owner?.to ?? null,
+    dedicated: Boolean(dedicated),
   };
 }
 
@@ -278,15 +320,64 @@ export function telegramConfig() {
   return { token, chatId };
 }
 
-/** What is actually wired up — booleans only, no addresses or secrets. */
+/**
+ * What is actually wired up — booleans only, no addresses or secrets.
+ *
+ * `outbox` is the loud part: free tiers fail silently (an expired app password,
+ * a suspended provider, a revoked bot), so pending/failed counts are exposed for
+ * an uptime monitor to alert on. See `scripts/notification-check.mjs`.
+ */
 export function notifyStatus() {
-  const email = emailConfig();
+  const owner = emailConfig();
+  const customer = customerEmailConfig();
   const telegram = telegramConfig();
+  const jobs = store.load(JOB_STORE, []) ?? [];
+
+  const waitingConfig = jobs.filter((job) => job.status === 'waiting_config').length;
+  const failed = jobs.filter((job) => job.status === 'failed').length;
+  /*
+   * A job that has already errored and is waiting to retry. Zero of these is the
+   * only genuinely quiet state: it means every notification so far went out on
+   * its first attempt.
+   */
+  const retrying = jobs.filter((job) => job.status === 'pending' && (job.attempts ?? 0) >= 1 && job.lastError).length;
+  /*
+   * Anything that has been stuck for more than 15 minutes is no longer a blip.
+   * Two service windows' worth of orders going unheard is a business problem, not
+   * a network hiccup, so it counts as unhealthy.
+   */
+  const staleMs = 15 * 60 * 1000;
+  const stuck = jobs.filter((job) => {
+    if (!['pending', 'sending', 'waiting_config'].includes(job.status)) return false;
+    const since = Date.parse(job.startedAt ?? job.createdAt ?? '');
+    return Number.isFinite(since) && Date.now() - since > staleMs;
+  }).length;
+
   return {
-    ownerEmail: Boolean(email),
-    customerEmail: Boolean(email?.customer),
+    ownerEmail: Boolean(owner),
+    customerEmail: Boolean(customer),
+    /* True when receipts go through their own verified-domain account. */
+    customerEmailDedicated: Boolean(customer?.dedicated),
     telegram: Boolean(telegram),
     publicUrl: publicBaseUrl(),
+    /**
+     * One boolean for a monitor to alert on.
+     *
+     * Free tiers fail silently: an app password is revoked, a provider suspends
+     * the account, a bot token is rotated — and nothing sounds. `healthy` is false
+     * while no channel can reach the kitchen, while orders sit un-sendable for
+     * want of configuration, or after any job has given up. It is deliberately
+     * strict, because a quiet kitchen is worse than a noisy monitor.
+     */
+    healthy: Boolean(owner || telegram) && waitingConfig === 0 && failed === 0 && stuck === 0,
+    outbox: {
+      waitingConfig,
+      pending: jobs.filter((job) => job.status === 'pending' || job.status === 'sending').length,
+      retrying,
+      stuck,
+      failed,
+      sent: jobs.filter((job) => job.status === 'sent').length,
+    },
   };
 }
 
@@ -314,11 +405,12 @@ export function enqueueOrderAlert(order, context = {}) {
   if (!order?.code) throw new Error('Cannot queue an order alert without an order code.');
 
   const email = emailConfig();
+  const customer = customerEmailConfig();
   const telegram = telegramConfig();
   const createdAt = new Date().toISOString();
   const plans = [];
 
-  if (email?.customer && validEmail(order.customer?.email)) {
+  if (customer && validEmail(order.customer?.email)) {
     plans.push({ channel: CUSTOMER_EMAIL, status: 'pending', trackingToken: context.trackingToken ?? null });
   }
   /* Always queued, even without SMTP: it waits as `waiting_config` so an order
@@ -416,13 +508,14 @@ export async function processNextOrderAlert(transport, config) {
     }
 
     const settings = store.load('settings', {}) ?? {};
-    const message = channel === CUSTOMER_EMAIL
+    const isReceipt = channel === CUSTOMER_EMAIL;
+    const message = isReceipt
       ? formatCustomerReceipt(order, {
         settings,
         trackingUrl: trackingUrlFor(order, job.trackingToken),
       })
       : formatOrderAlert(order);
-    const to = channel === CUSTOMER_EMAIL ? String(order.customer?.email ?? '').trim() : config.to;
+    const to = isReceipt ? String(order.customer?.email ?? '').trim() : config.to;
 
     if (!to) {
       failJob(job, 'No customer email address was saved with this order.');
@@ -430,14 +523,22 @@ export async function processNextOrderAlert(transport, config) {
       return;
     }
 
+    /* A receipt goes out through the verified-domain account when one exists, so
+       it is not filtered for coming from gmail.com. Older callers pass only one
+       transport; the receipt then uses it and the shared sender. */
+    const receiptConfig = isReceipt ? config.customer : null;
+    const sendWith = isReceipt && config.customerTransport ? config.customerTransport : transport;
+    const from = isReceipt && receiptConfig ? receiptConfig.from : config.from;
+    const replyTo = isReceipt ? (receiptConfig?.replyTo ?? config.to) : undefined;
+
     try {
-      const result = await transport.sendMail({
-        from: config.from,
+      const result = await sendWith.sendMail({
+        from,
         to,
         subject: message.subject,
         text: message.text,
         /* A customer replying to their receipt reaches the kitchen inbox. */
-        ...(channel === CUSTOMER_EMAIL ? { replyTo: config.to } : {}),
+        ...(replyTo ? { replyTo } : {}),
       });
       updateJob(job.id, {
         status: 'sent',
@@ -536,6 +637,18 @@ export async function processNextTelegramAlert(send = sendTelegramMessage, confi
 
 /* -------------------------------- Worker ------------------------------- */
 
+function transportFor(smtp) {
+  return nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: { user: smtp.user, pass: smtp.pass },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  });
+}
+
 /**
  * Start one non-blocking worker. It runs whichever channels are configured and
  * stays quiet when none are, so checkout never depends on notification setup.
@@ -544,28 +657,31 @@ export function startOrderNotificationWorker() {
   if (workerStarted) return true;
 
   const email = emailConfig();
+  const customer = customerEmailConfig();
   const telegram = telegramConfig();
-  if (!email && !telegram) {
+  if (!email && !customer && !telegram) {
     console.info('[order-notifications] no SMTP or Telegram configuration yet; orders are still saved');
     return false;
   }
 
-  const transport = email
-    ? nodemailer.createTransport({
-      host: email.host,
-      port: email.port,
-      secure: email.secure,
-      auth: { user: email.user, pass: email.pass },
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 20_000,
-    })
+  /* One connection per account: reusing the owner's transport when the receipt
+     inherits its credentials keeps the pool and the login count honest. */
+  const ownerTransport = email ? transportFor(email) : null;
+  const sameAccount = customer && email
+    && customer.host === email.host && customer.port === email.port && customer.user === email.user;
+  const customerTransport = customer
+    ? (sameAccount ? ownerTransport : transportFor(customer))
     : null;
+  const emailTransport = ownerTransport ?? customerTransport;
+  const emailConfigForWorker = {
+    ...(email ?? {}),
+    ...(customer ? { customer, customerTransport } : {}),
+  };
 
   workerStarted = true;
   const run = async () => {
-    if (transport) {
-      await processNextOrderAlert(transport, email).catch((error) => {
+    if (emailTransport) {
+      await processNextOrderAlert(emailTransport, emailConfigForWorker).catch((error) => {
         console.error(`[order-notifications] email worker error: ${String(error?.message ?? error).slice(0, 200)}`);
       });
     }
@@ -582,7 +698,13 @@ export function startOrderNotificationWorker() {
   workerTimer = setTimeout(run, 0);
   workerTimer.unref?.();
 
-  const parts = [email ? `email → ${email.to}` : null, telegram ? 'Telegram → owner phone' : null].filter(Boolean);
+  const parts = [
+    email ? `owner email → ${email.to}` : null,
+    customer
+      ? `customer receipts → ${customer.dedicated ? 'own verified account' : "owner's account (check spam)"}`
+      : null,
+    telegram ? 'Telegram → owner phone' : null,
+  ].filter(Boolean);
   console.info(`[order-notifications] worker enabled (${parts.join(', ')})`);
   return true;
 }

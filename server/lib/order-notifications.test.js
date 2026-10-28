@@ -10,7 +10,7 @@ import { join } from 'node:path';
  */
 process.env.NODE_ENV = 'test';
 process.env.HB_DATA_DIR = mkdtempSync(join(tmpdir(), 'hb-notify-test-'));
-for (const key of ['HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL', 'HB_TELEGRAM_BOT_TOKEN', 'HB_TELEGRAM_CHAT_ID', 'HB_PUBLIC_URL']) {
+for (const key of ['HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL', 'HB_TELEGRAM_BOT_TOKEN', 'HB_TELEGRAM_CHAT_ID', 'HB_PUBLIC_URL', 'HB_CUSTOMER_SMTP_HOST', 'HB_CUSTOMER_SMTP_PORT', 'HB_CUSTOMER_SMTP_USER', 'HB_CUSTOMER_SMTP_PASS', 'HB_CUSTOMER_SMTP_FROM', 'HB_CUSTOMER_EMAIL_ENABLED']) {
   delete process.env[key];
 }
 
@@ -21,6 +21,8 @@ const {
   enqueueOrderAlert,
   processNextOrderAlert,
   processNextTelegramAlert,
+  customerEmailConfig,
+  emailConfig,
   notifyStatus,
   publicBaseUrl,
   trackingUrlFor,
@@ -325,6 +327,131 @@ describe('outbox', () => {
       assert.equal(retried.attempts, 1);
       assert.ok(retried.nextAttemptAt, 'a retry is scheduled');
       assert.match(retried.lastError, /try later/);
+    });
+  });
+});
+
+describe('customer receipts on their own sending account', () => {
+  const BREVO = {
+    HB_CUSTOMER_SMTP_HOST: 'smtp-relay.brevo.com',
+    HB_CUSTOMER_SMTP_PORT: '587',
+    HB_CUSTOMER_SMTP_USER: 'brevo-user@smtp-brevo.com',
+    HB_CUSTOMER_SMTP_PASS: 'brevo-key',
+    HB_CUSTOMER_SMTP_FROM: 'Heritage Bites <orders@heritagebites.co.za>',
+  };
+
+  test('without its own account a receipt inherits the owner credentials', async () => {
+    await withEnv(SMTP_ENV, () => {
+      const owner = emailConfig();
+      const customer = customerEmailConfig();
+      assert.equal(customer.dedicated, false);
+      assert.equal(customer.host, owner.host);
+      assert.equal(customer.user, owner.user);
+      assert.equal(customer.from, owner.from);
+      assert.equal(customer.replyTo, 'kitchen@example.com', 'a reply still reaches the kitchen');
+      assert.equal(notifyStatus().customerEmailDedicated, false);
+    });
+  });
+
+  test('a dedicated block wins, so receipts leave from a verified domain', async () => {
+    await withEnv({ ...SMTP_ENV, ...BREVO }, () => {
+      const owner = emailConfig();
+      const customer = customerEmailConfig();
+      assert.equal(customer.dedicated, true);
+      assert.equal(customer.host, 'smtp-relay.brevo.com');
+      assert.equal(customer.port, 587);
+      assert.equal(customer.secure, false, 'port 587 means STARTTLS, not implicit TLS');
+      assert.equal(customer.from, 'Heritage Bites <orders@heritagebites.co.za>');
+      assert.equal(owner.host, 'smtp.example.com', "the kitchen ticket stays on the owner's account");
+      assert.equal(notifyStatus().customerEmailDedicated, true);
+    });
+  });
+
+  test('the two channels are routed to the two transports with the right sender', async () => {
+    await withEnv({ ...SMTP_ENV, ...BREVO }, async () => {
+      const order = makeOrder('HB-0600C');
+      store.save('orders', [order]);
+      enqueueOrderAlert(order, { trackingToken: 'tok-6' });
+
+      const ownerSent = [];
+      const customerSent = [];
+      const config = {
+        from: 'alerts@example.com',
+        to: 'kitchen@example.com',
+        customer: customerEmailConfig(),
+        customerTransport: { sendMail: async (email) => { customerSent.push(email); return { messageId: 'c1' }; } },
+      };
+
+      /* Kitchen ticket first, on the owner transport. */
+      await processNextOrderAlert({ sendMail: async (email) => { ownerSent.push(email); return { messageId: 'o1' }; } }, config);
+      assert.equal(ownerSent.length, 1);
+      assert.equal(ownerSent[0].from, 'alerts@example.com');
+      assert.equal(ownerSent[0].to, 'kitchen@example.com');
+      assert.equal(customerSent.length, 0);
+
+      /* Then the receipt, on the dedicated account. */
+      await processNextOrderAlert({ sendMail: async () => { throw new Error('the owner transport must not carry a receipt'); } }, config);
+      assert.equal(customerSent.length, 1);
+      assert.equal(customerSent[0].from, 'Heritage Bites <orders@heritagebites.co.za>');
+      assert.equal(customerSent[0].to, 'customer@example.co.za');
+      assert.equal(customerSent[0].replyTo, 'kitchen@example.com');
+      assert.match(customerSent[0].text, /\?token=tok-6/);
+    });
+  });
+
+  test('switching the customer copy off leaves the kitchen ticket working', async () => {
+    await withEnv({ ...SMTP_ENV, ...BREVO, HB_CUSTOMER_EMAIL_ENABLED: 'false' }, () => {
+      assert.equal(customerEmailConfig(), null);
+      assert.ok(emailConfig());
+      const order = makeOrder('HB-0601C');
+      const queued = enqueueOrderAlert(order, { trackingToken: 'tok-7' });
+      assert.deepEqual(queued.map((job) => job.channel), ['owner-email']);
+    });
+  });
+});
+
+describe('outbox visibility', () => {
+  test('failed and waiting jobs are counted so a monitor can shout', async () => {
+    await withEnv({ ...SMTP_ENV, HB_CUSTOMER_EMAIL_ENABLED: 'false' }, async () => {
+      const order = makeOrder('HB-0700C');
+      store.save('orders', [order]);
+      enqueueOrderAlert(order, { trackingToken: null });
+
+      assert.deepEqual(notifyStatus().outbox, { waitingConfig: 0, pending: 1, retrying: 0, stuck: 0, failed: 0, sent: 0 });
+      assert.equal(notifyStatus().healthy, true, 'a freshly queued job is not yet a problem');
+
+      await processNextOrderAlert({ sendMail: async () => { throw new Error('mailbox unavailable'); } }, { from: 'a@b.c', to: 'kitchen@example.com' });
+      assert.equal(notifyStatus().outbox.pending, 1, 'a retryable failure stays pending');
+      assert.equal(notifyStatus().outbox.retrying, 1, 'a failed attempt is visible, not silently pending');
+
+      /* Make it terminal: the job is at its last attempt. */
+      store.update('orderNotificationJobs', [], (list) => list.map((job) => ({ ...job, attempts: 5, nextAttemptAt: null, status: 'pending' })));
+      await processNextOrderAlert({ sendMail: async () => { throw new Error('mailbox unavailable'); } }, { from: 'a@b.c', to: 'kitchen@example.com' });
+      assert.equal(notifyStatus().outbox.failed, 1);
+      assert.equal(notifyStatus().healthy, false, 'a permanent failure must make the check shout');
+    });
+  });
+});
+
+describe('monitor signal', () => {
+  test('a job stuck for more than 15 minutes is unhealthy even though it is pending', async () => {
+    await withEnv({ ...SMTP_ENV, HB_CUSTOMER_EMAIL_ENABLED: 'false' }, () => {
+      const longAgo = new Date(Date.now() - 16 * 60_000).toISOString();
+      store.save('orderNotificationJobs', [{
+        id: 'stale',
+        orderCode: 'HB-0800C',
+        channel: 'owner-email',
+        status: 'pending',
+        attempts: 1,
+        createdAt: longAgo,
+        startedAt: null,
+        nextAttemptAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        lastError: 'SMTP 421 try later',
+      }]);
+
+      const status = notifyStatus();
+      assert.equal(status.outbox.stuck, 1);
+      assert.equal(status.healthy, false, 'a notification stuck for a whole service window is not healthy');
     });
   });
 });

@@ -286,7 +286,7 @@ describe('checkout', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fulfilment: 'collection',
-        customer: { name: 'T', phone: '+27820009999' },
+        customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999' },
         // 'veg' is required on this plate and is deliberately omitted here.
         items: [{ itemId: 'mogodu-plate', qty: 1, options: { starch: 'pap' } }],
         payment: { method: 'card', card: GOOD_CARD },
@@ -343,7 +343,7 @@ describe('checkout', () => {
 
     const cashOnDelivery = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '1 Sandton Drive', suburb: 'Sandton' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Sandton Drive', suburb: 'Sandton' },
       payment: { method: 'cash-on-delivery' },
     });
     assert.equal(cashOnDelivery.res.status, 422, 'cash on delivery was not confirmed by the business');
@@ -352,7 +352,7 @@ describe('checkout', () => {
   test('delivery is free in Rosebank and Sandton and enforces the minimum', async () => {
     const sandton = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
       items: [MOGODU],
     });
     assert.equal(sandton.res.status, 201);
@@ -362,7 +362,7 @@ describe('checkout', () => {
 
     const rosebank = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '15 Oxford Road', suburb: 'Rosebank' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '15 Oxford Road', suburb: 'Rosebank' },
       items: [MOGODU],
     });
     assert.equal(rosebank.res.status, 201);
@@ -372,7 +372,7 @@ describe('checkout', () => {
   test('REGRESSION: an address outside the delivery boundary is refused, not accepted', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Pretoria' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Pretoria' },
     });
     assert.equal(res.status, 422);
     assert.match(body.errors[0], /Rosebank and Sandton/i);
@@ -382,7 +382,7 @@ describe('checkout', () => {
   test('a suburb name alone cannot smuggle an out-of-area delivery through', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Sandtonville' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Sandtonville' },
     });
     assert.equal(res.status, 422);
     assert.match(body.errors[0], /Rosebank and Sandton/i);
@@ -391,7 +391,7 @@ describe('checkout', () => {
   test('cash on collection cannot be used for a delivery order', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
       payment: { method: 'cash-on-collection' },
     });
     assert.equal(res.status, 422);
@@ -403,6 +403,41 @@ describe('checkout', () => {
     assert.equal(res.status, 201);
     assert.equal(body.order.payment.status, 'pending');
     assert.equal(body.order.payment.reference, 'CASH');
+  });
+
+  /*
+   * The email rule, both halves. A card order without an address is refused
+   * before the charge, because the receipt is the customer's only record of what
+   * they paid for. Cash is different: they are collecting in person.
+   */
+  test('a card order without an email is refused before any charge', async () => {
+    const ordersBefore = (await fetch(`${base}/api/health`).then(json)).orders;
+    const { res, body } = await placeOrder({
+      customer: { name: 'No Email', phone: '+27 82 000 1111' },
+    });
+    assert.equal(res.status, 422);
+    assert.equal(body.code, 'email_required');
+    assert.match(body.errors[0], /email address/i);
+    const ordersAfter = (await fetch(`${base}/api/health`).then(json)).orders;
+    assert.equal(ordersAfter, ordersBefore, 'a refused order must not be saved');
+  });
+
+  test('a cash order does not need an email', async () => {
+    const { res, body } = await placeOrder({
+      customer: { name: 'Walk In', phone: '+27 82 000 2222' },
+      payment: { method: 'cash-on-collection' },
+    });
+    assert.equal(res.status, 201);
+    assert.equal(body.order.receiptEmail, null);
+  });
+
+  test('a malformed email is refused for either payment method', async () => {
+    const { res, body } = await placeOrder({
+      customer: { name: 'Typo', phone: '+27 82 000 3333', email: 'not-an-email' },
+      payment: { method: 'cash-on-collection' },
+    });
+    assert.equal(res.status, 422);
+    assert.match(body.errors[0], /does not look right/i);
   });
 
   test('unknown discount codes are ignored now that no codes are approved', async () => {
@@ -417,7 +452,7 @@ describe('order tracking + cancellation', () => {
   test('a tracking token is required, and the receipt never leaks the address', async () => {
     const placed = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
     });
     const { code } = placed.body.order;
 
@@ -477,7 +512,7 @@ describe('order tracking + cancellation', () => {
 describe('loyalty card and contact', () => {
   test('repeat customers accumulate stamps', async () => {
     const phone = '+27 71 234 5678';
-    await placeOrder({ customer: { name: 'Passport Test', phone } });
+    await placeOrder({ customer: { email: 't@e.co.za', name: 'Passport Test', phone } });
     const after = await fetch(`${base}/api/passport`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -494,7 +529,7 @@ describe('loyalty card and contact', () => {
     // Two contemporary plates is R260 — five full R50 bands, so a flat one
     // stamp per order would fail this assertion.
     const placed = await placeOrder({
-      customer: { name: 'Stamp Check', phone },
+      customer: { email: 't@e.co.za', name: 'Stamp Check', phone },
       items: [{ ...WINGS, qty: 2 }],
     });
     assert.equal(placed.res.status, 201, `order should be accepted: ${JSON.stringify(placed.body)}`);
@@ -517,7 +552,7 @@ describe('loyalty card and contact', () => {
     // Four contemporary plates at R130 is exactly R520 — ten stamps, one
     // completed card. `10 - (stamps % 10)` used to answer "10 more to go".
     const placed = await placeOrder({
-      customer: { name: 'Full Card', phone },
+      customer: { email: 't@e.co.za', name: 'Full Card', phone },
       items: [{ itemId: 'short-rib-plate', qty: 4, options: { starch: 'savoury-rice', veg: 'glazed-carrots' } }],
     });
     assert.equal(placed.res.status, 201, `order should be accepted: ${JSON.stringify(placed.body)}`);

@@ -495,6 +495,29 @@ app.post('/api/orders', async (req, res) => {
     return res.status(422).json({ errors: ['Cash is only accepted on collection. Please pay by card, or choose collection.'] });
   }
 
+  /*
+   * A card order needs an email address.
+   *
+   * That address is the only place a receipt can go: card orders are the ones
+   * where the customer has no other record of what they paid for. Cash on
+   * collection stays optional — the customer is standing in front of us, and
+   * forcing an address there would only add friction to a completed sale.
+   *
+   * Checked before the card is charged, so a refusal never costs the customer a
+   * payment and never creates an order that cannot be receipted.
+   */
+  const customerEmail = String(customer.email ?? '').trim();
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(customerEmail);
+  if (customerEmail && !emailLooksValid) {
+    return res.status(422).json({ errors: ['That email address does not look right.'] });
+  }
+  if (payment.method === 'card' && !customerEmail) {
+    return res.status(422).json({
+      errors: ['Please add an email address — it is where your receipt for a card order goes.'],
+      code: 'email_required',
+    });
+  }
+
   let chargeResult = null;
 
   if (payment.method === 'card') {

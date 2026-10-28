@@ -18,6 +18,7 @@ These are implemented, not just described. `server/seed.js` is the source of tru
 | Preparation / delivery | ~20 minutes / ~30 minutes inside the window |
 | Collection | Standard Bank, Rosebank and Sandton (exact point still to be confirmed) |
 | Payments | Card (Yoco) and cash on collection. No cash on delivery. |
+| Customer email | Required for card orders (the only place a receipt can go); optional for cash on collection |
 | Contact | 067 013 7587 · heritagebitesfood@gmail.com · Formspree inbox |
 
 Outside the window the site still takes orders, but labels them **pre-orders** for the next window on the receipt, in the order email and on the customer's screen.
@@ -81,6 +82,27 @@ spaces, keep it private, and restart the API. `HB_CUSTOMER_EMAIL_ENABLED=false`
 keeps the owner ticket but stops the customer copy; `HB_ORDER_EMAIL_ENABLED=false`
 switches both off. Gmail's normal account sending limits and policies apply.
 
+#### Deliverability: two accounts, not one
+
+Gmail is fine for the kitchen ticket — it is mail to yourself. It is a poor
+choice for customer receipts, because a receipt sent *from* `gmail.com` whose
+tracking link points at `heritagebites.co.za` is the classic shape of spoofed
+mail, and a fair share of them land in spam.
+
+So the two channels can use different senders. `HB_SMTP_*` carries the kitchen
+ticket; if `HB_CUSTOMER_SMTP_*` is set, receipts go out through that account
+instead — ideally a provider with a **verified sending domain** for
+`heritagebites.co.za`. Brevo's forever-free plan (300 emails/day, no card) does
+this, with two honest caveats:
+
+- the free plan puts **Brevo's own branding** in the footer of sent mail;
+- a verified domain means adding DNS records (SPF, DKIM) for the domain, which is
+  a one-time job at the domain registrar.
+
+Without `HB_CUSTOMER_SMTP_*` both channels share the owner's account. That still
+works and still costs nothing; it is just more likely to be filtered. The health
+check below says which of the two you are running.
+
 The customer receipt is plain text on purpose — it renders everywhere and carries
 no remote images — and it contains the order, the totals, the service window, the
 collection/delivery details, the private tracking link and a WhatsApp handoff.
@@ -103,12 +125,56 @@ Email is not a push notification. A Telegram bot is, and it costs nothing:
 A wrong chat id fails permanently (and is logged as a rejected chat), while a rate
 limit or a Telegram outage is retried. The bot token is never written to a log line.
 
+### Free tiers fail silently — so make them shout
+
+The real risk with a free stack is not the price, it is the silence: an App
+Password stops working when someone changes the Google password, a provider
+suspends an account over bounce rates, a bot token is rotated. Orders keep
+arriving and nobody is told.
+
+Three things guard against that:
+
+1. **Every job is durable and visible.** `GET /api/health` reports
+   `notifications.healthy` plus outbox counts (`pending`, `retrying`,
+   `waitingConfig`, `stuck`, `failed`, `sent`).
+2. **A scheduled check exits non-zero.** `scripts/notification-check.mjs` reads
+   the live API and fails loudly when no channel can reach the kitchen, when an
+   order is still waiting for configuration, when a job has been stuck for more
+   than 15 minutes, or when any job gave up after five attempts.
+
+   ```bash
+   HB_BASE=https://heritagebites.co.za node scripts/notification-check.mjs
+   ```
+
+   Run it from cron, a GitHub Action or an uptime monitor pointed at
+   `/api/health` — free-tier failure is only survivable if something notices.
+3. **The site is the source of truth.** The order is saved before any notification
+   is attempted, so a dead channel never loses a sale; `GET /api/orders/<code>`
+   with its tracking token always shows the current state.
+
 ### WhatsApp: free because a person presses send
 
-Automated WhatsApp push is not free: since October 2026 utility templates inside
-the service window are charged (about R0.16 per delivered message in South Africa)
-and need a verified Meta business account with a card on file. This build therefore
-does **not** claim to send WhatsApp notifications, and says so on the receipt page.
+Automated WhatsApp push is not free, and it is worth being precise about why.
+
+- **What changed.** From 1 October 2026 Meta charges per message for service
+  messages beyond 1,000 per business number per month, and for utility templates
+  sent inside the open 24-hour customer service window (utility templates get no
+  free allowance at all). Both were free before that date.
+- **The South African rate is not one number.** Meta's rate card effective
+  1 July 2026 lists South Africa at **US$0.0076** for utility and authentication
+  and **US$0.0379** for marketing. The card effective **1 October 2026** is
+  reported to raise the utility/authentication list rate by 25% to **US$0.0095**.
+  At roughly R16/US$ that is about **R0.12–R0.15 per delivered message**, and a
+  provider may add 15% VAT on top.
+- **Where to get the real figure.** Meta's own pricing dashboard for this account,
+  not an article and not this README. Meta's documentation has been inconsistent
+  about in-window pricing, so treat any quoted number — including these — as
+  provisional until the dashboard agrees.
+
+The conclusion does not depend on which of those figures is right: automated
+WhatsApp needs a verified Meta business account with a card on file, so it is not
+free, and this build does **not** claim to send WhatsApp notifications. The receipt
+page says so plainly.
 
 What it does instead is hand the message to the customer's own WhatsApp, pre-filled:
 the receipt page has *Message us about HB-xxxx* (a structured ticket to the kitchen),
@@ -221,7 +287,7 @@ There are no `/api/admin/*` endpoints.
 
 Before relying on this as a live restaurant ordering system, complete the items in `docs/what-is-needed.md`. The most important are:
 
-1. Set the Gmail App Password so order emails actually send, and add the Telegram bot token if the owner wants a phone push.
+1. Set the Gmail App Password so order emails actually send, add `HB_CUSTOMER_SMTP_*` for receipt deliverability, and add the Telegram bot token if the owner wants a phone push. Then schedule `scripts/notification-check.mjs`.
 2. Set the live Yoco keys so card payments are real.
 3. Decide who watches the order inbox during the service window, or commission a protected order queue.
 4. Confirm the exact collection point and the Formspree inbox owner.
