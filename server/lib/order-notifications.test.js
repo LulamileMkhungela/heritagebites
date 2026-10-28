@@ -10,14 +10,13 @@ import { join } from 'node:path';
  */
 process.env.NODE_ENV = 'test';
 process.env.HB_DATA_DIR = mkdtempSync(join(tmpdir(), 'hb-notify-test-'));
-for (const key of ['HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL', 'HB_TELEGRAM_BOT_TOKEN', 'HB_TELEGRAM_CHAT_ID', 'HB_PUBLIC_URL', 'HB_CUSTOMER_SMTP_HOST', 'HB_CUSTOMER_SMTP_PORT', 'HB_CUSTOMER_SMTP_USER', 'HB_CUSTOMER_SMTP_PASS', 'HB_CUSTOMER_SMTP_FROM', 'HB_CUSTOMER_EMAIL_ENABLED']) {
+for (const key of ['HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL', 'HB_VAPID_PUBLIC_KEY', 'HB_VAPID_PRIVATE_KEY', 'HB_OWNER_PUSH_KEY', 'HB_PUBLIC_URL', 'HB_CUSTOMER_SMTP_HOST', 'HB_CUSTOMER_SMTP_PORT', 'HB_CUSTOMER_SMTP_USER', 'HB_CUSTOMER_SMTP_PASS', 'HB_CUSTOMER_SMTP_FROM', 'HB_CUSTOMER_EMAIL_ENABLED']) {
   delete process.env[key];
 }
 
 const {
   formatOrderAlert,
   formatCustomerReceipt,
-  formatTelegramAlert,
   enqueueOrderAlert,
   processNextOrderAlert,
   processNextTelegramAlert,
@@ -26,7 +25,6 @@ const {
   notifyStatus,
   publicBaseUrl,
   trackingUrlFor,
-  sendTelegramMessage,
 } = await import('./order-notifications.js');
 const { store } = await import('./store.js');
 
@@ -38,11 +36,6 @@ const SMTP_ENV = {
   HB_SMTP_FROM: 'Heritage Bites <alerts@example.com>',
   HB_ORDER_ALERT_EMAIL: 'kitchen@example.com',
   HB_PUBLIC_URL: 'https://example.test',
-};
-
-const TELEGRAM_ENV = {
-  HB_TELEGRAM_BOT_TOKEN: '123:test-token',
-  HB_TELEGRAM_CHAT_ID: '987654',
 };
 
 /** Set env vars for one test and put the previous values back afterwards. */
@@ -165,23 +158,13 @@ describe('customer receipt', () => {
   });
 });
 
-describe('telegram alert', () => {
-  test('is the kitchen ticket, sized for the Telegram API', () => {
-    const { text } = formatTelegramAlert(makeOrder('HB-0300C'));
-    assert.match(text, /New Heritage Bites order HB-0300C/);
-    assert.match(text, /TOTAL: R190\.00/);
-    assert.ok(text.length < 4096, 'Telegram rejects messages over 4096 characters');
-    assert.doesNotMatch(text, /trackingTokenHash/);
-  });
-});
-
 describe('configuration status', () => {
   test('reports nothing configured on a bare install', async () => {
-    await withEnv({ ...SMTP_ENV, HB_SMTP_HOST: undefined, HB_TELEGRAM_BOT_TOKEN: undefined, HB_TELEGRAM_CHAT_ID: undefined }, () => {
+    await withEnv({ ...SMTP_ENV, HB_SMTP_HOST: undefined }, () => {
       const status = notifyStatus();
       assert.equal(status.ownerEmail, false);
       assert.equal(status.customerEmail, false);
-      assert.equal(status.telegram, false);
+      assert.equal(status.push.configured, false);
     });
   });
 
@@ -190,12 +173,8 @@ describe('configuration status', () => {
       const status = notifyStatus();
       assert.equal(status.ownerEmail, true);
       assert.equal(status.customerEmail, true);
-      assert.equal(status.telegram, false);
+      assert.equal(status.push.configured, false);
       assert.equal(status.publicUrl, 'https://example.test');
-    });
-
-    await withEnv(TELEGRAM_ENV, () => {
-      assert.equal(notifyStatus().telegram, true);
     });
 
     await withEnv({ ...SMTP_ENV, HB_CUSTOMER_EMAIL_ENABLED: 'false' }, () => {
@@ -225,18 +204,16 @@ describe('outbox', () => {
     assert.equal(JSON.stringify(jobs()).includes('tok-1'), false, 'no tracking token is stored before a receipt can be sent');
   });
 
-  test('queues owner email, customer receipt and Telegram once, owner ticket first', async () => {
-    await withEnv({ ...SMTP_ENV, ...TELEGRAM_ENV }, () => {
+  test('queues the owner ticket and the customer receipt once, owner ticket first', async () => {
+    await withEnv(SMTP_ENV, () => {
       const order = makeOrder('HB-0401C');
       const queued = enqueueOrderAlert(order, { trackingToken: 'tok-2' });
-      assert.equal(queued.length, 3);
+      assert.equal(queued.length, 2);
 
       const owner = jobFor(order.code, 'owner-email');
       const customer = jobFor(order.code, 'customer-email');
-      const telegram = jobFor(order.code, 'owner-telegram');
       assert.equal(owner.status, 'pending');
       assert.equal(customer.status, 'pending');
-      assert.equal(telegram.status, 'pending');
       assert.equal(customer.trackingToken, 'tok-2', 'the receipt needs the one-time token to deep-link');
 
       /* Jobs are prepended, so the owner ticket is the first email claimed. */
@@ -244,7 +221,7 @@ describe('outbox', () => {
       assert.equal(emails.at(0).channel, 'owner-email');
 
       enqueueOrderAlert(order, { trackingToken: 'tok-2' });
-      assert.equal(jobs().length, 3, 're-queueing the same order must not duplicate jobs');
+      assert.equal(jobs().length, 2, 're-queueing the same order must not duplicate jobs');
     });
   });
 
@@ -278,7 +255,6 @@ describe('outbox', () => {
       assert.match(sent[1].text, /https:\/\/example\.test\/order\/HB-0402C\?token=tok-3/);
       assert.equal(jobFor(order.code, 'customer-email').status, 'sent');
       assert.equal(jobFor(order.code, 'customer-email').trackingToken, null, 'the token is dropped once the receipt is out');
-      assert.equal(jobFor(order.code, 'owner-telegram'), undefined);
     });
   });
 
@@ -453,63 +429,5 @@ describe('monitor signal', () => {
       assert.equal(status.outbox.stuck, 1);
       assert.equal(status.healthy, false, 'a notification stuck for a whole service window is not healthy');
     });
-  });
-});
-
-describe('telegram delivery', () => {
-  test('pushes the ticket and marks the job sent', async () => {
-    await withEnv(TELEGRAM_ENV, async () => {
-      const order = makeOrder('HB-0500C');
-      store.save('orders', [order]);
-      enqueueOrderAlert(order, { trackingToken: null });
-
-      const pushed = [];
-      await processNextTelegramAlert(async (config, text) => {
-        pushed.push({ chatId: config.chatId, text });
-        return { ok: true };
-      });
-
-      assert.equal(pushed.length, 1);
-      assert.equal(pushed[0].chatId, '987654');
-      assert.match(pushed[0].text, /HB-0500C/);
-      assert.equal(jobFor(order.code, 'owner-telegram').status, 'sent');
-    });
-  });
-
-  test('a rejected chat id fails permanently, an outage retries', async () => {
-    await withEnv(TELEGRAM_ENV, async () => {
-      const order = makeOrder('HB-0501C');
-      store.save('orders', [order]);
-      enqueueOrderAlert(order, { trackingToken: null });
-
-      await processNextTelegramAlert(async () => ({ ok: false, status: 400, description: 'Bad Request: chat not found', retryable: false }));
-      const blocked = jobFor(order.code, 'owner-telegram');
-      assert.equal(blocked.status, 'failed');
-      assert.match(blocked.lastError, /chat not found/);
-
-      store.save('orderNotificationJobs', []);
-      enqueueOrderAlert(order, { trackingToken: null });
-      await processNextTelegramAlert(async () => ({ ok: false, status: 502, description: 'Bad Gateway', retryable: true }));
-      const retried = jobFor(order.code, 'owner-telegram');
-      assert.equal(retried.status, 'pending');
-      assert.ok(retried.nextAttemptAt);
-    });
-  });
-
-  test('sendTelegramMessage never leaks the bot token into the result', async () => {
-    let seenUrl = '';
-    const result = await sendTelegramMessage(
-      { token: '123:secret-token', chatId: '42' },
-      'hello',
-      async (url, init) => {
-        seenUrl = url;
-        assert.equal(JSON.parse(init.body).chat_id, '42');
-        return { ok: true, status: 200, json: async () => ({ ok: true }) };
-      },
-    );
-
-    assert.deepEqual(result, { ok: true });
-    assert.match(seenUrl, /api\.telegram\.org/);
-    assert.doesNotMatch(JSON.stringify(result), /secret-token/);
   });
 });

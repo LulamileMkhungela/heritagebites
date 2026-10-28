@@ -14,6 +14,18 @@ import { join } from 'node:path';
 
 process.env.NODE_ENV = 'test';
 process.env.HB_ORDER_EMAIL_ENABLED = 'false';
+
+/*
+ * Web Push is configured for the whole integration run so its routes can be
+ * exercised. The key pair is generated here, never committed: a leaked VAPID
+ * private key would let anyone push to this deployment's subscribers.
+ */
+const { default: webpush } = await import('web-push');
+const VAPID = webpush.generateVAPIDKeys();
+process.env.HB_VAPID_PUBLIC_KEY = VAPID.publicKey;
+process.env.HB_VAPID_PRIVATE_KEY = VAPID.privateKey;
+process.env.HB_VAPID_SUBJECT = 'mailto:kitchen@example.com';
+process.env.HB_OWNER_PUSH_KEY = 'integration-owner-key-1234';
 // Keep the contact endpoint offline: the Formspree call is exercised by its own
 // unit test with a stub, never against the real inbox from a test run.
 process.env.HB_CONTACT_FORMSPREE_URL = '';
@@ -183,6 +195,104 @@ describe('catalogue + search', () => {
   test('fresh installs start without demo orders', async () => {
     const health = await fetch(`${base}/api/health`).then(json);
     assert.equal(health.orders, 0, 'no sample customer orders are seeded into a fresh install');
+  });
+});
+
+describe('web push', () => {
+  const sub = (n) => ({
+    endpoint: `https://push.example.test/integration/${n}`,
+    keys: { p256dh: `p256dh-${n}`, auth: `auth-${n}` },
+  });
+
+  test('the public config publishes the VAPID key but never the private one', async () => {
+    const config = await fetch(`${base}/api/push/config`).then(json);
+    assert.equal(config.enabled, true);
+    assert.equal(config.vapidPublicKey, process.env.HB_VAPID_PUBLIC_KEY);
+    assert.equal(config.ownerEnrolment, true);
+    assert.doesNotMatch(JSON.stringify(config), new RegExp(process.env.HB_VAPID_PRIVATE_KEY));
+  });
+
+  test('a customer can only subscribe a device to an order it can already read', async () => {
+    const { body } = await placeOrder();
+
+    const wrongToken = await fetch(`${base}/api/push/order-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: body.order.code, token: 'not-the-token', subscription: sub(1) }),
+    });
+    assert.equal(wrongToken.status, 404, 'the tracking token is the authorisation');
+
+    const noOrder = await fetch(`${base}/api/push/order-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: 'HB-9999Z', token: body.trackingToken, subscription: sub(2) }),
+    });
+    assert.equal(noOrder.status, 404);
+
+    const good = await fetch(`${base}/api/push/order-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: body.order.code, token: body.trackingToken, subscription: sub(3) }),
+    });
+    assert.equal(good.status, 201);
+    assert.equal((await good.json()).scope, 'order');
+
+    const stored = JSON.parse(readFileSync(join(TMP, 'pushSubscriptions.json'), 'utf8'));
+    const record = stored.find((entry) => entry.endpoint.endsWith('/3'));
+    assert.equal(record.role, 'customer');
+    assert.equal(record.orderCode, body.order.code, 'a customer device is bound to one order');
+  });
+
+  test('a malformed subscription is refused with a reason', async () => {
+    const { body } = await placeOrder();
+    const res = await fetch(`${base}/api/push/order-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: body.order.code, token: body.trackingToken, subscription: { endpoint: 'not-a-url' } }),
+    });
+    assert.equal(res.status, 422);
+    assert.match((await res.json()).error, /not usable/i);
+  });
+
+  test('owner enrolment needs the key, and a wrong key is refused', async () => {
+    const wrong = await fetch(`${base}/api/push/owner-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-hb-owner-key': 'wrong-key-wrong-key' },
+      body: JSON.stringify({ subscription: sub(4) }),
+    });
+    assert.equal(wrong.status, 401);
+
+    const right = await fetch(`${base}/api/push/owner-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-hb-owner-key': process.env.HB_OWNER_PUSH_KEY },
+      body: JSON.stringify({ subscription: sub(5) }),
+    });
+    assert.equal(right.status, 201);
+
+    const stored = JSON.parse(readFileSync(join(TMP, 'pushSubscriptions.json'), 'utf8'));
+    assert.equal(stored.find((entry) => entry.endpoint.endsWith('/5')).role, 'owner');
+  });
+
+  test('a device can revoke itself without a key', async () => {
+    const res = await fetch(`${base}/api/push/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: sub(5).endpoint }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).removed, 1);
+
+    const stored = JSON.parse(readFileSync(join(TMP, 'pushSubscriptions.json'), 'utf8'));
+    assert.equal(stored.some((entry) => entry.endpoint.endsWith('/5')), false);
+  });
+
+  test('health reports push state without exposing endpoints', async () => {
+    const health = await fetch(`${base}/api/health`).then(json);
+    const push = health.notifications.push;
+    assert.equal(push.configured, true);
+    assert.equal(typeof push.ownerDevices, 'number');
+    assert.equal(typeof push.customerDevices, 'number');
+    assert.doesNotMatch(JSON.stringify(health), /push\.example\.test/);
   });
 });
 

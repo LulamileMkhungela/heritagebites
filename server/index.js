@@ -17,6 +17,15 @@ import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents,
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
 import { enqueueOrderAlert, notifyStatus, startOrderNotificationWorker } from './lib/order-notifications.js';
+import {
+  notifyOrderDevices,
+  notifyOwnerDevices,
+  ownerKey,
+  pushConfig,
+  pushStatus,
+  removeSubscription,
+  saveSubscription,
+} from './lib/web-push.js';
 import { deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
 import * as seed from './seed.js';
 
@@ -383,7 +392,7 @@ app.get('/api/health', (_req, res) => {
     paymentDriver: paymentDriver(),
     orders: get('orders').length,
     /* Which free notification channels are configured — booleans, no secrets. */
-    notifications: notifyStatus(),
+    notifications: { ...notifyStatus(), push: pushStatus() },
     time: new Date().toISOString(),
   });
 });
@@ -617,6 +626,19 @@ app.post('/api/orders', async (req, res) => {
   );
 
   set('orders', [order, ...get('orders')]);
+
+  /*
+   * Web Push is sent straight from the request rather than through the outbox: a
+   * phone alert is worth seconds, not retries. It is fire-and-forget — a failed
+   * push must never delay or fail an order that has already been paid for.
+   */
+  void notifyOwnerDevices(order).catch((error) => {
+    console.error(`[push] owner alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
+  });
+  void notifyOrderDevices(order, 'customer-order-placed').catch((error) => {
+    console.error(`[push] customer alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
+  });
+
   try {
     /* The one-time tracking token lets the customer receipt deep-link into the
        private order page; the saved order still keeps only its digest. */
@@ -682,6 +704,12 @@ app.post('/api/orders/:code/cancel', (req, res) => {
   appendTimeline(order, 'cancelled', `Cancelled by customer (was ${previous})`);
   orders[idx] = order;
   set('orders', orders);
+
+  /* The one status change a customer can trigger, so it is the one push they get. */
+  void notifyOrderDevices(order, 'customer-order-cancelled').catch((error) => {
+    console.error(`[push] cancellation alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
+  });
+
   res.set('Cache-Control', 'private, no-store');
   res.json({ order: publicOrder(order) });
 });
@@ -776,6 +804,92 @@ app.post('/api/quests', async (req, res) => {
   res.status(201).json({ ok: true, id: entry.id, delivered: delivery.delivered });
 });
 
+/* ----------------------------- Web Push -------------------------------- */
+
+/*
+ * Push routes.
+ *
+ * All three are rate-limited by the same rule the rest of the public API uses:
+ * they are small, typed, and reject anything unexpected. The important boundary is
+ * authorisation, not rate:
+ *
+ *   /api/push/order-subscribe  needs the order code AND its tracking token, so a
+ *                              device can only ever subscribe to one order it can
+ *                              already read.
+ *   /api/push/owner-subscribe  needs the owner key. Without one set on the host,
+ *                              owner enrolment is refused entirely rather than left
+ *                              open to whoever finds the URL.
+ */
+
+app.get('/api/push/config', (_req, res) => {
+  const config = pushConfig();
+  res.json({
+    enabled: Boolean(config),
+    vapidPublicKey: config?.publicKey ?? null,
+    ownerEnrolment: Boolean(config && ownerKey()),
+  });
+});
+
+app.post('/api/push/order-subscribe', (req, res) => {
+  const config = pushConfig();
+  if (!config) return res.status(503).json({ error: 'Order alerts are not switched on for this site.' });
+
+  const { code, token, subscription } = req.body ?? {};
+  const orders = get('orders');
+  const order = orders.find((entry) => entry.code.toLowerCase() === String(code ?? '').toLowerCase());
+  if (!order || !hasValidTrackingToken(order, String(token ?? ''))) {
+    return res.status(404).json({ error: 'That secure tracking link is invalid or has expired.' });
+  }
+  if (order.status === 'cancelled') {
+    return res.status(409).json({ error: 'This order is cancelled, so there is nothing left to alert you about.' });
+  }
+
+  const saved = saveSubscription(subscription, {
+    role: 'customer',
+    orderCode: order.code,
+    userAgent: req.get('user-agent'),
+  });
+  if (!saved.ok) return res.status(422).json({ error: saved.error });
+
+  res.status(201).json({ ok: true, scope: 'order', code: order.code });
+});
+
+app.post('/api/push/owner-subscribe', (req, res) => {
+  const config = pushConfig();
+  if (!config) return res.status(503).json({ error: 'Order alerts are not switched on for this site.' });
+
+  const expected = ownerKey();
+  if (!expected) {
+    return res.status(503).json({ error: 'Owner alerts are not configured on this host yet.' });
+  }
+
+  const given = String(req.get('x-hb-owner-key') ?? req.body?.key ?? '');
+  const a = Buffer.from(String(given));
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return res.status(401).json({ error: 'That owner key is not correct.' });
+  }
+
+  const saved = saveSubscription(req.body?.subscription, {
+    role: 'owner',
+    userAgent: req.get('user-agent'),
+  });
+  if (!saved.ok) return res.status(422).json({ error: saved.error });
+
+  res.status(201).json({ ok: true, scope: 'owner' });
+});
+
+app.post('/api/push/unsubscribe', (req, res) => {
+  const endpoint = String(req.body?.endpoint ?? '');
+  /*
+   * Deliberately unauthenticated: a device may revoke itself at any time, which is
+   * the whole point of "stop alerts". Nothing is disclosed by doing so, and an
+   * endpoint is an opaque capability URL that only its own browser knows.
+   */
+  const removed = removeSubscription(endpoint);
+  res.json({ ok: true, removed });
+});
+
 /* ------------------------------- 404 ---------------------------------- */
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
@@ -802,7 +916,7 @@ if (existsSync(DIST)) {
    * crawlers index a page whose entire content is an apology.
    */
   const KNOWN_ROUTES = new Set([
-    '/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest',
+    '/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest', '/alerts',
   ]);
   const isKnownRoute = (path) => KNOWN_ROUTES.has(path) || /^\/order\/[^/]+$/.test(path);
 

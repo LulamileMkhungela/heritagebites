@@ -1,12 +1,15 @@
 /**
- * Background order notifications — free-tier email and Telegram.
+ * Background order notifications — free-tier email.
  *
- * Three channels, none of which needs a paid message provider or a card on file:
+ * Two email channels, neither of which needs a paid message provider or a card:
  *
  *   owner-email     the kitchen ticket, to HB_ORDER_ALERT_EMAIL (or settings.email)
  *   customer-email  the customer's receipt + private tracking link, when they left
  *                   an address and HB_CUSTOMER_EMAIL_ENABLED is not "false"
- *   owner-telegram  an instant phone push through a free Telegram bot
+ *
+ * Web Push (server/lib/web-push.js) is the instant channel and is sent straight
+ * from the request, not through this outbox: a push is either delivered in
+ * seconds or not worth delivering, whereas email wants retries.
  *
  * WhatsApp is deliberately a *tap-to-send* channel, not an automated one: the
  * receipt page builds a pre-filled wa.me link the customer (or owner) presses, so
@@ -14,8 +17,7 @@
  * unlimited. Automated WhatsApp push would need Meta's Cloud API, business
  * verification and per-template charges, which this build does not use.
  *
- * The durable JSON outbox keeps checkout independent from SMTP or Telegram
- * availability: the order is saved first, then one small job per channel is
+ * The durable JSON outbox keeps checkout independent from SMTP availability: the order is saved first, then one small job per channel is
  * added. A single worker reads the saved order and retries delivery. For live,
  * multi-instance service, move this outbox into the same transactional database
  * as orders.
@@ -24,6 +26,7 @@ import { randomUUID } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { store } from './store.js';
 import { whatsappLink } from './notify.js';
+import { pushStatus } from './web-push.js';
 
 const JOB_STORE = 'orderNotificationJobs';
 const MAX_ATTEMPTS = 5;
@@ -38,7 +41,6 @@ export const EMAIL_CHANNELS = ['owner-email', 'customer-email'];
 
 const CUSTOMER_EMAIL = 'customer-email';
 const OWNER_EMAIL = 'owner-email';
-const OWNER_TELEGRAM = 'owner-telegram';
 
 let workerStarted = false;
 let workerBusy = false;
@@ -210,17 +212,6 @@ export function formatCustomerReceipt(order, options = {}) {
   };
 }
 
-/** Telegram's own message: same ticket, trimmed to the API's size limit. */
-export function formatTelegramAlert(order) {
-  const alert = formatOrderAlert(order);
-  const text = `🔔 ${alert.text}`;
-  return {
-    text: text.length > TELEGRAM_LIMIT - 100
-      ? `${text.slice(0, TELEGRAM_LIMIT - 130)}\n…(truncated — open the order in the site)`
-      : text,
-  };
-}
-
 /* -------------------------------- Config ------------------------------- */
 
 /** Public origin used to build tracking links. Never guessed from a request. */
@@ -306,21 +297,6 @@ export function customerEmailConfig() {
 }
 
 /**
- * Telegram bot configuration.
- *
- * A bot is created by messaging @BotFather and costs nothing: no card, no
- * per-message fee, no application review. The owner messages the new bot once so
- * Telegram opens a chat with them, then that chat id is the alert destination.
- */
-export function telegramConfig() {
-  if (process.env.HB_TELEGRAM_ENABLED === 'false') return null;
-  const token = process.env.HB_TELEGRAM_BOT_TOKEN?.trim();
-  const chatId = process.env.HB_TELEGRAM_CHAT_ID?.trim();
-  if (!token || !chatId) return null;
-  return { token, chatId };
-}
-
-/**
  * What is actually wired up — booleans only, no addresses or secrets.
  *
  * `outbox` is the loud part: free tiers fail silently (an expired app password,
@@ -330,7 +306,7 @@ export function telegramConfig() {
 export function notifyStatus() {
   const owner = emailConfig();
   const customer = customerEmailConfig();
-  const telegram = telegramConfig();
+  const push = pushStatus();
   const jobs = store.load(JOB_STORE, []) ?? [];
 
   const waitingConfig = jobs.filter((job) => job.status === 'waiting_config').length;
@@ -358,7 +334,7 @@ export function notifyStatus() {
     customerEmail: Boolean(customer),
     /* True when receipts go through their own verified-domain account. */
     customerEmailDedicated: Boolean(customer?.dedicated),
-    telegram: Boolean(telegram),
+    push,
     publicUrl: publicBaseUrl(),
     /**
      * One boolean for a monitor to alert on.
@@ -369,7 +345,7 @@ export function notifyStatus() {
      * want of configuration, or after any job has given up. It is deliberately
      * strict, because a quiet kitchen is worse than a noisy monitor.
      */
-    healthy: Boolean(owner || telegram) && waitingConfig === 0 && failed === 0 && stuck === 0,
+    healthy: Boolean(owner || push.configured) && waitingConfig === 0 && failed === 0 && stuck === 0,
     outbox: {
       waitingConfig,
       pending: jobs.filter((job) => job.status === 'pending' || job.status === 'sending').length,
@@ -406,7 +382,6 @@ export function enqueueOrderAlert(order, context = {}) {
 
   const email = emailConfig();
   const customer = customerEmailConfig();
-  const telegram = telegramConfig();
   const createdAt = new Date().toISOString();
   const plans = [];
 
@@ -416,7 +391,6 @@ export function enqueueOrderAlert(order, context = {}) {
   /* Always queued, even without SMTP: it waits as `waiting_config` so an order
      taken before the App Password exists is still emailed once the worker starts. */
   plans.push({ channel: OWNER_EMAIL, status: email ? 'pending' : 'waiting_config' });
-  if (telegram) plans.push({ channel: OWNER_TELEGRAM, status: 'pending' });
 
   const queued = [];
 
@@ -559,82 +533,6 @@ export async function processNextOrderAlert(transport, config) {
   }
 }
 
-/* ------------------------------- Telegram ------------------------------ */
-
-/**
- * Send one Telegram message.
- *
- * Returns a result instead of throwing so the caller can tell a permanent
- * mistake (wrong chat id → 400) from something worth retrying (rate limit,
- * Telegram outage). The bot token is part of the URL and is never logged.
- */
-export async function sendTelegramMessage(config, text, fetchImpl = fetch) {
-  const res = await fetchImpl(`https://api.telegram.org/bot${config.token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: config.chatId, text, disable_web_page_preview: true }),
-    signal: AbortSignal.timeout(10_000),
-  });
-
-  let body = null;
-  try {
-    body = await res.json();
-  } catch {
-    body = null;
-  }
-
-  if (res.ok && body?.ok !== false) return { ok: true };
-
-  return {
-    ok: false,
-    status: res.status,
-    description: String(body?.description ?? `Telegram responded ${res.status}`).slice(0, 200),
-    retryable: res.status === 429 || res.status >= 500,
-  };
-}
-
-export async function processNextTelegramAlert(send = sendTelegramMessage, config = telegramConfig()) {
-  if (!config) return;
-  if (workerBusy) return;
-  workerBusy = true;
-
-  try {
-    const job = claimNextJob((candidate) => jobChannel(candidate) === OWNER_TELEGRAM);
-    if (!job) return;
-
-    const order = savedOrder(job.orderCode);
-    if (!order) {
-      failJob(job, 'The saved order could not be found.');
-      return;
-    }
-
-    try {
-      const { text } = formatTelegramAlert(order);
-      const result = await send(config, text);
-      if (result?.ok) {
-        updateJob(job.id, {
-          status: 'sent',
-          sentAt: new Date().toISOString(),
-          lastError: null,
-          nextAttemptAt: null,
-        });
-        console.info(`[order-notifications] pushed order ${order.code} to Telegram`);
-        return;
-      }
-
-      const terminal = result?.retryable === false || (job.attempts ?? 1) >= MAX_ATTEMPTS;
-      failJob(job, result?.description ?? 'Telegram rejected the message.', terminal);
-      console.error(`[order-notifications] order ${order.code} Telegram ${terminal ? 'failed permanently' : 'will retry'}: ${String(result?.description ?? 'rejected').slice(0, 200)}`);
-    } catch (error) {
-      const terminal = (job.attempts ?? 1) >= MAX_ATTEMPTS;
-      failJob(job, error?.message ?? error, terminal);
-      console.error(`[order-notifications] order ${order.code} Telegram ${terminal ? 'failed permanently' : 'will retry'}: ${String(error?.message ?? error).slice(0, 200)}`);
-    }
-  } finally {
-    workerBusy = false;
-  }
-}
-
 /* -------------------------------- Worker ------------------------------- */
 
 function transportFor(smtp) {
@@ -658,9 +556,8 @@ export function startOrderNotificationWorker() {
 
   const email = emailConfig();
   const customer = customerEmailConfig();
-  const telegram = telegramConfig();
-  if (!email && !customer && !telegram) {
-    console.info('[order-notifications] no SMTP or Telegram configuration yet; orders are still saved');
+  if (!email && !customer) {
+    console.info('[order-notifications] no SMTP configuration yet; orders are still saved');
     return false;
   }
 
@@ -685,11 +582,6 @@ export function startOrderNotificationWorker() {
         console.error(`[order-notifications] email worker error: ${String(error?.message ?? error).slice(0, 200)}`);
       });
     }
-    if (telegram) {
-      await processNextTelegramAlert(undefined, telegram).catch((error) => {
-        console.error(`[order-notifications] Telegram worker error: ${String(error?.message ?? error).slice(0, 200)}`);
-      });
-    }
     if (!workerStarted) return;
     workerTimer = setTimeout(run, POLL_MS);
     workerTimer.unref?.();
@@ -703,7 +595,6 @@ export function startOrderNotificationWorker() {
     customer
       ? `customer receipts → ${customer.dedicated ? 'own verified account' : "owner's account (check spam)"}`
       : null,
-    telegram ? 'Telegram → owner phone' : null,
   ].filter(Boolean);
   console.info(`[order-notifications] worker enabled (${parts.join(', ')})`);
   return true;

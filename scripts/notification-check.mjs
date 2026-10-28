@@ -4,7 +4,7 @@
  *
  * Free notification tiers fail quietly. A Gmail App Password gets revoked when
  * someone changes the account password; Brevo suspends an account for a bounce
- * rate; a Telegram bot token is rotated. In every case the site keeps taking
+ * rate; the push key pair is rotated. In every case the site keeps taking
  * orders and nothing tells the kitchen. This script is meant to run on a schedule
  * (cron, a GitHub Action, an uptime monitor) and exit non-zero so somebody is
  * told, rather than trusting a "no news is good news" dashboard.
@@ -45,14 +45,21 @@ say(`  owner email:          ${n.ownerEmail ? 'configured' : 'NOT CONFIGURED'}`)
 say(`  customer email:       ${n.customerEmail
   ? `configured (${n.customerEmailDedicated ? 'own verified domain' : "shared with the owner's account"})`
   : 'NOT CONFIGURED'}`);
-say(`  telegram push:        ${n.telegram ? 'configured' : 'NOT CONFIGURED'}`);
+say(`  web push:             ${n.push?.configured
+  ? `ready — ${n.push.ownerDevices} kitchen device(s), ${n.push.customerDevices} customer device(s)`
+  : n.push?.vapid
+    ? 'keys set but NO owner key, so no kitchen device can enrol'
+    : 'NOT CONFIGURED (HB_VAPID_PUBLIC_KEY / HB_VAPID_PRIVATE_KEY)'}`);
 say(`  tracking link origin: ${n.publicUrl ?? 'unknown'}`);
 say('');
 say(`  outbox:               ${outbox.pending ?? 0} pending · ${outbox.retrying ?? 0} retrying · `
   + `${outbox.waitingConfig ?? 0} waiting for config · ${outbox.failed ?? 0} failed · ${outbox.sent ?? 0} sent`);
 
-if (!n.ownerEmail && !n.telegram) {
-  problems.push('No channel can reach the kitchen: set HB_SMTP_* (owner email) and/or HB_TELEGRAM_* .');
+if (!n.ownerEmail && !n.push?.configured) {
+  problems.push('No channel can reach the kitchen: set HB_SMTP_* (owner email) and/or the Web Push keys plus HB_OWNER_PUSH_KEY.');
+}
+if (n.push?.configured && (n.push.ownerDevices ?? 0) === 0) {
+  problems.push('Push is configured but no kitchen device has enrolled: open /alerts on the kitchen phone or tablet and enrol it.');
 }
 if (!n.customerEmail) {
   notes.push('Customers get no receipt email. Set HB_SMTP_* or HB_CUSTOMER_SMTP_* to turn it on.');
@@ -73,8 +80,8 @@ if ((outbox.stuck ?? 0) > 0) {
 if ((outbox.failed ?? 0) > 0) {
   problems.push(`${outbox.failed} notification job(s) gave up after five attempts. Read data/runtime/orderNotificationJobs.json and resend by hand.`);
 }
-if (!n.telegram && n.ownerEmail) {
-  notes.push('Email alone is not a push notification. A free Telegram bot puts each order on the owner\'s phone.');
+if (!n.push?.vapid && n.ownerEmail) {
+  notes.push('Email alone is not a push notification unless the Gmail app is installed. Web Push puts each order on the kitchen phone for free: npm run push:keys');
 }
 
 if (notes.length) {

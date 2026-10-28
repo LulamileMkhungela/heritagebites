@@ -6,6 +6,13 @@ import { Badge, Button, LinkButton, SectionLabel, Spinner } from '../components/
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { useCatalog } from '../store/catalog';
 import type { Order } from '../lib/types';
+import {
+  checkPush,
+  hasLocalSubscription,
+  subscribeToOrder,
+  unsubscribeThisDevice,
+  type PushState,
+} from '../lib/push';
 
 export default function OrderStatus() {
   const { code = '' } = useParams();
@@ -14,6 +21,8 @@ export default function OrderStatus() {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [push, setPush] = useState<PushState | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
   const settings = useCatalog((s) => s.data?.settings);
 
   /* The order code in the tab title means two tracking tabs stay tellable
@@ -33,6 +42,47 @@ export default function OrderStatus() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  /*
+   * Alerts are per device, so the state is asked for on mount rather than assumed:
+   * another tab may have turned them on, or the browser may have thrown the
+   * subscription away, and the button must say what is actually true.
+   */
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const state = await checkPush();
+      if (!alive) return;
+      const already = state.status === 'idle' ? await hasLocalSubscription() : false;
+      if (!alive) return;
+      setPush(already
+        ? { status: 'subscribed', message: 'Alerts are on for this device. We will tell you when this order changes.' }
+        : state);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const enableAlerts = async () => {
+    if (!order) return;
+    setPushBusy(true);
+    try {
+      setPush(await subscribeToOrder(order.code, trackingToken));
+    } catch (error) {
+      setPush({ status: 'blocked', message: error instanceof Error ? error.message : 'We could not turn alerts on.' });
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const disableAlerts = async () => {
+    setPushBusy(true);
+    try {
+      await unsubscribeThisDevice();
+      setPush({ status: 'idle', message: 'Alerts are off for this device.' });
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const cancel = async () => {
     if (!order || !window.confirm('Cancel this order? This cannot be undone.')) return;
@@ -174,6 +224,38 @@ export default function OrderStatus() {
               <a href={`tel:${order.customer.phone}`} className="font-mono text-xs hover:text-ochre-deep">{order.customer.phone}</a>
             </p>
           </div>
+
+          {/*
+            Web Push: the only free channel that reaches a phone by itself, with no
+            app and no message fee. It is opt-in per device, so it is offered here —
+            on the order the customer already has open — rather than buried in a
+            settings page.
+          */}
+          {push && push.status !== 'unsupported' && push.status !== 'unconfigured' && (
+            <div className="rounded-3xl border-2 border-ochre bg-ochre/10 p-5" aria-live="polite">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre-deep">Alerts on this device</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-ink/75">{push.message}</p>
+              {push.status === 'subscribed' ? (
+                <button
+                  type="button"
+                  onClick={disableAlerts}
+                  disabled={pushBusy}
+                  className="mt-3 w-full rounded-full border-2 border-ink/25 px-4 py-2 text-xs font-semibold uppercase tracking-wide hover:border-ink disabled:opacity-50"
+                >
+                  {pushBusy ? 'Turning off…' : 'Turn alerts off'}
+                </button>
+              ) : push.status === 'idle' ? (
+                <button
+                  type="button"
+                  onClick={enableAlerts}
+                  disabled={pushBusy}
+                  className="mt-3 w-full rounded-full bg-ink px-4 py-2 text-xs font-semibold uppercase tracking-wide text-bone hover:bg-ink-3 disabled:opacity-50"
+                >
+                  {pushBusy ? 'Turning on…' : 'Alert me on this device'}
+                </button>
+              ) : null}
+            </div>
+          )}
 
           <div className="rounded-3xl border-2 border-ink/10 bg-ink p-6 text-bone">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre">Need an update?</p>

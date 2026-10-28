@@ -163,6 +163,9 @@ const ROUTES = [
   { path: '/passport', expect: [/Your loyalty card/i], title: /^Loyalty card — Heritage Bites$/ },
   { path: '/quest', expect: [/Ask us to cook it/i, /What the kitchen cooks/i, /Send your quest/i], title: /^Customer quest — Heritage Bites$/ },
   { path: trackingPath, displayPath: '/order/[secure-link]', expect: [new RegExp(orderCode), /Order received/i], title: new RegExp(`^Order ${orderCode} — Heritage Bites$`) },
+  /* Owner enrolment. jsdom has no PushManager, so this also proves the page
+     degrades to an explanation instead of throwing. */
+  { path: '/alerts', expect: [/Enrol this device/i, /cannot receive/i], title: /^Order alerts — Heritage Bites$/ },
   { path: '/no-such-page', expect: [/This plate came back empty/i], title: /^Page not found — Heritage Bites$/ },
 ];
 

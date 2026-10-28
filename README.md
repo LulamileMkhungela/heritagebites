@@ -25,7 +25,7 @@ Outside the window the site still takes orders, but labels them **pre-orders** f
 
 ## Current product status
 
-The kitchen/manager console, staff roles, seeded staff logins and admin API have been removed. No staff-facing order workflow remains in this application. Successful orders are saved and queued for background alerts: an email ticket to `heritagebitesfood@gmail.com`, an email receipt to the customer (when they left an address) and, if a Telegram bot is configured, a phone push to the owner. Nothing is delivered until the SMTP or Telegram settings exist on the host — the order is still saved and still tracked. The alerts do not provide a staff queue or advance order statuses. Order receipts are secure contact points, not live kitchen tracking.
+The kitchen/manager console, staff roles, seeded staff logins and admin API have been removed. No staff-facing order workflow remains in this application. Successful orders are saved and alerted on: a Web Push notification to every enrolled kitchen device, an email ticket to `heritagebitesfood@gmail.com`, a Web Push confirmation to a customer who enabled alerts, and an email receipt to the customer (when they left an address). Push and email are independent — nothing is delivered until the VAPID keys and SMTP settings exist on the host, but the order is still saved and still tracked. The alerts do not provide a staff queue or advance order statuses. Order receipts are secure contact points, not live kitchen tracking.
 
 The Contact form forwards each enquiry to the business Formspree endpoint **and** keeps a local copy, so a delivery failure never loses a message. WhatsApp remains a tap-to-send channel in both directions: see [Free order notifications](#free-order-notifications-email--telegram--whatsapp) for why that is deliberate.
 
@@ -45,35 +45,62 @@ The **kitchen archive** (`comingSoon` in `server/seed.js`) brings back the pre-s
 
 Nothing is published that the business has not signed off. Specifically: no drinks, add-ons, discount codes, testimonials or day-of-week promotions are live, because none were approved. Two dishes (Tlhakwana and Smiley) have no photograph yet, so they render a "photo coming soon" panel instead of a picture of a different dish. `SEED_VERSION` in `server/seed.js` re-seeds catalogue content on boot when it changes; orders, messages and loyalty stamps are never touched.
 
-## Free order notifications (email + Telegram + WhatsApp)
+## Free order notifications (push + email + WhatsApp)
 
 Every channel below costs nothing per message and needs no card on file. There is
-no SMS provider, no WhatsApp Cloud API account and no message bundle to buy.
+no SMS provider, no WhatsApp Cloud API account, no messaging app to install and no
+message bundle to buy.
 
-| Who | Channel | Automatic? | Cost |
-| --- | --- | --- | --- |
-| Owner | Email ticket to `HB_ORDER_ALERT_EMAIL` | Yes, background worker | R0 (Gmail App Password) |
-| Owner | Telegram push to the phone | Yes, background worker | R0 (free bot) |
-| Customer | Email receipt with private tracking link | Yes, when they left an email | R0 (same SMTP account) |
-| Customer / owner | WhatsApp | No — one tap, sent from their own app | R0, unlimited |
+| Who | Channel | Automatic? | Reaches them when the site is closed? | Cost |
+| --- | --- | --- | --- | --- |
+| Owner | **Web Push** to enrolled kitchen devices | Yes, within seconds | Yes | R0 |
+| Owner | Email ticket to `HB_ORDER_ALERT_EMAIL` | Yes, background worker | Yes | R0 |
+| Customer | **Web Push** for the order they just placed | Yes, if they tap "Alert me" | Yes | R0 |
+| Customer | Email receipt with private tracking link | Yes, when they left an email | Yes | R0 |
+| Customer / owner | WhatsApp | No — one tap, sent from their own app | — | R0, unlimited |
 
-### How it works
+### Which alert does who get?
 
-Placing an order saves it first, then writes one small job per channel into the
-JSON outbox (`orderNotificationJobs`). A single background worker reads the saved
-order and delivers each job, retrying failures with backoff (30s → 2m → 10m → 1h →
-6h, five attempts). The order is never blocked by missing settings: with no SMTP
-configured the jobs simply wait as `waiting_config` and go out once the worker can
-start. `GET /api/health` reports which channels are live, as booleans only:
+- **Owner, the moment an order lands:** a Web Push notification on every enrolled
+  kitchen device (phone and/or counter tablet), plus the email ticket as the
+  permanent record. The push says the code, plate count, total and
+  collection/delivery; `requireInteraction` keeps it on screen until acknowledged.
+- **Customer, the moment they order:** a Web Push confirmation if they enabled
+  alerts on that device, and the email receipt with their tracking link. The push
+  deliberately carries no tracking token — a lock-screen message must not be able
+  to hand someone the order page.
+- **Customer, when the order changes:** a Web Push for the one status change this
+  build can produce — cancellation. There is no staff console and no status
+  workflow, so nothing else advances an order; the tracking page is the live state.
 
-```json
-"notifications": { "ownerEmail": true, "customerEmail": true, "telegram": false, "publicUrl": "https://heritagebites.co.za" }
+### Web Push: free, because the browser does the delivering
+
+A browser subscribes once and the server can then wake that device even with the
+site closed. It rides the browser vendor's own push service, so there is no
+provider account and no per-message charge. Set it up once:
+
+```bash
+npm run push:keys     # prints HB_VAPID_* and a suggested HB_OWNER_PUSH_KEY
 ```
 
-The owner ticket is queued last and claimed first, so a broken customer address
-can never delay the kitchen seeing an order.
+Put the values in the host's secrets, restart the API, then open **`/alerts`** on
+each device that should buzz and paste the owner key. That page is protected by the
+key rather than a login, and holds no order data — it only enrols a browser.
 
-### Owner email (and the customer receipt)
+Two honest limits:
+
+- **iPhone:** Safari only delivers push after the site is added to the Home Screen
+  (iOS 16.4+). Android and desktop work straight away. The pages say this instead
+  of failing silently.
+- **It is opt-in.** Nobody is pushed to without tapping. A customer who ignores the
+  offer still gets the email receipt, which is why email is not redundant.
+
+A customer subscription is bound to one order code and capped at five devices, so
+nobody can point a device at someone else's orders; a device's own
+`/api/push/unsubscribe` needs no key, because revoking oneself must always work.
+Dead subscriptions (a browser reporting 404/410) are deleted rather than retried.
+
+### Email: the record that outlives a browser
 
 Copy `.env.example` to `.env` locally, or set the same values in the production
 host's secret settings. Turn on 2-step verification for the business Google
@@ -81,6 +108,19 @@ account, create an App Password, set `HB_SMTP_PASS` to those 16 characters witho
 spaces, keep it private, and restart the API. `HB_CUSTOMER_EMAIL_ENABLED=false`
 keeps the owner ticket but stops the customer copy; `HB_ORDER_EMAIL_ENABLED=false`
 switches both off. Gmail's normal account sending limits and policies apply.
+
+Placing an order saves it first, then writes one job per email channel into the
+JSON outbox; a single worker delivers them with retries (30s → 2m → 10m → 1h → 6h,
+five attempts). The owner ticket is claimed first, so a broken customer address
+can never delay the kitchen. Web Push does not use the outbox: a phone alert is
+worth seconds, not retries.
+
+The customer receipt is plain text and contains the order, totals, service window,
+collection/delivery details, the private tracking link and a WhatsApp handoff.
+Replying to it reaches the kitchen inbox. `HB_PUBLIC_URL` is the origin used in
+that link; it is never inferred from the request `Host` header. The plaintext
+token lives in the outbox job only until the receipt is sent, then it is cleared —
+the saved order keeps only its SHA-256 digest.
 
 #### Deliverability: two accounts, not one
 
@@ -101,49 +141,28 @@ this, with two honest caveats:
 
 Without `HB_CUSTOMER_SMTP_*` both channels share the owner's account. That still
 works and still costs nothing; it is just more likely to be filtered. The health
-check below says which of the two you are running.
-
-The customer receipt is plain text on purpose — it renders everywhere and carries
-no remote images — and it contains the order, the totals, the service window, the
-collection/delivery details, the private tracking link and a WhatsApp handoff.
-Replying to it reaches the kitchen inbox. `HB_PUBLIC_URL` is the origin used in
-that tracking link; it is never inferred from the request `Host` header.
-
-The plaintext tracking token is held in the outbox job only until the receipt is
-sent or fails permanently, then it is cleared. The saved order still stores only
-its SHA-256 digest, so the private order page is exactly as private as before.
-
-### Telegram: the free instant phone alert
-
-Email is not a push notification. A Telegram bot is, and it costs nothing:
-
-1. Message **@BotFather**, `/newbot`, and copy the token into `HB_TELEGRAM_BOT_TOKEN`.
-2. Send the new bot any message once, then read the chat id from
-   `https://api.telegram.org/bot<TOKEN>/getUpdates` and put it in `HB_TELEGRAM_CHAT_ID`.
-3. Restart the API. Each order arrives as a message from the bot within seconds.
-
-A wrong chat id fails permanently (and is logged as a rejected chat), while a rate
-limit or a Telegram outage is retried. The bot token is never written to a log line.
+check says which of the two you are running.
 
 ### Free tiers fail silently — so make them shout
 
 The real risk with a free stack is not the price, it is the silence: an App
 Password stops working when someone changes the Google password, a provider
-suspends an account over bounce rates, a bot token is rotated. Orders keep
-arriving and nobody is told.
+suspends an account over bounce rates, keys are rotated, and a phone is wiped so a
+push subscription dies. Orders keep arriving and nobody is told.
 
 Three things guard against that:
 
-1. **Every job is durable and visible.** `GET /api/health` reports
-   `notifications.healthy` plus outbox counts (`pending`, `retrying`,
-   `waitingConfig`, `stuck`, `failed`, `sent`).
+1. **Every channel is visible.** `GET /api/health` reports
+   `notifications.healthy`, the push device counts, and outbox counts (`pending`,
+   `retrying`, `waitingConfig`, `stuck`, `failed`, `sent`).
 2. **A scheduled check exits non-zero.** `scripts/notification-check.mjs` reads
-   the live API and fails loudly when no channel can reach the kitchen, when an
-   order is still waiting for configuration, when a job has been stuck for more
-   than 15 minutes, or when any job gave up after five attempts.
+   the live API and fails loudly when no channel can reach the kitchen, when push
+   is configured but **no device has enrolled**, when an order is still waiting for
+   configuration, when a job has been stuck for more than 15 minutes, or when any
+   job gave up after five attempts.
 
    ```bash
-   HB_BASE=https://heritagebites.co.za node scripts/notification-check.mjs
+   HB_BASE=https://heritagebites.co.za npm run notify:check
    ```
 
    Run it from cron, a GitHub Action or an uptime monitor pointed at
@@ -259,7 +278,8 @@ node scripts/build-combined-pdf.mjs
 - `/passport` — loyalty card
 - `/quest` — customer quest: a view-only reference of what the kitchen cooks, then a request form
 - `/checkout` — order checkout
-- `/order/:code?token=…` — private order receipt and details
+- `/order/:code?token=…` — private order receipt and details, with per-device alert opt-in
+- `/alerts` — owner device enrolment for kitchen alerts (not in the public navigation)
 
 There are no admin/staff routes. Unknown paths show the public not-found screen.
 
@@ -280,6 +300,10 @@ A successful checkout returns a random, high-entropy tracking token. The token i
 - `POST /api/contact` — record an enquiry and forward it to the business inbox
 - `POST /api/quests` — record a customer quest (a request for a dish, not an order) and forward it to the same
   monitored inbox; nothing is charged, priced or reserved
+- `GET /api/push/config` — whether Web Push is on, and the public VAPID key
+- `POST /api/push/order-subscribe` — enrol a device for one order; needs the order code **and** its tracking token
+- `POST /api/push/owner-subscribe` — enrol a kitchen device; needs the `x-hb-owner-key` header
+- `POST /api/push/unsubscribe` — a device revoking itself; deliberately unauthenticated
 
 There are no `/api/admin/*` endpoints.
 
@@ -287,7 +311,7 @@ There are no `/api/admin/*` endpoints.
 
 Before relying on this as a live restaurant ordering system, complete the items in `docs/what-is-needed.md`. The most important are:
 
-1. Set the Gmail App Password so order emails actually send, add `HB_CUSTOMER_SMTP_*` for receipt deliverability, and add the Telegram bot token if the owner wants a phone push. Then schedule `scripts/notification-check.mjs`.
+1. Set the Gmail App Password so order emails actually send, add `HB_CUSTOMER_SMTP_*` for receipt deliverability, run `npm run push:keys` and enrol the kitchen devices at `/alerts`. Then schedule `npm run notify:check`.
 2. Set the live Yoco keys so card payments are real.
 3. Decide who watches the order inbox during the service window, or commission a protected order queue.
 4. Confirm the exact collection point and the Formspree inbox owner.

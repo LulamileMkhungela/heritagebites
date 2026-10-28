@@ -13,6 +13,7 @@ import OrderStatus from './pages/OrderStatus';
 import Passport from './pages/Passport';
 import Quest from './pages/Quest';
 import NotFound from './pages/NotFound';
+import OrderAlerts from './pages/OrderAlerts';
 
 /**
  * Scroll management.
@@ -79,6 +80,8 @@ export default function App() {
           <Route path="/order/:code" element={<OrderStatus />} />
           <Route path="/passport" element={<Passport />} />
           <Route path="/quest" element={<Quest />} />
+          {/* Owner device enrolment. Not in the public navigation. */}
+          <Route path="/alerts" element={<OrderAlerts />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
