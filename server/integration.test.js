@@ -26,6 +26,8 @@ process.env.HB_VAPID_PUBLIC_KEY = VAPID.publicKey;
 process.env.HB_VAPID_PRIVATE_KEY = VAPID.privateKey;
 process.env.HB_VAPID_SUBJECT = 'mailto:kitchen@example.com';
 process.env.HB_OWNER_PUSH_KEY = 'integration-owner-key-1234';
+/* Nothing in the suite may reach a real push service. */
+process.env.HB_PUSH_DRY_RUN = 'true';
 // Keep the contact endpoint offline: the Formspree call is exercised by its own
 // unit test with a stub, never against the real inbox from a test run.
 process.env.HB_CONTACT_FORMSPREE_URL = '';
@@ -241,6 +243,8 @@ describe('web push', () => {
     const record = stored.find((entry) => entry.endpoint.endsWith('/3'));
     assert.equal(record.role, 'customer');
     assert.equal(record.orderCode, body.order.code, 'a customer device is bound to one order');
+    assert.ok(record.lastSentAt, 'the subscription was confirmed with a push, proving the pipe works');
+    assert.equal(record.failures, 0);
   });
 
   test('a malformed subscription is refused with a reason', async () => {

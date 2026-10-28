@@ -130,7 +130,7 @@ export function saveSubscription(raw, scope) {
     return [record, ...without];
   });
 
-  return { ok: true, role: record.role, orderCode: record.orderCode };
+  return { ok: true, role: record.role, orderCode: record.orderCode, record };
 }
 
 export function removeSubscription(endpoint) {
@@ -185,11 +185,19 @@ export function pushPayload(kind, order) {
     };
   }
 
-  if (kind === 'customer-order-placed') {
+  /*
+   * Sent the moment a device opts in, not when the order was placed.
+   *
+   * The original design pushed "order placed" at checkout, which could never work:
+   * the customer taps "alert me" on the receipt page *after* checkout returns, so
+   * there was nobody subscribed yet. This confirmation is also the only proof the
+   * customer gets that the pipe actually reaches their phone.
+   */
+  if (kind === 'customer-alerts-on') {
     return {
-      title: `Order ${order.code} received`,
-      body: `We have your order — ${money(order.totals?.total)}. ${order.serviceWindow?.label ? `Cooking in ${order.serviceWindow.label}.` : ''}`.trim(),
-      tag: `order-${order.code}`,
+      title: `Alerts on for ${order.code}`,
+      body: `We will tell you here if ${order.code} changes. Total ${money(order.totals?.total)}.`,
+      tag: `order-${order.code}-alerts`,
       data: { kind, code: order.code },
     };
   }
@@ -236,6 +244,14 @@ export async function deliver(subscriptionsToSend, payload, send = defaultSend) 
 }
 
 function defaultSend(subscription, payload) {
+  /*
+   * HB_PUSH_DRY_RUN=true logs instead of sending. Local runs and the test suite
+   * use it so nothing reaches a real push service (and no test depends on DNS).
+   */
+  if (process.env.HB_PUSH_DRY_RUN === 'true') {
+    console.info(`[push] dry run (${process.env.NODE_ENV ?? 'dev'}): would send "${payload.title}"`);
+    return Promise.resolve({ statusCode: 201 });
+  }
   return webpush.sendNotification(
     { endpoint: subscription.endpoint, keys: subscription.keys },
     JSON.stringify(payload),
@@ -295,6 +311,22 @@ export async function notifyOrderDevices(order, kind, send) {
    * pruned by age rather than deleted here, because the receipt page is where a
    * customer revokes a device and it should keep working until they do.
    */
+  return { sent, results };
+}
+
+/**
+ * Confirm a single freshly-saved subscription, so the person who just tapped
+ * "alert me" gets immediate proof instead of silence until a cancellation that
+ * may never happen.
+ */
+export async function confirmOrderSubscription(record, order, send) {
+  const config = pushConfig();
+  if (!config || !ensureVapid(config)) return { sent: 0, results: [] };
+  const payload = pushPayload('customer-alerts-on', order);
+  if (!payload) return { sent: 0, results: [] };
+  const results = await deliver([record], payload, send);
+  const sent = results.filter((result) => result.ok).length;
+  console.info(`[push] order ${order.code}: subscription confirmation ${sent ? 'delivered' : 'not delivered yet'}`);
   return { sent, results };
 }
 

@@ -101,7 +101,10 @@ export async function checkPush(): Promise<PushState> {
       message: 'On an iPhone, add this site to your Home Screen first (Share → Add to Home Screen), then turn alerts on.',
     };
   }
-  return { status: 'idle', message: 'Get an alert on this device when your order is ready.' };
+  /* Deliberately not "when your order is ready": no status workflow advances an
+     order in this build, so that promise could not be kept. What can be promised is
+     a confirmation now and an alert if the order is cancelled. */
+  return { status: 'idle', message: 'Confirm this order on this device, and get an alert here if it changes.' };
 }
 
 /**

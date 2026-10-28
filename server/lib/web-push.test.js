@@ -175,7 +175,7 @@ describe('payloads', () => {
   });
 
   test('the customer alert never carries the tracking token or the address', () => {
-    const payload = pushPayload('customer-order-placed', order);
+    const payload = pushPayload('customer-alerts-on', order);
     assert.match(payload.body, /R200\.00/);
     assert.doesNotMatch(JSON.stringify(payload), /token/i);
     assert.doesNotMatch(JSON.stringify(payload), /0820000000|t@example\.co\.za/);
@@ -183,6 +183,14 @@ describe('payloads', () => {
 
   test('an unknown kind produces nothing rather than a broken notification', () => {
     assert.equal(pushPayload('nonsense', order), null);
+    assert.equal(pushPayload('customer-order-placed', order), null, 'the checkout-time customer push was unreachable and is gone');
+  });
+
+  test('the confirmation says alerts are on for that order', () => {
+    const payload = pushPayload('customer-alerts-on', order);
+    assert.match(payload.title, /Alerts on for HB-0900C/);
+    assert.match(payload.body, /R200\.00/);
+    assert.doesNotMatch(JSON.stringify(payload), /token/i);
   });
 });
 

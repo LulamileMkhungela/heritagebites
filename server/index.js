@@ -18,6 +18,7 @@ import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
 import { enqueueOrderAlert, notifyStatus, startOrderNotificationWorker } from './lib/order-notifications.js';
 import {
+  confirmOrderSubscription,
   notifyOrderDevices,
   notifyOwnerDevices,
   ownerKey,
@@ -635,9 +636,6 @@ app.post('/api/orders', async (req, res) => {
   void notifyOwnerDevices(order).catch((error) => {
     console.error(`[push] owner alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
   });
-  void notifyOrderDevices(order, 'customer-order-placed').catch((error) => {
-    console.error(`[push] customer alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
-  });
 
   try {
     /* The one-time tracking token lets the customer receipt deep-link into the
@@ -850,6 +848,14 @@ app.post('/api/push/order-subscribe', (req, res) => {
     userAgent: req.get('user-agent'),
   });
   if (!saved.ok) return res.status(422).json({ error: saved.error });
+
+  /*
+   * Confirm straight away, fire-and-forget. The customer has just tapped "alert
+   * me"; silence until a cancellation that may never happen would look broken.
+   */
+  void confirmOrderSubscription(saved.record, order).catch((error) => {
+    console.error(`[push] confirmation failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
+  });
 
   res.status(201).json({ ok: true, scope: 'order', code: order.code });
 });

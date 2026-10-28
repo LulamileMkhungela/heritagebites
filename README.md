@@ -55,7 +55,7 @@ message bundle to buy.
 | --- | --- | --- | --- | --- |
 | Owner | **Web Push** to enrolled kitchen devices | Yes, within seconds | Yes | R0 |
 | Owner | Email ticket to `HB_ORDER_ALERT_EMAIL` | Yes, background worker | Yes | R0 |
-| Customer | **Web Push** for the order they just placed | Yes, if they tap "Alert me" | Yes | R0 |
+| Customer | **Web Push** confirmation + cancellation for their order | Yes, once they tap "Alert me" | Yes | R0 |
 | Customer | Email receipt with private tracking link | Yes, when they left an email | Yes | R0 |
 | Customer / owner | WhatsApp | No — one tap, sent from their own app | — | R0, unlimited |
 
@@ -65,10 +65,15 @@ message bundle to buy.
   kitchen device (phone and/or counter tablet), plus the email ticket as the
   permanent record. The push says the code, plate count, total and
   collection/delivery; `requireInteraction` keeps it on screen until acknowledged.
-- **Customer, the moment they order:** a Web Push confirmation if they enabled
-  alerts on that device, and the email receipt with their tracking link. The push
-  deliberately carries no tracking token — a lock-screen message must not be able
-  to hand someone the order page.
+- **Customer, when they opt in:** a Web Push confirmation the instant they tap
+  "alert me" on their receipt — which is also their proof that alerts reach that
+  phone — plus the email receipt with their tracking link. The push deliberately
+  carries no tracking token: a lock-screen message must not hand someone the order
+  page.
+
+  (An earlier design pushed "order placed" at checkout. That could never work: the
+  customer opts in *after* checkout returns, so no device was subscribed yet. The
+  confirmation is sent at opt-in time instead, which is both reachable and useful.)
 - **Customer, when the order changes:** a Web Push for the one status change this
   build can produce — cancellation. There is no staff console and no status
   workflow, so nothing else advances an order; the tracking page is the live state.
@@ -142,6 +147,12 @@ this, with two honest caveats:
 Without `HB_CUSTOMER_SMTP_*` both channels share the owner's account. That still
 works and still costs nothing; it is just more likely to be filtered. The health
 check says which of the two you are running.
+
+### Checking it without a phone
+
+`HB_PUSH_DRY_RUN=true` makes the server log each push instead of sending it, so a
+local run or a test can exercise the whole path without touching a push service.
+The test suite sets it.
 
 ### Free tiers fail silently — so make them shout
 
