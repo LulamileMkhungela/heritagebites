@@ -57,17 +57,24 @@ export default function Layout() {
     <div className="min-h-screen bg-bone">
       {/* Main navigation */}
       <header className="sticky top-0 z-50 border-b border-bone/15 bg-ink text-bone backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
-          <Link to="/" className="group flex items-center gap-3" aria-label="Heritage Bites home">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-bone text-ink transition-transform group-hover:rotate-3">
+        <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-4 sm:px-4 sm:py-3">
+          <Link to="/" className="group flex min-h-11 min-w-11 items-center gap-2 sm:gap-3" aria-label="Heritage Bites home">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-bone text-ink transition-transform group-hover:rotate-3">
               <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                 <path d="M4 12h16M4 12c0 4.4 3.6 8 8 8s8-3.6 8-8" />
                 <path d="M7 8.5c0-1.4 1-1.4 1-2.8M11.5 8.5c0-1.4 1-1.4 1-2.8M16 8.5c0-1.4 1-1.4 1-2.8" />
               </svg>
             </span>
-            <span className="leading-none">
-              <span className="block font-display text-xl font-semibold tracking-tight text-bone">Heritage Bites</span>
-              <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-ochre">{catalog?.settings.tagline ?? 'Every Bite Tells a Story'}</span>
+            {/*
+              The wordmark is the only purely decorative thing in the bar, so it is
+              what gives way on a 320px phone: below 360px the icon alone remains
+              (the link keeps its accessible name), and the tagline only appears
+              once there is room for it. Everything else in the row is a control
+              and keeps its full 44px touch size.
+            */}
+            <span className="hidden min-w-0 leading-none min-[360px]:block">
+              <span className="block truncate font-display text-base font-semibold tracking-tight text-bone sm:text-xl">Heritage Bites</span>
+              <span className="mt-1 hidden truncate font-mono text-xs uppercase tracking-[0.18em] text-ochre sm:block">{catalog?.settings.tagline ?? 'Every Bite Tells a Story'}</span>
             </span>
           </Link>
 
@@ -86,11 +93,11 @@ export default function Layout() {
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-2 xl:ml-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 xl:ml-2">
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="flex items-center gap-2 rounded-full border-2 border-bone/25 px-3 py-2 text-[13px] text-bone/75 transition-colors hover:border-ochre hover:text-bone"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full border-2 border-bone/25 text-[13px] text-bone/75 transition-colors hover:border-ochre hover:text-bone lg:flex lg:w-auto lg:gap-2 lg:px-3 lg:py-2"
               aria-label="Search the menu"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
@@ -98,13 +105,13 @@ export default function Layout() {
                 <path d="m20 20-3.5-3.5" strokeLinecap="round" />
               </svg>
               <span className="hidden lg:inline">Search</span>
-              <kbd className="hidden rounded border border-bone/25 px-1 font-mono text-[10px] lg:inline">⌘K</kbd>
+              <kbd className="hidden rounded border border-bone/25 px-1 font-mono text-xs lg:inline">⌘K</kbd>
             </button>
 
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="relative flex items-center gap-2 rounded-full border border-bone/25 bg-transparent px-4 py-2.5 text-[13px] font-semibold text-bone transition-colors hover:border-ochre hover:text-ochre"
+              className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-bone/25 bg-transparent text-[13px] font-semibold text-bone transition-colors hover:border-ochre hover:text-ochre sm:flex sm:w-auto sm:gap-2 sm:px-4 sm:py-2.5"
               /*
                 The visible "Basket" label is hidden below sm, so without this
                 the button is an unnamed icon on a phone. The count is folded in
@@ -121,14 +128,14 @@ export default function Layout() {
               </svg>
               <span className="hidden sm:inline">Basket</span>
               {count > 0 && (
-                <span className="animate-pop grid h-5 min-w-5 place-items-center rounded-full bg-ochre px-1 font-mono text-[11px] font-bold text-ink">{count}</span>
+                <span className="animate-pop absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-ochre px-1 font-mono text-xs font-bold text-ink sm:static">{count}</span>
               )}
             </button>
 
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              className="grid h-10 w-10 place-items-center rounded-full border-2 border-bone/25 hover:bg-bone/10 xl:hidden"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full border-2 border-bone/25 hover:bg-bone/10 xl:hidden"
               aria-label="Toggle navigation"
               aria-expanded={menuOpen}
             >
@@ -194,7 +201,7 @@ function PreviewStrip() {
   return (
     <div className="bg-ink text-bone">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ochre">Preview</span>
+        <span className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-ochre">Preview</span>
         <p className="min-w-0 flex-1 text-[12px] leading-snug text-bone/75">
           Ordering and payments are switched off on this preview. Real orders: call or WhatsApp us.
         </p>
@@ -202,7 +209,7 @@ function PreviewStrip() {
           href={wa}
           target="_blank"
           rel="noreferrer"
-          className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ochre underline decoration-ochre/40 underline-offset-2 hover:text-bone"
+          className="shrink-0 text-xs font-semibold uppercase tracking-wide text-ochre underline decoration-ochre/40 underline-offset-2 hover:text-bone"
         >
           WhatsApp
         </a>
@@ -238,14 +245,14 @@ function ServiceStrip() {
         sentence in a ten-character column three lines deep.
       */}
       <div className="mx-auto flex max-w-7xl flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
-        <span className="order-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ochre-deep">
+        <span className="order-1 font-mono text-xs font-bold uppercase tracking-[0.18em] text-ochre-deep">
           {service.headline}
         </span>
         <a
           href={wa}
           target="_blank"
           rel="noreferrer"
-          className="order-2 ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ochre-deep underline decoration-ochre-deep/40 underline-offset-2 hover:text-ink sm:order-3"
+          className="order-2 ml-auto inline-flex min-h-11 shrink-0 items-center text-xs font-semibold uppercase tracking-wide text-ochre-deep underline decoration-ochre-deep/40 underline-offset-2 hover:text-ink sm:order-3"
         >
           Ask on WhatsApp
         </a>
@@ -278,20 +285,20 @@ function Footer() {
             South African plates cooked with care, Thursdays and Fridays. Order online for collection or delivery in Rosebank and Sandton.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
-            <a href={`tel:${s?.phone}`} className="rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
+            <a href={`tel:${s?.phone}`} className="inline-flex min-h-11 items-center rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
               Call us
             </a>
-            <a href={wa} target="_blank" rel="noreferrer" className="rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
+            <a href={wa} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
               WhatsApp
             </a>
-            <a href={`mailto:${s?.email}`} className="rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
+            <a href={`mailto:${s?.email}`} className="inline-flex min-h-11 items-center rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
               Email
             </a>
           </div>
         </div>
 
         <div>
-          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-ochre">Kitchen hours</h2>
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre">Kitchen hours</h2>
           <ul className="space-y-1 text-sm text-bone/70">
             {(s?.hours ?? []).filter((h) => !h.closed).map((h) => (
               <li key={h.day} className="flex justify-between gap-4">
@@ -299,37 +306,37 @@ function Footer() {
                 <span className="font-mono text-xs">{h.open}–{h.close}</span>
               </li>
             ))}
-            <li className="pt-1 text-[11px] text-bone/45">Closed the rest of the week</li>
+            <li className="pt-1 text-xs text-bone/45">Closed the rest of the week</li>
           </ul>
         </div>
 
         <div>
-          <h2 className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-ochre">Order</h2>
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre">Order</h2>
           <ul className="space-y-2 text-sm text-bone/70">
-            <li><Link to="/menu" className="hover:text-ochre">Meals</Link></li>
-            <li><Link to="/specials" className="hover:text-ochre">This week</Link></li>
-            <li><Link to="/checkout" className="hover:text-ochre">Checkout &amp; pay</Link></li>
-            <li><Link to="/passport" className="hover:text-ochre">Loyalty card</Link></li>
-            <li><Link to="/quest" className="hover:text-ochre">Customer quest</Link></li>
-            <li><Link to="/policies" className="hover:text-ochre">Policies &amp; terms</Link></li>
+            <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Meals</Link></li>
+            <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">This week</Link></li>
+            <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
+            <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
+            <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer quest</Link></li>
+            <li><Link to="/policies" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Policies &amp; terms</Link></li>
             <li>
               {s?.channels?.ubereats?.url
-                ? <a href={s.channels.ubereats.url} target="_blank" rel="noreferrer" className="hover:text-ochre">Uber Eats</a>
+                ? <a href={s.channels.ubereats.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Uber Eats</a>
                 : <span className="text-bone/40">Uber Eats · link coming soon</span>}
             </li>
             <li>
               {s?.channels?.mrd?.url
-                ? <a href={s.channels.mrd.url} target="_blank" rel="noreferrer" className="hover:text-ochre">Mr D Food</a>
+                ? <a href={s.channels.mrd.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Mr D Food</a>
                 : <span className="text-bone/40">Mr D Food · link coming soon</span>}
             </li>
           </ul>
-          <p className="mt-5 rounded-xl border border-bone/15 p-3 text-[11px] leading-relaxed text-bone/55">
+          <p className="mt-5 rounded-xl border border-bone/15 p-3 text-xs leading-relaxed text-bone/55">
             Card payments are processed by Yoco. Card details are entered in Yoco&apos;s secure window — Heritage Bites never receives them.
           </p>
         </div>
       </div>
       <div className="border-t border-bone/10 px-4 py-5">
-        <div className="mx-auto max-w-7xl text-[11px] text-bone/45">
+        <div className="mx-auto max-w-7xl text-xs text-bone/45">
           <span>© {new Date().getFullYear()} Heritage Bites · Est. {s?.established ?? 2025}</span>
         </div>
       </div>
@@ -415,7 +422,7 @@ function CartDrawerPanel() {
                         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
                       </button>
                     </div>
-                    {l.picks.length > 0 && <p className="mt-0.5 text-[11px] leading-snug text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</p>}
+                    {l.picks.length > 0 && <p className="mt-0.5 text-xs leading-snug text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</p>}
                     <div className="mt-2 flex items-center justify-between">
                       <div className="inline-flex items-center rounded-full border-2 border-ink/12">
                         <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="grid h-7 w-7 place-items-center hover:bg-ink hover:text-bone rounded-full" aria-label="Decrease">−</button>
@@ -443,7 +450,7 @@ function CartDrawerPanel() {
                   <span className="font-mono">{zar(subtotal)}</span>
                 </div>
               </div>
-              <p className="mt-2 text-[11px] text-ink/45">
+              <p className="mt-2 text-xs text-ink/45">
                 {belowMinimum
                   ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
                   : 'Final totals are confirmed at checkout.'}
@@ -550,7 +557,7 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
             className="w-full bg-transparent py-4 text-base outline-none placeholder:text-ink/35"
             aria-label="Search dishes"
           />
-          <button type="button" onClick={onClose} className="shrink-0 rounded-full border border-ink/15 px-2 py-1 font-mono text-[10px] text-ink/50 hover:bg-ink hover:text-bone">
+          <button type="button" onClick={onClose} className="shrink-0 rounded-full border border-ink/15 px-2 py-1 font-mono text-xs text-ink/50 hover:bg-ink hover:text-bone">
             ESC
           </button>
         </div>
@@ -558,7 +565,7 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
         <div className="max-h-[52vh] overflow-y-auto">
           {!q.trim() && (
             <div className="px-5 py-5">
-              <p className="mb-2 font-mono text-[11px] uppercase tracking-widest text-ink/45">Try one of these</p>
+              <p className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/45">Try one of these</p>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((s) => (
                   <button key={s} type="button" onClick={() => setQ(s)} className="rounded-full border-2 border-ink/12 px-3 py-1.5 text-sm hover:border-ochre hover:bg-ochre/10">
@@ -566,7 +573,7 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
                   </button>
                 ))}
               </div>
-              <p className="mt-5 text-[11px] leading-relaxed text-ink/40">
+              <p className="mt-5 text-xs leading-relaxed text-ink/40">
                 Search matches dish names, Setswana and isiZulu names, and ingredients. Press ⏎ to open, or + to add straight to your basket.
               </p>
             </div>
@@ -590,7 +597,7 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
               <img src={r.image} alt="" className="h-12 w-12 rounded-lg object-cover" loading="lazy" />
               <button type="button" onClick={() => go(r.id)} className="min-w-0 flex-1 text-left">
                 <span className="block truncate text-sm font-semibold">{r.name}</span>
-                <span className="block text-[11px] text-ink/50">{r.localName ? `${r.localName} · ` : ''}{zar(r.price)}</span>
+                <span className="block text-xs text-ink/50">{r.localName ? `${r.localName} · ` : ''}{zar(r.price)}</span>
               </button>
               <button
                 type="button"

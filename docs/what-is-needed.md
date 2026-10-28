@@ -20,11 +20,11 @@ What is not yet live is operational, not cosmetic. In order:
 
 ## Launch hardening
 
-6. **Production data and backups.** Orders, messages, loyalty stamps and the email outbox are JSON files in `HB_DATA_DIR`. Point that at a persistent volume, back it up weekly, and note the store is single-instance only. Move to a transactional database before running more than one server or at meaningful volume.
+6. **Production data and backups.** Orders, messages, loyalty stamps and the email outbox are JSON files in `HB_DATA_DIR`. Point that at a persistent volume and run `npm run backup` weekly, copying the archive off the machine — the command exists now (`scripts/export-data.mjs`, refuses to write a backup over a corrupt store), but nothing schedules it for you. The store is single-instance only; move to a transactional database before running more than one server or at meaningful volume.
 7. **Hosting.** A Node.js 20+ host with HTTPS and persistent disk (Afrihost Cloud/VPS, Render, Railway and similar all work; shared hosting does not). Set every secret through the host's secret settings — never in the repository, a PDF or a chat message.
 8. **Monitoring.** Uptime check on `/api/health`, error logging, and an alert if the order email worker starts failing. Without this, a silent SMTP failure means silent lost orders.
-9. **Rate limiting and abuse controls** on `/api/contact`, `/api/orders` and `/api/passport`. Not implemented yet.
-10. **Security review** of the deployed configuration: HTTPS/HSTS, no debug data in responses, dependency audit, and confirmation that the tracking token is the only way to read an order.
+9. **Rate limiting and abuse controls** — done. Every write endpoint is capped per client (`server/lib/rate-limit.js`), with `429` and `Retry-After` rather than a silent drop: orders 20 per 10 min, enquiries and quests 8, loyalty lookups 30, reads 180 a minute. The numbers are set for one busy shopfront rather than one person, because mobile networks put many customers behind a single NAT address. `/api/health` is deliberately uncapped so an uptime monitor always gets an answer. Set `HB_TRUST_PROXY=1` behind a host proxy, or every visitor shares one bucket. Counters are in memory, so a restart forgets them.
+10. **Security review** of the deployed configuration: HTTPS/HSTS (the app sends HSTS only over TLS), no debug data in responses, dependency audit, and confirmation that the tracking token is the only way to read an order. Response headers (nosniff, frame-ancestors, referrer policy, permissions policy) and gzip are already wired; the remaining item is a **Content-Security-Policy**, which needs nonces threaded through the build and is not worth shipping half-done.
 
 ## Content still outstanding from the business
 

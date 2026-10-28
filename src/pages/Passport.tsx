@@ -66,7 +66,7 @@ export default function Passport() {
       */}
       {STATIC_PREVIEW && (
         <div className="mt-8 rounded-3xl border-2 border-ochre bg-ochre/10 p-5">
-          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ochre-deep">Preview build</p>
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">Preview build</p>
           <p className="mt-1.5 text-sm text-ink/70">
             Stamp lookups need the live site. In the meantime, WhatsApp us on{' '}
             <a href={`https://wa.me/${settings?.whatsapp ?? '27670137587'}`} target="_blank" rel="noreferrer" className="font-semibold text-ochre-deep underline">
@@ -95,7 +95,7 @@ export default function Passport() {
           <div className="mt-8 overflow-hidden rounded-[2rem] border-2 border-ink bg-ink text-bone">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-bone/15 px-6 py-4">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre">Heritage Bites</p>
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Heritage Bites</p>
                 <p className="font-display text-xl font-semibold">{result.found ? result.name : 'No stamps yet'}</p>
               </div>
               <p className="font-mono text-xs text-bone/50">{normalisePhone(phone)}</p>
@@ -125,7 +125,7 @@ export default function Passport() {
                     ['Next free meal', cardFull ? 'Ready now' : `${result.untilFree} stamps away`],
                   ].map(([k, v]) => (
                     <div key={k} className="rounded-2xl border border-bone/15 p-3">
-                      <dt className="font-mono text-[10px] uppercase tracking-wider text-bone/45">{k}</dt>
+                      <dt className="font-mono text-xs uppercase tracking-wider text-bone/45">{k}</dt>
                       <dd className="mt-1 font-display text-2xl font-bold text-ochre">{v}</dd>
                     </div>
                   ))}
@@ -159,7 +159,7 @@ export default function Passport() {
       */}
       <div className="mt-10 flex flex-wrap items-center justify-between gap-5 rounded-3xl border-2 border-ink/10 bg-white p-6">
         <div className="max-w-xl">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre-deep">Customer quest</p>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Customer quest</p>
           <h2 className="mt-1 font-display text-2xl font-semibold">Craving something that is not on the menu?</h2>
           <p className="mt-1.5 text-[13px] leading-relaxed text-ink/60">
             Look through what the kitchen cooks, then ask us for the dish you actually want. A person reads it and replies

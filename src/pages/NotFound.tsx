@@ -14,7 +14,7 @@ export default function NotFound() {
       <div className="mt-8 flex flex-wrap justify-center gap-3">
         <LinkButton to="/">Back home</LinkButton>
         <LinkButton to="/menu" variant="outline">See the menu</LinkButton>
-        <Link to="/contact" className="self-center text-sm font-semibold text-ochre-deep underline">
+        <Link to="/contact" className="inline-flex min-h-11 items-center self-center text-sm font-semibold text-ochre-deep underline">
           Tell us what broke
         </Link>
       </div>

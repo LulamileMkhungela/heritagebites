@@ -33,7 +33,13 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({ variant = 'primary', size = 'md', block, className = '', children, ...rest }: BtnProps) {
-  const sizes = { sm: 'px-3.5 py-2 text-sm', md: 'px-5 py-2.5 text-sm', lg: 'px-7 py-3.5 text-base' }[size];
+  /*
+    44px is the smallest comfortable touch target (Apple's HIG says 44pt, Android
+    says 48dp). These are the only two pill buttons in the app, so the floor is
+    set here rather than patched page by page: min-h keeps the height honest even
+    when the label is one short word.
+  */
+  const sizes = { sm: 'min-h-11 min-w-11 px-3.5 py-2 text-sm', md: 'min-h-11 min-w-11 px-5 py-2.5 text-sm', lg: 'min-h-12 min-w-12 px-7 py-3.5 text-base' }[size];
   return (
     <button
       {...rest}
@@ -53,7 +59,13 @@ export function LinkButton({
   children,
   ...rest
 }: { to?: string; href?: string; variant?: Variant; size?: 'sm' | 'md' | 'lg'; className?: string; children: ReactNode } & Record<string, unknown>) {
-  const sizes = { sm: 'px-3.5 py-2 text-sm', md: 'px-5 py-2.5 text-sm', lg: 'px-7 py-3.5 text-base' }[size];
+  /*
+    44px is the smallest comfortable touch target (Apple's HIG says 44pt, Android
+    says 48dp). These are the only two pill buttons in the app, so the floor is
+    set here rather than patched page by page: min-h keeps the height honest even
+    when the label is one short word.
+  */
+  const sizes = { sm: 'min-h-11 min-w-11 px-3.5 py-2 text-sm', md: 'min-h-11 min-w-11 px-5 py-2.5 text-sm', lg: 'min-h-12 min-w-12 px-7 py-3.5 text-base' }[size];
   const cls = `inline-flex items-center justify-center gap-2 rounded-full font-semibold uppercase tracking-wide transition-all duration-200 active:translate-y-px ${sizes} ${variants[variant]} ${className}`;
   if (href) {
     return (
@@ -82,7 +94,7 @@ export function Badge({ children, tone = 'ochre', className = '' }: { children: 
     bone: 'bg-bone/15 text-bone border-bone/30',
   };
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider ${tones[tone] ?? tones.ochre} ${className}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wider ${tones[tone] ?? tones.ochre} ${className}`}>
       {children}
     </span>
   );
@@ -131,7 +143,7 @@ export function SectionLabel({ children, onDark = false }: { children: ReactNode
   return (
     <div className="mb-4 flex items-center gap-3">
       <span className="h-px w-8 bg-ochre" />
-      <span className={`font-mono text-[11px] font-semibold uppercase tracking-[0.22em] ${onDark ? 'text-ochre' : 'text-ochre-deep'}`}>{children}</span>
+      <span className={`font-mono text-xs font-semibold uppercase tracking-[0.22em] ${onDark ? 'text-ochre' : 'text-ochre-deep'}`}>{children}</span>
     </div>
   );
 }
@@ -200,7 +212,7 @@ export function Field({
     <label className="block">
       <span className="mb-1.5 flex items-baseline justify-between gap-2">
         <span className="text-[13px] font-semibold text-ink">{label}</span>
-        {hint && !error && <span className="text-[11px] text-ink/45">{hint}</span>}
+        {hint && !error && <span className="text-xs text-ink/45">{hint}</span>}
       </span>
       {children}
       {error && <span className="mt-1 block text-[12px] font-medium text-chili">{error}</span>}

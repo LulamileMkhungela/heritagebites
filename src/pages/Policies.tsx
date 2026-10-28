@@ -45,21 +45,21 @@ export default function Policies() {
       <div className="mx-auto max-w-7xl px-4 py-12">
         <div className="grid gap-8 lg:grid-cols-[16rem_1fr]">
           <nav aria-label="Policies" className="lg:sticky lg:top-28 lg:self-start">
-            <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">On this page</p>
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">On this page</p>
             <ul className="space-y-1">
               {policies.map((p) => (
                 <li key={p.id}>
                   <a
                     href={`#${p.id}`}
                     onClick={() => setActive(p.id)}
-                    className={`block rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${active === p.id ? 'bg-ink text-bone' : 'text-ink/65 hover:bg-ink/5'}`}
+                    className={`flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${active === p.id ? 'bg-ink text-bone' : 'text-ink/65 hover:bg-ink/5'}`}
                   >
                     {p.title}
                   </a>
                 </li>
               ))}
             </ul>
-            <p className="mt-4 rounded-xl border border-ink/10 bg-white p-3 text-[11px] leading-relaxed text-ink/50">
+            <p className="mt-4 rounded-xl border border-ink/10 bg-white p-3 text-xs leading-relaxed text-ink/50">
               Questions about any of this? Call or WhatsApp +27 67 013 7587, or email heritagebitesfood@gmail.com.
             </p>
           </nav>
@@ -73,7 +73,7 @@ export default function Policies() {
                 aria-labelledby={`policy-${policy.id}`}
               >
                 <h2 id={`policy-${policy.id}`} className="font-display text-3xl font-semibold">{policy.title}</h2>
-                <p className="mt-1 font-mono text-[11px] uppercase tracking-wider text-ink/40">
+                <p className="mt-1 font-mono text-xs uppercase tracking-wider text-ink/40">
                   Last updated {new Date(policy.updated).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
                 <p className="mt-4 text-[15px] leading-relaxed text-ink/75">{policy.intro}</p>

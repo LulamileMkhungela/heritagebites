@@ -7,6 +7,7 @@
  */
 import 'dotenv/config';
 import express from 'express';
+import compression from 'compression';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -16,8 +17,19 @@ import { chargeCard, paymentDriver, paymentConfig, verifyYocoCheckout } from './
 import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents, orderCode, loyaltyPointsFor } from './lib/pricing.js';
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
-import { enqueueOrderAlert, startOrderNotificationWorker } from './lib/order-notifications.js';
+import { enqueueOrderAlert, notifyStatus, startOrderNotificationWorker } from './lib/order-notifications.js';
+import {
+  confirmOrderSubscription,
+  notifyOrderDevices,
+  notifyOwnerDevices,
+  ownerKey,
+  pushConfig,
+  pushStatus,
+  removeSubscription,
+  saveSubscription,
+} from './lib/web-push.js';
 import { deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
+import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
 
 const PORT = Number(process.env.PORT || 4000);
@@ -68,7 +80,86 @@ const hasValidTrackingToken = (order, token) => {
 };
 
 const app = express();
+
+/*
+ * Behind a host's reverse proxy every connection appears to come from 127.0.0.1,
+ * which would make every visitor share one rate-limit bucket. Asking Express to
+ * read X-Forwarded-For is only safe when the deployment says there really is a
+ * proxy in front of it, so it is opt-in rather than assumed.
+ */
+if (process.env.HB_TRUST_PROXY === '1') app.set('trust proxy', 1);
+
+/*
+ * gzip. The JavaScript bundle is ~325kB uncompressed and ~94kB gzipped, and this
+ * audience is on mobile data in South Africa, where that difference is the
+ * customer's airtime. The dev server compresses already; the production process
+ * did not, which meant the live site shipped the bigger number.
+ */
+app.use(compression({ threshold: 1024 }));
+
+/*
+ * Security headers.
+ *
+ * Deliberately conservative and hand-written rather than a helmet default: a
+ * mis-set Content-Security-Policy does not throw, it silently breaks the site in
+ * whichever browser is strictest. The two that matter here are HSTS (this site
+ * takes card orders, so plain HTTP must never be offered after the first visit)
+ * and frame-ancestors/X-Frame-Options (a login-free order page inside someone
+ * else's frame is a clickjacking surface).
+ *
+ * There is no CSP yet. The built index.html carries an inline JSON-LD block and
+ * the app uses inline styles, so a real policy needs nonces threaded through the
+ * build. Doing that badly is worse than not doing it; it is listed as follow-up.
+ */
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  /*
+   * Only over HTTPS, and only for a year at a time: HSTS on a domain that is
+   * later served over plain HTTP locks customers out with no way to click past it.
+   */
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
 app.use(express.json({ limit: '256kb' }));
+
+/* ---------------------------- Rate limits ------------------------------ */
+/*
+ * Limits on the endpoints that cost something: money (orders), disk (the JSON
+ * store grows with every order, quest and enquiry), or trust (the loyalty lookup
+ * takes a phone number and returns someone's stamp count, so it is also an
+ * enumeration surface).
+ *
+ * The numbers are deliberately loose, for a reason worth writing down: South
+ * African mobile networks put many customers behind one carrier-grade NAT
+ * address, so a limit tuned to "one person" would lock out a whole shopping
+ * centre. These are tuned to "one busy shopfront", which a script still cannot
+ * reach. Anything that trips a limit gets a 429 and a Retry-After, never a silent
+ * drop, and the client already degrades gracefully (the search palette falls back
+ * to filtering the catalogue it has).
+ *
+ * Read-only endpoints are capped mostly to stop a scraper copying the catalogue
+ * or hammering search, and /api/health is left uncapped because an uptime monitor
+ * polling it every minute is exactly the traffic that should always succeed.
+ */
+const LIMITS = {
+  catalogue: rateLimit({ windowMs: 60_000, max: scaledMax(180), name: 'catalogue' }),
+  search: rateLimit({ windowMs: 60_000, max: scaledMax(180), name: 'search' }),
+  quote: rateLimit({ windowMs: 60_000, max: scaledMax(120), name: 'quote' }),
+  order: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(20), name: 'order' }),
+  orderRead: rateLimit({ windowMs: 60_000, max: scaledMax(120), name: 'order-read' }),
+  cancel: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(10), name: 'cancel' }),
+  loyalty: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(30), name: 'loyalty' }),
+  contact: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(8), name: 'contact' }),
+  quest: rateLimit({ windowMs: 10 * 60_000, max: scaledMax(8), name: 'quest' }),
+  push: rateLimit({ windowMs: 60_000, max: scaledMax(30), name: 'push' }),
+};
 
 /* ------------------------------ Helpers ------------------------------- */
 
@@ -212,7 +303,39 @@ function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
   return { lines, errors, totals, discount: disc };
 }
 
+/**
+ * `t***@example.co.za` — enough to recognise your own inbox, not enough to leak
+ * it to anyone who happens to hold a tracking link.
+ */
+function maskEmail(value) {
+  const email = String(value ?? '').trim();
+  const at = email.indexOf('@');
+  if (at < 1) return null;
+  const local = email.slice(0, at);
+  return `${local[0]}${'*'.repeat(Math.max(1, Math.min(3, local.length - 1)))}${email.slice(at)}`;
+}
+
+/**
+ * What actually happened to the customer's receipt.
+ *
+ * The page must not promise an email that was never queued: with no SMTP
+ * configured no customer-email job exists at all, so the state is `none` and the
+ * order page stays quiet instead of claiming a receipt was sent.
+ */
+function receiptStatusFor(order) {
+  const jobs = store.load('orderNotificationJobs', []) ?? [];
+  const job = jobs.find((entry) => entry.orderCode === order.code
+    && (entry.channel ?? 'owner-email') === 'customer-email');
+  const state = !job
+    ? 'none'
+    : job.status === 'sent'
+      ? 'sent'
+      : job.status === 'failed' ? 'failed' : 'queued';
+  return { email: maskEmail(order.customer?.email), state };
+}
+
 function publicOrder(order) {
+  const receipt = receiptStatusFor(order);
   const settings = get('settings');
   return {
     id: order.id,
@@ -225,6 +348,13 @@ function publicOrder(order) {
     fulfilment: order.fulfilment,
     fulfilmentLabel: fulfilmentLabel(order.fulfilment),
     customer: { name: order.customer.name, phone: order.customer.phone },
+    /*
+     * Confirmation of where the receipt was emailed, masked. The full address is
+     * never returned: this payload is also served from the tracking link, and a
+     * masked address is enough for the customer to recognise their own inbox.
+     */
+    receiptEmail: receipt.state === 'none' ? null : receipt.email,
+    receiptState: receipt.state,
     items: order.items,
     totals: order.totals,
     payment: { method: order.payment.method, status: order.payment.status, reference: order.payment.reference, last4: order.payment.last4, brand: order.payment.brand },
@@ -339,10 +469,17 @@ async function forwardQuest(entry) {
 /* ------------------------------ Public API ---------------------------- */
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, paymentDriver: paymentDriver(), orders: get('orders').length, time: new Date().toISOString() });
+  res.json({
+    ok: true,
+    paymentDriver: paymentDriver(),
+    orders: get('orders').length,
+    /* Which free notification channels are configured — booleans, no secrets. */
+    notifications: { ...notifyStatus(), push: pushStatus() },
+    time: new Date().toISOString(),
+  });
 });
 
-app.get('/api/catalog', (_req, res) => {
+app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
   const settings = get('settings');
   res.json({
     categories: get('categories'),
@@ -364,7 +501,7 @@ app.get('/api/catalog', (_req, res) => {
 });
 
 /** Search backs the command-palette: name, local name, language, tags, story. */
-app.get('/api/search', (req, res) => {
+app.get('/api/search', LIMITS.search, (req, res) => {
   const q = String(req.query.q ?? '').trim().toLowerCase();
   const menu = get('menu');
   if (!q) return res.json({ results: [], q });
@@ -388,7 +525,7 @@ app.get('/api/search', (req, res) => {
   res.json({ results, q });
 });
 
-app.post('/api/quote', (req, res) => {
+app.post('/api/quote', LIMITS.quote, (req, res) => {
   const { items, fulfilment, code } = req.body ?? {};
   const { lines, errors, totals, discount } = quote(items, { fulfilment, code });
   if (errors.length) return res.status(422).json({ errors });
@@ -409,7 +546,7 @@ function cardFieldsSent(payment) {
   return Boolean(payment?.card || payment?.token);
 }
 
-app.post('/api/orders', async (req, res) => {
+app.post('/api/orders', LIMITS.order, async (req, res) => {
   const { items, fulfilment = 'collection', customer = {}, code = '', payment = {}, channel = 'card' } = req.body ?? {};
 
   const { lines, errors, totals, discount } = quote(items, { fulfilment, code });
@@ -447,6 +584,29 @@ app.post('/api/orders', async (req, res) => {
   }
   if (payment.method === 'cash-on-collection' && fulfilment === 'delivery') {
     return res.status(422).json({ errors: ['Cash is only accepted on collection. Please pay by card, or choose collection.'] });
+  }
+
+  /*
+   * A card order needs an email address.
+   *
+   * That address is the only place a receipt can go: card orders are the ones
+   * where the customer has no other record of what they paid for. Cash on
+   * collection stays optional — the customer is standing in front of us, and
+   * forcing an address there would only add friction to a completed sale.
+   *
+   * Checked before the card is charged, so a refusal never costs the customer a
+   * payment and never creates an order that cannot be receipted.
+   */
+  const customerEmail = String(customer.email ?? '').trim();
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(customerEmail);
+  if (customerEmail && !emailLooksValid) {
+    return res.status(422).json({ errors: ['That email address does not look right.'] });
+  }
+  if (payment.method === 'card' && !customerEmail) {
+    return res.status(422).json({
+      errors: ['Please add an email address — it is where your receipt for a card order goes.'],
+      code: 'email_required',
+    });
   }
 
   let chargeResult = null;
@@ -548,8 +708,20 @@ app.post('/api/orders', async (req, res) => {
   );
 
   set('orders', [order, ...get('orders')]);
+
+  /*
+   * Web Push is sent straight from the request rather than through the outbox: a
+   * phone alert is worth seconds, not retries. It is fire-and-forget — a failed
+   * push must never delay or fail an order that has already been paid for.
+   */
+  void notifyOwnerDevices(order).catch((error) => {
+    console.error(`[push] owner alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
+  });
+
   try {
-    enqueueOrderAlert(order);
+    /* The one-time tracking token lets the customer receipt deep-link into the
+       private order page; the saved order still keeps only its digest. */
+    enqueueOrderAlert(order, { trackingToken });
   } catch (error) {
     // The order remains valid even if its email-alert job cannot be recorded.
     console.error(`[order-notifications] could not queue order ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
@@ -584,7 +756,7 @@ app.post('/api/orders', async (req, res) => {
   res.status(201).json({ order: publicOrder(order), loyalty: next, trackingToken });
 });
 
-app.get('/api/orders/:code', (req, res) => {
+app.get('/api/orders/:code', LIMITS.orderRead, (req, res) => {
   const order = get('orders').find((o) => o.code.toLowerCase() === String(req.params.code).toLowerCase());
   if (!order || !hasValidTrackingToken(order, String(req.query.token ?? ''))) {
     return res.status(404).json({ error: 'That secure tracking link is invalid or has expired.' });
@@ -593,7 +765,7 @@ app.get('/api/orders/:code', (req, res) => {
   res.json({ order: publicOrder(order) });
 });
 
-app.post('/api/orders/:code/cancel', (req, res) => {
+app.post('/api/orders/:code/cancel', LIMITS.cancel, (req, res) => {
   const orders = get('orders');
   const idx = orders.findIndex((o) => o.code.toLowerCase() === String(req.params.code).toLowerCase());
   if (idx < 0 || !hasValidTrackingToken(orders[idx], String(req.body?.token ?? ''))) {
@@ -611,13 +783,19 @@ app.post('/api/orders/:code/cancel', (req, res) => {
   appendTimeline(order, 'cancelled', `Cancelled by customer (was ${previous})`);
   orders[idx] = order;
   set('orders', orders);
+
+  /* The one status change a customer can trigger, so it is the one push they get. */
+  void notifyOrderDevices(order, 'customer-order-cancelled').catch((error) => {
+    console.error(`[push] cancellation alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
+  });
+
   res.set('Cache-Control', 'private, no-store');
   res.json({ order: publicOrder(order) });
 });
 
 /* ----------------------------- Loyalty card -------------------------- */
 
-app.post('/api/passport', (req, res) => {
+app.post('/api/passport', LIMITS.loyalty, (req, res) => {
   const key = String(req.body?.phone ?? '').replace(/\D/g, '');
   if (key.length < 9) return res.status(422).json({ error: 'Please enter a valid South African cell number.' });
   const record = get('stamps')[key];
@@ -645,7 +823,7 @@ app.post('/api/passport', (req, res) => {
 
 /* -------------------------------- Contact ----------------------------- */
 
-app.post('/api/contact', async (req, res) => {
+app.post('/api/contact', LIMITS.contact, async (req, res) => {
   const { name, phone, email, subject, message } = req.body ?? {};
   if (!name?.trim() || !message?.trim()) return res.status(422).json({ errors: ['Please add your name and a message.'] });
 
@@ -677,7 +855,7 @@ app.post('/api/contact', async (req, res) => {
  */
 const QUEST_DAYS = ['either', 'Thursday', 'Friday'];
 
-app.post('/api/quests', async (req, res) => {
+app.post('/api/quests', LIMITS.quest, async (req, res) => {
   const { name, phone, email, dish, serviceDay = 'either', plates, notes } = req.body ?? {};
   const errors = [];
 
@@ -703,6 +881,99 @@ app.post('/api/quests', async (req, res) => {
 
   const delivery = await forwardQuest(entry);
   res.status(201).json({ ok: true, id: entry.id, delivered: delivery.delivered });
+});
+
+/* ----------------------------- Web Push -------------------------------- */
+
+/*
+ * Push routes.
+ *
+ * All three are rate-limited (see LIMITS above) and they are small, typed, and
+ * reject anything unexpected. The important boundary is authorisation, not rate:
+ *
+ *   /api/push/order-subscribe  needs the order code AND its tracking token, so a
+ *                              device can only ever subscribe to one order it can
+ *                              already read.
+ *   /api/push/owner-subscribe  needs the owner key. Without one set on the host,
+ *                              owner enrolment is refused entirely rather than left
+ *                              open to whoever finds the URL.
+ */
+
+app.get('/api/push/config', (_req, res) => {
+  const config = pushConfig();
+  res.json({
+    enabled: Boolean(config),
+    vapidPublicKey: config?.publicKey ?? null,
+    ownerEnrolment: Boolean(config && ownerKey()),
+  });
+});
+
+app.post('/api/push/order-subscribe', LIMITS.push, (req, res) => {
+  const config = pushConfig();
+  if (!config) return res.status(503).json({ error: 'Order alerts are not switched on for this site.' });
+
+  const { code, token, subscription } = req.body ?? {};
+  const orders = get('orders');
+  const order = orders.find((entry) => entry.code.toLowerCase() === String(code ?? '').toLowerCase());
+  if (!order || !hasValidTrackingToken(order, String(token ?? ''))) {
+    return res.status(404).json({ error: 'That secure tracking link is invalid or has expired.' });
+  }
+  if (order.status === 'cancelled') {
+    return res.status(409).json({ error: 'This order is cancelled, so there is nothing left to alert you about.' });
+  }
+
+  const saved = saveSubscription(subscription, {
+    role: 'customer',
+    orderCode: order.code,
+    userAgent: req.get('user-agent'),
+  });
+  if (!saved.ok) return res.status(422).json({ error: saved.error });
+
+  /*
+   * Confirm straight away, fire-and-forget. The customer has just tapped "alert
+   * me"; silence until a cancellation that may never happen would look broken.
+   */
+  void confirmOrderSubscription(saved.record, order).catch((error) => {
+    console.error(`[push] confirmation failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
+  });
+
+  res.status(201).json({ ok: true, scope: 'order', code: order.code });
+});
+
+app.post('/api/push/owner-subscribe', LIMITS.push, (req, res) => {
+  const config = pushConfig();
+  if (!config) return res.status(503).json({ error: 'Order alerts are not switched on for this site.' });
+
+  const expected = ownerKey();
+  if (!expected) {
+    return res.status(503).json({ error: 'Owner alerts are not configured on this host yet.' });
+  }
+
+  const given = String(req.get('x-hb-owner-key') ?? req.body?.key ?? '');
+  const a = Buffer.from(String(given));
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return res.status(401).json({ error: 'That owner key is not correct.' });
+  }
+
+  const saved = saveSubscription(req.body?.subscription, {
+    role: 'owner',
+    userAgent: req.get('user-agent'),
+  });
+  if (!saved.ok) return res.status(422).json({ error: saved.error });
+
+  res.status(201).json({ ok: true, scope: 'owner' });
+});
+
+app.post('/api/push/unsubscribe', LIMITS.push, (req, res) => {
+  const endpoint = String(req.body?.endpoint ?? '');
+  /*
+   * Deliberately unauthenticated: a device may revoke itself at any time, which is
+   * the whole point of "stop alerts". Nothing is disclosed by doing so, and an
+   * endpoint is an opaque capability URL that only its own browser knows.
+   */
+  const removed = removeSubscription(endpoint);
+  res.json({ ok: true, removed });
 });
 
 /* ------------------------------- 404 ---------------------------------- */
@@ -731,7 +1002,7 @@ if (existsSync(DIST)) {
    * crawlers index a page whose entire content is an apology.
    */
   const KNOWN_ROUTES = new Set([
-    '/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest',
+    '/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest', '/alerts',
   ]);
   const isKnownRoute = (path) => KNOWN_ROUTES.has(path) || /^\/order\/[^/]+$/.test(path);
 

@@ -77,7 +77,7 @@ export default function Contact() {
                 className="group flex items-start justify-between gap-4 rounded-3xl border-2 border-ink/10 bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-ink/30"
               >
                 <span>
-                  <span className="block font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">{row.t}</span>
+                  <span className="block font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">{row.t}</span>
                   <span className="mt-1 block text-[15px] font-semibold">{row.v}</span>
                   <span className="mt-1 block text-[12px] text-ink/50">{row.cta}</span>
                 </span>
@@ -88,31 +88,31 @@ export default function Contact() {
             ))}
 
             <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">Opening hours</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Opening hours</p>
               <ul className="mt-3 space-y-1.5 text-sm">
                 {(s?.hours ?? []).map((h) => {
                   const isToday = h.day === new Date().getDay();
                   return (
                     <li key={h.day} className={`flex justify-between gap-4 ${isToday ? 'font-bold' : h.closed ? 'text-ink/35' : 'text-ink/65'}`}>
-                      <span>{h.label}{isToday && <span className="ml-2 rounded-full bg-ochre px-2 py-0.5 text-[10px] uppercase text-ink">Today</span>}</span>
+                      <span>{h.label}{isToday && <span className="ml-2 rounded-full bg-ochre px-2 py-0.5 text-xs uppercase text-ink">Today</span>}</span>
                       <span className="font-mono text-xs">{h.closed ? 'Closed' : `${h.open} – ${h.close}`}</span>
                     </li>
                   );
                 })}
               </ul>
-              <p className="mt-3 border-t border-ink/10 pt-3 text-[11px] leading-relaxed text-ink/55">
+              <p className="mt-3 border-t border-ink/10 pt-3 text-xs leading-relaxed text-ink/55">
                 {s?.collectionNote ?? 'We confirm the exact collection point by WhatsApp when your order is placed.'}
               </p>
             </div>
 
             <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">Delivery</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</p>
               <p className="mt-2 text-sm text-ink/70">
                 {s?.deliveryAreas?.join(' & ') ?? 'Rosebank & Sandton'} only, Thursdays and Fridays between{' '}
                 {s?.serviceWindow.open} and {s?.serviceWindow.close}. Delivery is included in the plate price; the minimum
                 order is R{Number(s?.minDeliveryOrder ?? 100)}.
               </p>
-              <Link to="/policies" className="mt-3 inline-block text-sm font-semibold text-ochre-deep underline">
+              <Link to="/policies" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-ochre-deep underline">
                 Delivery, refund and cancellation policies
               </Link>
             </div>
@@ -189,7 +189,7 @@ export default function Contact() {
                   <Button type="submit" size="lg" disabled={state === 'sending'}>
                     {state === 'sending' ? 'Sending…' : 'Send message'}
                   </Button>
-                  <p className="text-[11px] leading-relaxed text-ink/40">
+                  <p className="text-xs leading-relaxed text-ink/40">
                     We only use these details to reply to your enquiry. No marketing list, no sharing. See our{' '}
                     <Link to="/policies" className="font-semibold text-ink/60 underline">privacy policy</Link>.
                   </p>

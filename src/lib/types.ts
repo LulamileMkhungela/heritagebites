@@ -242,6 +242,13 @@ export interface Order {
   fulfilment: Fulfilment;
   fulfilmentLabel: string;
   customer: { name: string; phone: string };
+  /**
+   * Where the receipt was emailed, masked by the server (`t***@example.co.za`).
+   * Null when no address was left or no receipt was ever queued.
+   */
+  receiptEmail: string | null;
+  /** Delivery state of that receipt, so the page never promises an email it did not send. */
+  receiptState: 'none' | 'queued' | 'sent' | 'failed';
   items: { itemId: string; name: string; unitPrice: number; qty: number; options: { label: string }[]; lineTotal: number }[];
   totals: Totals;
   payment: { method: string; status: string; reference: string; last4: string | null; brand: string | null };

@@ -19,15 +19,21 @@
     "test:interaction": "node scripts/interaction-smoke.mjs",
     "test:a11y": "node scripts/a11y-audit.mjs",
     "test:pages": "node scripts/pages-smoke.mjs",
-    "verify": "npm run test && npm run test:render && npm run test:interaction && npm run test:a11y"
+    "test:mobile": "node scripts/mobile-audit.mjs",
+    "backup": "node scripts/export-data.mjs",
+    "verify": "npm run test && npm run test:render && npm run test:interaction && npm run test:a11y",
+    "push:keys": "node scripts/push-keys.mjs",
+    "notify:check": "node scripts/notification-check.mjs"
   },
   "dependencies": {
+    "compression": "^1.8.2",
     "dotenv": "^18.0.8",
     "express": "^4.21.2",
     "nodemailer": "^10.1.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
+    "web-push": "^3.6.7",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

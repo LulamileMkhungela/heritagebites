@@ -43,7 +43,7 @@ export default function Specials() {
       {/* Today's status is read from the API, not guessed in the browser. */}
       <section className="mx-auto max-w-7xl px-4 py-10">
         <div className={`rounded-3xl border-2 p-6 ${service.open ? 'border-ochre bg-ochre/10' : 'border-ink/10 bg-white'}`}>
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">{service.headline}</p>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">{service.headline}</p>
           <p className="mt-2 font-display text-2xl font-semibold">{service.message}</p>
           <p className="mt-2 text-sm text-ink/60">
             {service.open
@@ -57,7 +57,7 @@ export default function Specials() {
             <Reveal key={day.day}>
               <div className="flex items-center justify-between rounded-3xl border-2 border-ink/10 bg-white p-6">
                 <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">Service day</p>
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Service day</p>
                   <h2 className="mt-1 font-display text-2xl font-semibold">{DAY_NAMES[day.day]}</h2>
                 </div>
                 <p className="font-mono text-lg font-bold">{day.open}–{day.close}</p>
@@ -136,7 +136,7 @@ export default function Specials() {
               </dl>
             </div>
             <div className="rounded-3xl bg-ink p-8 text-bone">
-              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ochre">Ask about this week</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Ask about this week</p>
               <p className="mt-3 text-sm leading-relaxed text-bone/75">
                 Specials change week to week and are confirmed on WhatsApp. Send us a message and we will tell you what
                 is in the pots.
@@ -144,7 +144,7 @@ export default function Specials() {
               <LinkButton href={waLink} variant="whatsapp" size="lg" className="mt-5">
                 WhatsApp us
               </LinkButton>
-              <p className="mt-4 text-[11px] leading-relaxed text-bone/45">
+              <p className="mt-4 text-xs leading-relaxed text-bone/45">
                 No delivery-partner links are published yet. Order online, or collect in {areas}.
               </p>
             </div>

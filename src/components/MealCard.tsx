@@ -33,10 +33,10 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
           </span>
         )}
         <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">
-          {zar(item.price)} <span className="font-sans text-[10px] font-normal uppercase tracking-wider text-bone/70">incl. delivery</span>
+          {zar(item.price)} <span className="font-sans text-xs font-normal uppercase tracking-wider text-bone/70">incl. delivery</span>
         </span>
         {item.imagePending && (
-          <span className="absolute right-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-ink">
+          <span className="absolute right-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-ink">
             Photo coming soon
           </span>
         )}
@@ -49,13 +49,13 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
           <span className="shrink-0 font-mono text-xs text-ink/45">{item.prepMins}′</span>
         </div>
         {item.localName && (
-          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-ochre-deep">
+          <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-ochre-deep">
             {item.localName} · {item.language}
           </p>
         )}
         {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>}
         {!compact && (
-          <p className="mt-2 font-mono text-[11px] uppercase tracking-wider text-ink/40">
+          <p className="mt-2 font-mono text-xs uppercase tracking-wider text-ink/40">
             {zar(item.price)} · starch & veg included
           </p>
         )}
@@ -154,7 +154,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
               ['Rating', `★ ${item.rating}`],
             ].map(([k, v]) => (
               <div key={k}>
-                <dt className="font-mono text-[10px] uppercase tracking-wider text-ink/40">{k}</dt>
+                <dt className="font-mono text-xs uppercase tracking-wider text-ink/40">{k}</dt>
                 <dd className="text-sm font-semibold">{v}</dd>
               </div>
             ))}
@@ -162,7 +162,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
 
           {item.story && (
             <div className="mt-5 rounded-2xl border-l-4 border-ochre bg-ochre/10 p-4">
-              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-ochre-deep">Every bite tells a story</p>
+              <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Every bite tells a story</p>
               <p className="text-[14px] leading-relaxed text-ink/80">{item.story}</p>
             </div>
           )}
@@ -171,7 +171,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
             <fieldset key={o.id} className="mt-5">
               <legend className="mb-2 flex items-center gap-2 text-sm font-semibold">
                 {o.label}
-                {o.required ? <span className="text-ochre-deep">*</span> : <span className="text-[11px] font-normal text-ink/40">optional{o.multiple ? ' · choose any' : ''}</span>}
+                {o.required ? <span className="text-ochre-deep">*</span> : <span className="text-xs font-normal text-ink/40">optional{o.multiple ? ' · choose any' : ''}</span>}
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {o.choices.map((c) => {

@@ -14,9 +14,30 @@ import { join } from 'node:path';
 
 process.env.NODE_ENV = 'test';
 process.env.HB_ORDER_EMAIL_ENABLED = 'false';
+
+/*
+ * Web Push is configured for the whole integration run so its routes can be
+ * exercised. The key pair is generated here, never committed: a leaked VAPID
+ * private key would let anyone push to this deployment's subscribers.
+ */
+const { default: webpush } = await import('web-push');
+const VAPID = webpush.generateVAPIDKeys();
+process.env.HB_VAPID_PUBLIC_KEY = VAPID.publicKey;
+process.env.HB_VAPID_PRIVATE_KEY = VAPID.privateKey;
+process.env.HB_VAPID_SUBJECT = 'mailto:kitchen@example.com';
+process.env.HB_OWNER_PUSH_KEY = 'integration-owner-key-1234';
+/* Nothing in the suite may reach a real push service. */
+process.env.HB_PUSH_DRY_RUN = 'true';
 // Keep the contact endpoint offline: the Formspree call is exercised by its own
 // unit test with a stub, never against the real inbox from a test run.
 process.env.HB_CONTACT_FORMSPREE_URL = '';
+/*
+ * The suite is one client on one address and places more orders in a minute than
+ * any real customer would, so every rate limit is multiplied rather than turned
+ * off: the middleware stays wired and under test, only the allowance is raised.
+ * The limiter itself has its own tests, including one that proves a 429 arrives.
+ */
+process.env.HB_RATE_LIMIT_MULTIPLIER = '50';
 // Tests run against a throwaway data directory so they never touch the demo
 // dataset that the storefront shows.
 const TMP = mkdtempSync(join(tmpdir(), 'hb-test-'));
@@ -186,6 +207,106 @@ describe('catalogue + search', () => {
   });
 });
 
+describe('web push', () => {
+  const sub = (n) => ({
+    endpoint: `https://push.example.test/integration/${n}`,
+    keys: { p256dh: `p256dh-${n}`, auth: `auth-${n}` },
+  });
+
+  test('the public config publishes the VAPID key but never the private one', async () => {
+    const config = await fetch(`${base}/api/push/config`).then(json);
+    assert.equal(config.enabled, true);
+    assert.equal(config.vapidPublicKey, process.env.HB_VAPID_PUBLIC_KEY);
+    assert.equal(config.ownerEnrolment, true);
+    assert.doesNotMatch(JSON.stringify(config), new RegExp(process.env.HB_VAPID_PRIVATE_KEY));
+  });
+
+  test('a customer can only subscribe a device to an order it can already read', async () => {
+    const { body } = await placeOrder();
+
+    const wrongToken = await fetch(`${base}/api/push/order-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: body.order.code, token: 'not-the-token', subscription: sub(1) }),
+    });
+    assert.equal(wrongToken.status, 404, 'the tracking token is the authorisation');
+
+    const noOrder = await fetch(`${base}/api/push/order-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: 'HB-9999Z', token: body.trackingToken, subscription: sub(2) }),
+    });
+    assert.equal(noOrder.status, 404);
+
+    const good = await fetch(`${base}/api/push/order-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: body.order.code, token: body.trackingToken, subscription: sub(3) }),
+    });
+    assert.equal(good.status, 201);
+    assert.equal((await good.json()).scope, 'order');
+
+    const stored = JSON.parse(readFileSync(join(TMP, 'pushSubscriptions.json'), 'utf8'));
+    const record = stored.find((entry) => entry.endpoint.endsWith('/3'));
+    assert.equal(record.role, 'customer');
+    assert.equal(record.orderCode, body.order.code, 'a customer device is bound to one order');
+    assert.ok(record.lastSentAt, 'the subscription was confirmed with a push, proving the pipe works');
+    assert.equal(record.failures, 0);
+  });
+
+  test('a malformed subscription is refused with a reason', async () => {
+    const { body } = await placeOrder();
+    const res = await fetch(`${base}/api/push/order-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: body.order.code, token: body.trackingToken, subscription: { endpoint: 'not-a-url' } }),
+    });
+    assert.equal(res.status, 422);
+    assert.match((await res.json()).error, /not usable/i);
+  });
+
+  test('owner enrolment needs the key, and a wrong key is refused', async () => {
+    const wrong = await fetch(`${base}/api/push/owner-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-hb-owner-key': 'wrong-key-wrong-key' },
+      body: JSON.stringify({ subscription: sub(4) }),
+    });
+    assert.equal(wrong.status, 401);
+
+    const right = await fetch(`${base}/api/push/owner-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-hb-owner-key': process.env.HB_OWNER_PUSH_KEY },
+      body: JSON.stringify({ subscription: sub(5) }),
+    });
+    assert.equal(right.status, 201);
+
+    const stored = JSON.parse(readFileSync(join(TMP, 'pushSubscriptions.json'), 'utf8'));
+    assert.equal(stored.find((entry) => entry.endpoint.endsWith('/5')).role, 'owner');
+  });
+
+  test('a device can revoke itself without a key', async () => {
+    const res = await fetch(`${base}/api/push/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: sub(5).endpoint }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).removed, 1);
+
+    const stored = JSON.parse(readFileSync(join(TMP, 'pushSubscriptions.json'), 'utf8'));
+    assert.equal(stored.some((entry) => entry.endpoint.endsWith('/5')), false);
+  });
+
+  test('health reports push state without exposing endpoints', async () => {
+    const health = await fetch(`${base}/api/health`).then(json);
+    const push = health.notifications.push;
+    assert.equal(push.configured, true);
+    assert.equal(typeof push.ownerDevices, 'number');
+    assert.equal(typeof push.customerDevices, 'number');
+    assert.doesNotMatch(JSON.stringify(health), /push\.example\.test/);
+  });
+});
+
 describe('checkout', () => {
   test('an approved card creates a paid order with a trackable code', async () => {
     const { res, body } = await placeOrder();
@@ -199,8 +320,12 @@ describe('checkout', () => {
     assert.equal(typeof body.order.serviceWindow.isPreOrder, 'boolean', 'every order carries a service window');
     assert.ok(body.order.serviceWindow.label);
 
+    /* Nothing is promised to the customer while SMTP is unconfigured. */
+    assert.equal(body.order.receiptEmail, null, 'no receipt is promised without SMTP');
+    assert.equal(body.order.receiptState, 'none');
+
     const jobs = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'));
-    const alert = jobs.find((job) => job.orderCode === body.order.code);
+    const alert = jobs.find((job) => job.orderCode === body.order.code && (job.channel ?? 'owner-email') === 'owner-email');
     assert.ok(alert, 'a saved order should enqueue a background owner email alert');
     assert.equal(alert.status, 'waiting_config', 'missing SMTP credentials must not block checkout');
     assert.equal(alert.attempts, 0);
@@ -219,9 +344,41 @@ describe('checkout', () => {
     assert.doesNotMatch(sentEmails[0].text, new RegExp(body.trackingToken));
 
     const sentJob = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'))
-      .find((job) => job.orderCode === body.order.code);
+      .find((job) => job.orderCode === body.order.code && (job.channel ?? 'owner-email') === 'owner-email');
     assert.equal(sentJob.status, 'sent');
     assert.equal(sentJob.messageId, 'mock-message-id');
+  });
+
+  test('with SMTP configured the customer receipt is queued and the address stays masked', async () => {
+    Object.assign(process.env, {
+      HB_ORDER_EMAIL_ENABLED: 'true',
+      HB_SMTP_HOST: 'smtp.example.com',
+      HB_SMTP_PORT: '465',
+      HB_SMTP_USER: 'alerts@example.com',
+      HB_SMTP_PASS: 'app-password',
+      HB_SMTP_FROM: 'alerts@example.com',
+      HB_ORDER_ALERT_EMAIL: 'kitchen@example.com',
+    });
+
+    try {
+      const { res, body } = await placeOrder();
+      assert.equal(res.status, 201);
+      assert.equal(body.order.receiptState, 'queued', 'the receipt job exists as soon as the order lands');
+      assert.equal(body.order.receiptEmail, 'i*@e.co.za', 'the page shows a masked address');
+      assert.doesNotMatch(JSON.stringify(body.order), /"i@e\.co\.za"/, 'the full address is never returned');
+
+      const jobs = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'))
+        .filter((job) => job.orderCode === body.order.code);
+      assert.deepEqual(jobs.map((job) => job.channel).sort(), ['customer-email', 'owner-email']);
+      const receipt = jobs.find((job) => job.channel === 'customer-email');
+      assert.ok(receipt.trackingToken, 'the receipt holds the one-time link until it is sent');
+      assert.doesNotMatch(JSON.stringify(body.order), new RegExp(receipt.trackingToken), 'the token never appears in the order payload');
+    } finally {
+      for (const key of ['HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL']) {
+        delete process.env[key];
+      }
+      process.env.HB_ORDER_EMAIL_ENABLED = 'false';
+    }
   });
 
   test('a declined card returns 402 and creates nothing', async () => {
@@ -250,7 +407,7 @@ describe('checkout', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fulfilment: 'collection',
-        customer: { name: 'T', phone: '+27820009999' },
+        customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999' },
         // 'veg' is required on this plate and is deliberately omitted here.
         items: [{ itemId: 'mogodu-plate', qty: 1, options: { starch: 'pap' } }],
         payment: { method: 'card', card: GOOD_CARD },
@@ -307,7 +464,7 @@ describe('checkout', () => {
 
     const cashOnDelivery = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '1 Sandton Drive', suburb: 'Sandton' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Sandton Drive', suburb: 'Sandton' },
       payment: { method: 'cash-on-delivery' },
     });
     assert.equal(cashOnDelivery.res.status, 422, 'cash on delivery was not confirmed by the business');
@@ -316,7 +473,7 @@ describe('checkout', () => {
   test('delivery is free in Rosebank and Sandton and enforces the minimum', async () => {
     const sandton = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
       items: [MOGODU],
     });
     assert.equal(sandton.res.status, 201);
@@ -326,7 +483,7 @@ describe('checkout', () => {
 
     const rosebank = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '15 Oxford Road', suburb: 'Rosebank' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '15 Oxford Road', suburb: 'Rosebank' },
       items: [MOGODU],
     });
     assert.equal(rosebank.res.status, 201);
@@ -336,7 +493,7 @@ describe('checkout', () => {
   test('REGRESSION: an address outside the delivery boundary is refused, not accepted', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Pretoria' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Pretoria' },
     });
     assert.equal(res.status, 422);
     assert.match(body.errors[0], /Rosebank and Sandton/i);
@@ -346,7 +503,7 @@ describe('checkout', () => {
   test('a suburb name alone cannot smuggle an out-of-area delivery through', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Sandtonville' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Sandtonville' },
     });
     assert.equal(res.status, 422);
     assert.match(body.errors[0], /Rosebank and Sandton/i);
@@ -355,7 +512,7 @@ describe('checkout', () => {
   test('cash on collection cannot be used for a delivery order', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
       payment: { method: 'cash-on-collection' },
     });
     assert.equal(res.status, 422);
@@ -367,6 +524,41 @@ describe('checkout', () => {
     assert.equal(res.status, 201);
     assert.equal(body.order.payment.status, 'pending');
     assert.equal(body.order.payment.reference, 'CASH');
+  });
+
+  /*
+   * The email rule, both halves. A card order without an address is refused
+   * before the charge, because the receipt is the customer's only record of what
+   * they paid for. Cash is different: they are collecting in person.
+   */
+  test('a card order without an email is refused before any charge', async () => {
+    const ordersBefore = (await fetch(`${base}/api/health`).then(json)).orders;
+    const { res, body } = await placeOrder({
+      customer: { name: 'No Email', phone: '+27 82 000 1111' },
+    });
+    assert.equal(res.status, 422);
+    assert.equal(body.code, 'email_required');
+    assert.match(body.errors[0], /email address/i);
+    const ordersAfter = (await fetch(`${base}/api/health`).then(json)).orders;
+    assert.equal(ordersAfter, ordersBefore, 'a refused order must not be saved');
+  });
+
+  test('a cash order does not need an email', async () => {
+    const { res, body } = await placeOrder({
+      customer: { name: 'Walk In', phone: '+27 82 000 2222' },
+      payment: { method: 'cash-on-collection' },
+    });
+    assert.equal(res.status, 201);
+    assert.equal(body.order.receiptEmail, null);
+  });
+
+  test('a malformed email is refused for either payment method', async () => {
+    const { res, body } = await placeOrder({
+      customer: { name: 'Typo', phone: '+27 82 000 3333', email: 'not-an-email' },
+      payment: { method: 'cash-on-collection' },
+    });
+    assert.equal(res.status, 422);
+    assert.match(body.errors[0], /does not look right/i);
   });
 
   test('unknown discount codes are ignored now that no codes are approved', async () => {
@@ -381,7 +573,7 @@ describe('order tracking + cancellation', () => {
   test('a tracking token is required, and the receipt never leaks the address', async () => {
     const placed = await placeOrder({
       fulfilment: 'delivery',
-      customer: { name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
     });
     const { code } = placed.body.order;
 
@@ -441,7 +633,7 @@ describe('order tracking + cancellation', () => {
 describe('loyalty card and contact', () => {
   test('repeat customers accumulate stamps', async () => {
     const phone = '+27 71 234 5678';
-    await placeOrder({ customer: { name: 'Passport Test', phone } });
+    await placeOrder({ customer: { email: 't@e.co.za', name: 'Passport Test', phone } });
     const after = await fetch(`${base}/api/passport`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -458,7 +650,7 @@ describe('loyalty card and contact', () => {
     // Two contemporary plates is R260 — five full R50 bands, so a flat one
     // stamp per order would fail this assertion.
     const placed = await placeOrder({
-      customer: { name: 'Stamp Check', phone },
+      customer: { email: 't@e.co.za', name: 'Stamp Check', phone },
       items: [{ ...WINGS, qty: 2 }],
     });
     assert.equal(placed.res.status, 201, `order should be accepted: ${JSON.stringify(placed.body)}`);
@@ -481,7 +673,7 @@ describe('loyalty card and contact', () => {
     // Four contemporary plates at R130 is exactly R520 — ten stamps, one
     // completed card. `10 - (stamps % 10)` used to answer "10 more to go".
     const placed = await placeOrder({
-      customer: { name: 'Full Card', phone },
+      customer: { email: 't@e.co.za', name: 'Full Card', phone },
       items: [{ itemId: 'short-rib-plate', qty: 4, options: { starch: 'savoury-rice', veg: 'glazed-carrots' } }],
     });
     assert.equal(placed.res.status, 201, `order should be accepted: ${JSON.stringify(placed.body)}`);

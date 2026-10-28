@@ -184,7 +184,10 @@ function LiveCheckout() {
     if (!customer.name.trim()) e.name = 'We need a name for the order.';
     if (!customer.phone.trim()) e.phone = 'We need a number to reach you on.';
     else if (normalisePhone(customer.phone).length < 11) e.phone = 'Please enter a valid South African cell number.';
-    if (customer.email && !/^\\S+@\\S+\\.\\S+$/.test(customer.email)) e.email = 'That email does not look right.';
+    const emailGiven = customer.email.trim();
+    if (emailGiven && !/^\S+@\S+\.\S+$/.test(emailGiven)) e.email = 'That email does not look right.';
+    /* Card orders need somewhere to send the receipt; cash does not. */
+    else if (!emailGiven && method2 === 'card') e.email = 'We need an email to send your card receipt to.';
     if (fulfilment === 'delivery') {
       if (!customer.suburb.trim()) e.suburb = 'Which delivery area are you in?';
       if (!customer.address.trim()) e.address = 'Where should we deliver?';
@@ -258,7 +261,7 @@ function LiveCheckout() {
 
       {service && !service.open && (
         <div className="mt-4 rounded-2xl border-2 border-ochre bg-ochre/10 p-4">
-          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ochre-deep">{service.headline}</p>
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">{service.headline}</p>
           <p className="mt-1 text-[13px] font-medium text-ink">{service.message}</p>
           <p className="mt-1 text-[12px] text-ink/60">
             You can still place the order now — we just cannot cook or deliver it until then.
@@ -270,7 +273,7 @@ function LiveCheckout() {
         <div className="space-y-8">
           {/* Fulfilment */}
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">How do you want it?</legend>
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want it?</legend>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {([
                 {
@@ -292,11 +295,11 @@ function LiveCheckout() {
                   className={`rounded-2xl border-2 p-4 text-left transition-all ${fulfilment === f.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
                 >
                   <span className="block font-semibold">{f.t}</span>
-                  <span className="mt-1 block text-[11px] leading-snug text-ink/55">{f.d}</span>
+                  <span className="mt-1 block text-xs leading-snug text-ink/55">{f.d}</span>
                 </button>
               ))}
             </div>
-            <p className="mt-3 text-[11px] text-ink/50">
+            <p className="mt-3 text-xs text-ink/50">
               Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Service window {settings?.serviceWindow.open}–
               {settings?.serviceWindow.close} on Thursdays and Fridays.
             </p>
@@ -304,7 +307,7 @@ function LiveCheckout() {
 
           {/* Details */}
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">Your details</legend>
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Your details</legend>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <Field label="Full name" error={errors.name}>
                 <input className={inputCls} value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} autoComplete="name" placeholder="Thabo Mahlangu" />
@@ -312,7 +315,11 @@ function LiveCheckout() {
               <Field label="Cell number" hint="so we can contact you" error={errors.phone}>
                 <input className={inputCls} value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="tel" placeholder="+27 82 000 0000" />
               </Field>
-              <Field label="Email" hint="optional" error={errors.email}>
+              <Field
+                label="Email"
+                hint={method2 === 'card' ? 'required — your receipt goes here' : 'optional'}
+                error={errors.email}
+              >
                 <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
               </Field>
               {fulfilment === 'delivery' && (
@@ -338,11 +345,25 @@ function LiveCheckout() {
                 </Field>
               </div>
             </div>
+            {/*
+              Both free channels explained where the customer is actually
+              entering an address, rather than buried in a policy page: email is
+              automatic, WhatsApp is a tap. No promise of an automated WhatsApp
+              message is made, because one cannot be sent for free.
+            */}
+            <p className="mt-3 text-xs leading-relaxed text-ink/50">
+              {customer.email.trim()
+                ? 'We email your receipt and a private tracking link to that address as soon as the order is placed. '
+                : method2 === 'card'
+                  ? 'A card order needs an email address — it is the only place your receipt can go. '
+                  : 'Add an email and we will send your receipt and a private tracking link. '}
+              The kitchen gets the order the moment you place it; WhatsApp replies come from a person, so they are not instant.
+            </p>
           </fieldset>
 
           {/* Payment */}
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ochre-deep">Payment</legend>
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Payment</legend>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {([
                 {
@@ -370,20 +391,20 @@ function LiveCheckout() {
                   </span>
                   <span>
                     <span className="block text-sm font-semibold">{m.label}</span>
-                    <span className="block text-[11px] text-ink/55">{m.blurb}</span>
+                    <span className="block text-xs text-ink/55">{m.blurb}</span>
                   </span>
                 </button>
               ))}
             </div>
             {fulfilment === 'delivery' && (
-              <p className="mt-2 text-[11px] text-ink/50">Delivery orders are paid by card. Cash is accepted on collection only.</p>
+              <p className="mt-2 text-xs text-ink/50">Delivery orders are paid by card. Cash is accepted on collection only.</p>
             )}
 
             {method2 === 'card' && liveCards && (
               <div className="animate-rise mt-5 rounded-2xl border-2 border-ink/10 bg-bone/70 p-5">
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-ink/50">Secure card payment</span>
-                  <span className="flex items-center gap-2 text-[11px] text-ink/50">
+                  <span className="font-mono text-xs uppercase tracking-wider text-ink/50">Secure card payment</span>
+                  <span className="flex items-center gap-2 text-xs text-ink/50">
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
                     Secured by Yoco
                   </span>
@@ -391,7 +412,7 @@ function LiveCheckout() {
                 {yoco ? (
                   <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-morogo bg-morogo/10 p-3">
                     <p className="text-[13px] font-semibold text-ink">Card authorised · {zar(yoco.amountCents / 100)}</p>
-                    <button type="button" onClick={() => setYoco(null)} className="text-[11px] font-semibold uppercase tracking-wide text-ink/60 underline">
+                    <button type="button" onClick={() => setYoco(null)} className="text-xs font-semibold uppercase tracking-wide text-ink/60 underline">
                       Change
                     </button>
                   </div>
@@ -401,7 +422,7 @@ function LiveCheckout() {
                   </Button>
                 )}
                 {yocoError && <p className="mt-2 text-[12px] font-medium text-chili">{yocoError}</p>}
-                <p className="mt-3 text-[11px] leading-relaxed text-ink/55">
+                <p className="mt-3 text-xs leading-relaxed text-ink/55">
                   Card details are entered in Yoco&apos;s secure window. Heritage Bites never sees or stores your card number.
                   Place your order after the card is authorised.
                 </p>
@@ -411,8 +432,8 @@ function LiveCheckout() {
             {needsCard && (
               <div className="animate-rise mt-5 rounded-2xl border-2 border-ink/10 bg-bone/70 p-5">
                 <div className="mb-4 flex items-center justify-between">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-ink/50">Card details</span>
-                  <span className="flex items-center gap-2 text-[11px] text-ink/50">
+                  <span className="font-mono text-xs uppercase tracking-wider text-ink/50">Card details</span>
+                  <span className="flex items-center gap-2 text-xs text-ink/50">
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
                     Test mode
                   </span>
@@ -429,7 +450,7 @@ function LiveCheckout() {
                         autoComplete="cc-number"
                         placeholder="4242 4242 4242 4242"
                       />
-                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[10px] font-bold uppercase text-ink/40">{brand || '····'}</span>
+                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs font-bold uppercase text-ink/40">{brand || '····'}</span>
                     </div>
                   </Field>
                   <div className="grid grid-cols-2 gap-4">
@@ -446,20 +467,21 @@ function LiveCheckout() {
                 </div>
 
                 <div className="mt-4 rounded-xl border border-ink/10 bg-ochre/10 p-3">
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-ochre-deep">Sandbox mode — test cards</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <p className="font-mono text-xs uppercase tracking-wider text-ochre-deep">Sandbox mode — test cards</p>
+                  {/* Two columns on a phone: a chip that shrinks into a 26px sliver is unhittable. */}
+                  <div className="mt-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
                     {TEST_CARDS.map((t) => (
                       <button
                         key={t.number}
                         type="button"
                         onClick={() => setCard({ ...card, number: formatCardNumber(t.number), expiry: '12/32', cvc: '123', holder: card.holder || 'Test User' })}
-                        className="rounded-full border border-ink/15 bg-bone px-2.5 py-1 text-[11px] font-medium hover:border-ochre"
+                        className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-full border border-ink/15 bg-bone px-3 py-1 text-xs font-medium hover:border-ochre sm:shrink-0"
                       >
                         {t.label}
                       </button>
                     ))}
                   </div>
-                  <p className="mt-2 text-[11px] leading-relaxed text-ink/55">
+                  <p className="mt-2 text-xs leading-relaxed text-ink/55">
                     Live card payments are off on this build, so no real charge is made. Once Yoco live keys are set on the
                     host, this form is replaced by Yoco&apos;s secure payment window.
                   </p>
@@ -474,7 +496,7 @@ function LiveCheckout() {
           <div className="overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
             <div className="border-b-2 border-ink/10 px-5 py-4">
               <h2 className="font-display text-xl font-semibold">Order summary</h2>
-              <p className="text-[11px] text-ink/50">
+              <p className="text-xs text-ink/50">
                 {lines.reduce((n, l) => n + l.qty, 0)} {lines.reduce((n, l) => n + l.qty, 0) === 1 ? 'item' : 'items'} · {fulfilment}
               </p>
             </div>
@@ -485,11 +507,11 @@ function LiveCheckout() {
                   <img src={l.image} alt="" className="h-12 w-12 rounded-lg object-cover" loading="lazy" />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-semibold leading-tight">{l.name}</p>
-                    {l.picks.length > 0 && <p className="text-[10px] leading-snug text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</p>}
+                    {l.picks.length > 0 && <p className="text-xs leading-snug text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</p>}
                     <div className="mt-1 flex items-center gap-2">
-                      <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="grid h-5 w-5 place-items-center rounded-full border border-ink/20 text-[10px] hover:bg-ink hover:text-bone" aria-label="Decrease">−</button>
-                      <span className="font-mono text-[11px]">{l.qty}</span>
-                      <button type="button" onClick={() => setQty(l.key, l.qty + 1)} className="grid h-5 w-5 place-items-center rounded-full border border-ink/20 text-[10px] hover:bg-ink hover:text-bone" aria-label="Increase">+</button>
+                      <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="grid h-11 w-11 place-items-center rounded-full border border-ink/20 text-sm hover:bg-ink hover:text-bone" aria-label="Decrease">−</button>
+                      <span className="font-mono text-xs">{l.qty}</span>
+                      <button type="button" onClick={() => setQty(l.key, l.qty + 1)} className="grid h-11 w-11 place-items-center rounded-full border border-ink/20 text-sm hover:bg-ink hover:text-bone" aria-label="Increase">+</button>
                     </div>
                   </div>
                   <span className="font-mono text-[13px] font-semibold">{zar(l.unitPrice * l.qty)}</span>
@@ -540,7 +562,7 @@ function LiveCheckout() {
                 {state === 'paying' ? 'Processing payment…' : `Place order · ${zar(shown.total)}`}
               </Button>
 
-              <p className="mt-3 text-[11px] leading-relaxed text-ink/60">
+              <p className="mt-3 text-xs leading-relaxed text-ink/60">
                 By placing this order you agree to our{' '}
                 <Link to="/policies" className="font-semibold text-ochre-deep underline">terms, delivery and refund policies</Link>.
               </p>
@@ -549,13 +571,13 @@ function LiveCheckout() {
 
           <Reveal delay={100}>
             <div className="mt-4 rounded-3xl border-2 border-ink/10 bg-ink p-5 text-bone">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre">Prefer not to pay online?</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Prefer not to pay online?</p>
               <p className="mt-2 text-sm text-bone/70">Send the same basket to us on WhatsApp and pay cash when you collect.</p>
               <a
                 href={`https://wa.me/${settings?.whatsapp ?? '27670137587'}?text=${encodeURIComponent('Hi Heritage Bites! I would like to order:\n' + lines.map((l) => `• ${l.qty} × ${l.name}`).join('\n'))}`}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-3 inline-flex items-center gap-2 rounded-full bg-ochre px-4 py-2 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"
+                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full bg-ochre px-4 py-2 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"
               >
                 Order on WhatsApp
               </a>
@@ -618,7 +640,7 @@ function PreviewCheckout() {
           </p>
         )}
 
-        <p className="mt-3 text-[11px] leading-relaxed text-ink/45">
+        <p className="mt-3 text-xs leading-relaxed text-ink/45">
           Prices are the published plate prices. Delivery in Rosebank and Sandton is included; the minimum order is R100.
           The live site will confirm the total with the kitchen before anything is charged.
         </p>

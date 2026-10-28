@@ -148,7 +148,7 @@ async function auditRouteAt(route) {
   return { route, problems, h1: titles, nodes: window.document.querySelectorAll('*').length, dom };
 }
 
-const ROUTES = ['/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest'];
+const ROUTES = ['/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest', '/alerts'];
 
 console.log('\n--- a11y audit (jsdom) ---');
 let total = 0;

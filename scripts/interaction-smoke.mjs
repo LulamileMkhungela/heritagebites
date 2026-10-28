@@ -525,7 +525,7 @@ await step('the loyalty card looks up stamps by cell number', async () => {
     body: JSON.stringify({
       channel: 'card',
       fulfilment: 'collection',
-      customer: { name: 'Passport Test', phone: loyal },
+      customer: { name: 'Passport Test', phone: loyal, email: 'passport@example.co.za' },
       items: [{ itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } }],
       payment: { method: 'card', card: { number: '4242424242424242', expiry: '12/32', cvc: '123', holder: 'P TEST' } },
     }),
@@ -626,6 +626,25 @@ await step('validation blocks an empty order', async () => {
   return 'blocked with a message';
 });
 
+await step('a card order without an email is blocked, because the receipt has nowhere to go', async () => {
+  const ordersBefore = await orderCount();
+
+  const byPlaceholder = (re) => [...s1.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
+  s1.setInput(byPlaceholder(/Thabo Mahlangu/), 'Interaction Test');
+  s1.setInput(byPlaceholder(/\+27 82/), '+27 82 000 7777');
+  s1.setInput(byPlaceholder(/4242 4242/), '4242 4242 4242 4242');
+  s1.setInput(byPlaceholder(/MM\/YY/), '12/32');
+  s1.setInput(byPlaceholder(/^123$/), '123');
+  s1.setInput(byPlaceholder(/T MAHLANGU/), 'I TEST');
+
+  s1.click(s1.byText('button[type="submit"]', /Place order/i)[0]);
+  await s1.waitFor(() => /need an email/i.test(s1.text()), 'email requirement', 10000);
+
+  const ordersAfter = await orderCount();
+  if (ordersAfter !== ordersBefore) throw new Error(`an order was created without an email: ${ordersBefore} -> ${ordersAfter}`);
+  return 'blocked with an email requirement';
+});
+
 await step('a declined card is refused and does not create an order', async () => {
   const ordersBefore = await orderCount();
 
@@ -633,6 +652,7 @@ await step('a declined card is refused and does not create an order', async () =
   const byPlaceholder = (re) => [...fields].find((f) => re.test(f.placeholder ?? ''));
   s1.setInput(byPlaceholder(/Thabo Mahlangu/), 'Interaction Test');
   s1.setInput(byPlaceholder(/\+27 82/), '+27 82 000 7777');
+  s1.setInput(byPlaceholder(/you@example/), 'interaction@example.co.za');
   s1.setInput(byPlaceholder(/4242 4242/), '4000 0000 0000 0002'); // declined
   s1.setInput(byPlaceholder(/MM\/YY/), '12/32');
   s1.setInput(byPlaceholder(/^123$/), '123');
@@ -713,16 +733,50 @@ await step('an approved card places the order and lands on the tracking page', a
   return code;
 });
 
-await step('the tracking page offers manual WhatsApp updates and an order ticket', async () => {
+await step('the receipt destination is shown masked, or not claimed at all', async () => {
+  /*
+   * Whether a receipt was queued depends on the server having SMTP configured, so
+   * this checks the two honest outcomes rather than assuming one: either the page
+   * names a masked address, or it says nothing about a receipt. What it must never
+   * do is claim a receipt and print the full address.
+   */
+  const text = s1.text();
+  if (/interaction@example\.co\.za/.test(text)) throw new Error('the full email address is exposed on the page');
+
+  if (/Receipt (emailed to|on its way to)|could not email your receipt/i.test(text)) {
+    if (!/i\*+@example\.co\.za/.test(text)) throw new Error('the masked receipt address is missing');
+    return 'masked receipt address shown';
+  }
+  if (/receipt/i.test(text) && /emailed to/i.test(text)) {
+    throw new Error('the page claims a receipt was sent without a masked address');
+  }
+  return 'no receipt claimed (no SMTP on this server), and no address leaked';
+});
+
+await step('the tracking page offers manual WhatsApp updates, an order ticket and a shareable receipt', async () => {
   const links = [...s1.doc.querySelectorAll('a[href^="https://wa.me/"]')];
-  if (links.length < 2) throw new Error('expected update-request and order-message links');
-  if (links.some((a) => !/wa\.me\/27670137587/.test(a.href))) throw new Error('wrong WhatsApp number');
+  if (links.length < 3) throw new Error('expected update-request, order-message and keep-receipt links');
+
+  /*
+   * Two kinds of link are legitimate here: the ones that message the kitchen
+   * (which must always be the business number) and the share link that opens
+   * WhatsApp with no recipient so the customer can keep the receipt in a chat
+   * of their own choosing. A share link pointing at a *wrong* number never is.
+   */
+  const business = links.filter((a) => /wa\.me\/27670137587/.test(a.href));
+  const share = links.filter((a) => !/wa\.me\/27670137587/.test(a.href));
+  if (business.length < 2) throw new Error('wrong WhatsApp number');
+  if (share.length !== 1 || !/^https:\/\/wa\.me\/\?text=/.test(share[0].href)) {
+    throw new Error('unexpected WhatsApp link target');
+  }
 
   const body = (a) => new URL(a.href).searchParams.get('text') ?? '';
-  const updates = links.find((a) => body(a).includes('please send me WhatsApp updates'));
+  if (!body(share[0]).includes(s1.__code)) throw new Error('shareable receipt is missing the order code');
+
+  const updates = business.find((a) => body(a).includes('please send me WhatsApp updates'));
   if (!updates || !body(updates).includes(s1.__code)) throw new Error('manual update request is missing the order code');
 
-  const ticket = links.find((a) => body(a).includes('Heritage Bites order'));
+  const ticket = business.find((a) => body(a).includes('Heritage Bites order'));
   if (!ticket || !body(ticket).includes(s1.__code)) throw new Error('order ticket body missing');
   if (!/not automatic/i.test(s1.text())) throw new Error('page does not clarify that WhatsApp updates are manual');
   return 'manual update request + pre-filled order ticket';

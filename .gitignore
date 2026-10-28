@@ -1,0 +1,24 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Local secrets — never commit a filled-in .env
+.env
+.env.*
+!.env.example
+
+# Runtime JSON store: orders, messages, quests, loyalty stamps, the outbox
+data/runtime/
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
+# Editor / OS noise
+.DS_Store
+*.log
+
+# Generated intermediate for the PDF builder
+docs/.statement.html
+
+# Local data backups (contain customer records — never commit them)
+backups/
