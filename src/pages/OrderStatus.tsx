@@ -62,6 +62,16 @@ export default function OrderStatus() {
 
   const updateMessage = encodeURIComponent(`Hi Heritage Bites, please send me WhatsApp updates for order ${order.code}.`);
   const updateRequest = `https://wa.me/${(settings?.whatsapp ?? '27670137587').replace(/\D/g, '')}?text=${updateMessage}`;
+
+  /*
+   * WhatsApp without the Cloud API: the customer presses a link and *their own*
+   * WhatsApp sends the message. Opening wa.me with no number lets them keep a
+   * copy of this receipt in a chat — with themselves, or whoever is collecting.
+   */
+  const keepReceiptMessage = encodeURIComponent(
+    `Heritage Bites order ${order.code} — ${zar(order.totals.total)}\n${order.statusMeta.label}\n${typeof window === 'undefined' ? '' : window.location.href}`,
+  );
+  const keepReceiptLink = `https://wa.me/?text=${keepReceiptMessage}`;
   return (
     <section className="mx-auto max-w-5xl px-4 py-12">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -71,6 +81,17 @@ export default function OrderStatus() {
           <p className="mt-2 text-sm text-ink/55">
             Placed {timeAgo(order.createdAt)} · {order.fulfilmentLabel} · {order.items.reduce((n, i) => n + i.qty, 0)} items
           </p>
+          {order.receiptEmail && order.receiptState !== 'none' && (
+            <p className="mt-1 text-[12px] text-ink/45">
+              {order.receiptState === 'sent'
+                ? 'Receipt emailed to '
+                : order.receiptState === 'queued'
+                  ? 'Receipt on its way to '
+                  : 'We could not email your receipt to '}
+              <span className="font-mono">{order.receiptEmail}</span>
+              {order.receiptState === 'failed' && ' — call or WhatsApp us and we will resend it.'}
+            </p>
+          )}
           {order.serviceWindow && (
             <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-full border border-ink/15 bg-white px-3 py-1 text-[12px] font-medium text-ink/70">
               <span className="font-mono text-[10px] uppercase tracking-wider text-ochre-deep">
@@ -156,7 +177,11 @@ export default function OrderStatus() {
 
           <div className="rounded-3xl border-2 border-ink/10 bg-ink p-6 text-bone">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ochre">Need an update?</p>
-            <p className="mt-2 text-sm text-bone/70">Your order is saved here. Automated kitchen updates are unavailable; WhatsApp updates are manual, not automatic. Message or call us for an update.</p>
+            <p className="mt-2 text-sm text-bone/70">
+              The kitchen was notified the moment you placed this order, and this page always shows the latest state.
+              WhatsApp messages are not automatic: replies are written by a person during kitchen hours, so they are not instant —
+              message or call us for an update.
+            </p>
             <a
               href={updateRequest}
               target="_blank"
@@ -172,6 +197,14 @@ export default function OrderStatus() {
               className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-ochre"
             >
               Message us about {order.code}
+            </a>
+            <a
+              href={keepReceiptLink}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-ochre"
+            >
+              Keep this receipt on WhatsApp
             </a>
             <a href={`tel:${order.phone.replace(/\s/g, '')}`} className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-ochre">
               Call {order.phone}

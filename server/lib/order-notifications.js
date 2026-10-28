@@ -1,21 +1,44 @@
 /**
- * Background email alerts for newly placed orders.
+ * Background order notifications — free-tier email and Telegram.
  *
- * The durable JSON outbox keeps checkout independent from SMTP availability:
- * the order is saved first, then a small job containing only its code is added.
- * A single worker reads the saved order and retries email delivery. For live,
+ * Three channels, none of which needs a paid message provider or a card on file:
+ *
+ *   owner-email     the kitchen ticket, to HB_ORDER_ALERT_EMAIL (or settings.email)
+ *   customer-email  the customer's receipt + private tracking link, when they left
+ *                   an address and HB_CUSTOMER_EMAIL_ENABLED is not "false"
+ *   owner-telegram  an instant phone push through a free Telegram bot
+ *
+ * WhatsApp is deliberately a *tap-to-send* channel, not an automated one: the
+ * receipt page builds a pre-filled wa.me link the customer (or owner) presses, so
+ * the message is sent by a person from their own WhatsApp. That is free and
+ * unlimited. Automated WhatsApp push would need Meta's Cloud API, business
+ * verification and per-template charges, which this build does not use.
+ *
+ * The durable JSON outbox keeps checkout independent from SMTP or Telegram
+ * availability: the order is saved first, then one small job per channel is
+ * added. A single worker reads the saved order and retries delivery. For live,
  * multi-instance service, move this outbox into the same transactional database
  * as orders.
  */
 import { randomUUID } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { store } from './store.js';
+import { whatsappLink } from './notify.js';
 
 const JOB_STORE = 'orderNotificationJobs';
 const MAX_ATTEMPTS = 5;
 const POLL_MS = Math.max(1000, Number(process.env.HB_ORDER_EMAIL_POLL_MS) || 5000);
 const STALE_SENDING_MS = 2 * 60 * 1000;
 const RETRY_DELAYS = [30_000, 2 * 60_000, 10 * 60_000, 60 * 60_000, 6 * 60 * 60_000];
+const DEFAULT_PUBLIC_URL = 'https://heritagebites.co.za';
+const TELEGRAM_LIMIT = 4096;
+
+/** Channels that are delivered by the SMTP transport. */
+export const EMAIL_CHANNELS = ['owner-email', 'customer-email'];
+
+const CUSTOMER_EMAIL = 'customer-email';
+const OWNER_EMAIL = 'owner-email';
+const OWNER_TELEGRAM = 'owner-telegram';
 
 let workerStarted = false;
 let workerBusy = false;
@@ -34,6 +57,29 @@ function paymentName(value) {
   })[value] ?? 'Manual';
 }
 
+/** Payment status in words a customer understands, not gateway jargon. */
+function paymentStatusName(value) {
+  return ({
+    approved: 'paid',
+    pending: 'to be paid on collection',
+    declined: 'not paid',
+    refunded: 'refunded',
+  })[value] ?? 'pending';
+}
+
+/** Jobs written before channels existed have no `channel` field. */
+function jobChannel(job) {
+  return job?.channel ?? OWNER_EMAIL;
+}
+
+const validEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value ?? '').trim());
+
+/* ------------------------------ Formatting ----------------------------- */
+
+function optionSuffix(item) {
+  return item.options?.length ? ` (${item.options.map((option) => option.label).join(', ')})` : '';
+}
+
 /** Build a plain-text email without including a tracking token or card data. */
 export function formatOrderAlert(order) {
   const lines = [
@@ -50,8 +96,7 @@ export function formatOrderAlert(order) {
   ];
 
   for (const item of order.items ?? []) {
-    const options = item.options?.length ? ` (${item.options.map((option) => option.label).join(', ')})` : '';
-    lines.push(`- ${item.qty} × ${item.name}${options}: ${money(item.lineTotal)}`);
+    lines.push(`- ${item.qty} × ${item.name}${optionSuffix(item)}: ${money(item.lineTotal)}`);
   }
 
   lines.push('');
@@ -77,7 +122,119 @@ export function formatOrderAlert(order) {
   };
 }
 
-function emailConfig() {
+/**
+ * The customer's own copy.
+ *
+ * Plain text on purpose: it renders everywhere, cannot be mangled into a
+ * phishing-looking HTML shell, and carries no remote images to trip spam filters.
+ * The only link that is not published on the website is the private tracking URL,
+ * which is why it is built from the one-time token handed out at checkout.
+ */
+export function formatCustomerReceipt(order, options = {}) {
+  const settings = options.settings ?? {};
+  const trackingUrl = options.trackingUrl ?? '';
+  const phoneDisplay = options.phoneDisplay || settings.phoneDisplay || settings.phone || '';
+  const supportEmail = options.supportEmail || settings.email || '';
+  const whatsappUrl = options.whatsappUrl
+    || (settings.whatsapp
+      ? whatsappLink(settings.whatsapp, `Hi Heritage Bites, about order ${order.code}`)
+      : '');
+  const firstName = String(order.customer?.name ?? '').trim().split(/\s+/)[0];
+
+  const lines = [
+    `Hi ${firstName || 'there'},`,
+    '',
+    'Thank you — your Heritage Bites order is with the kitchen.',
+    '',
+    `ORDER ${order.code}`,
+    `Placed: ${order.createdAt ?? 'time unavailable'}`,
+    `Type: ${fulfilmentName(order.fulfilment)}`,
+    `Payment: ${paymentName(order.payment?.method)} (${paymentStatusName(order.payment?.status)})`,
+  ];
+
+  if (order.serviceWindow?.label) {
+    const preOrder = order.serviceWindow.isPreOrder ? ' (pre-order for the next window)' : '';
+    lines.push(`Service window: ${order.serviceWindow.label}${preOrder}`);
+  }
+
+  lines.push('');
+  for (const item of order.items ?? []) {
+    lines.push(`• ${item.qty} × ${item.name}${optionSuffix(item)} — ${money(item.lineTotal)}`);
+  }
+
+  lines.push('');
+  if (Number(order.totals?.discount) > 0) {
+    lines.push(`Subtotal: ${money(order.totals?.subtotal)}`);
+    if (Number(order.totals?.delivery) > 0) lines.push(`Delivery: ${money(order.totals.delivery)}`);
+    lines.push(`Discount: -${money(order.totals.discount)}`);
+  }
+  lines.push(`TOTAL: ${money(order.totals?.total)}`);
+
+  lines.push('');
+  if (order.fulfilment === 'delivery') {
+    lines.push('DELIVERY');
+    const where = [order.customer?.suburb, order.customer?.address].filter(Boolean).join(' — ');
+    lines.push(
+      `We deliver to ${where || 'the address you gave us'}. Delivery is included in the plate price and takes about 30 minutes inside the service window.`,
+    );
+  } else {
+    lines.push('COLLECTION');
+    lines.push(
+      'Collect from our shadow kitchen at Standard Bank, Rosebank and Sandton. We confirm the exact collection point on WhatsApp before your window.',
+    );
+  }
+
+  if (trackingUrl) {
+    lines.push('');
+    lines.push('FOLLOW YOUR ORDER');
+    lines.push('This private link opens your receipt and its progress. Keep it to yourself — anyone who has it can read the order:');
+    lines.push(trackingUrl);
+  }
+
+  lines.push('');
+  lines.push('NEED SOMETHING?');
+  if (whatsappUrl) lines.push(`WhatsApp us: ${whatsappUrl}`);
+  if (phoneDisplay) lines.push(`Call: ${phoneDisplay}`);
+  if (supportEmail) lines.push(`Email: ${supportEmail}`);
+  lines.push('');
+  lines.push(
+    'WhatsApp replies are written by a person during kitchen hours, so they are not instant. Replying to this email reaches the same inbox the kitchen watches.',
+  );
+  lines.push('');
+  lines.push(`If you did not place order ${order.code}, please ignore this email.`);
+  lines.push('— Heritage Bites');
+
+  return {
+    subject: `Heritage Bites receipt — order ${order.code}`,
+    text: lines.join('\n'),
+  };
+}
+
+/** Telegram's own message: same ticket, trimmed to the API's size limit. */
+export function formatTelegramAlert(order) {
+  const alert = formatOrderAlert(order);
+  const text = `🔔 ${alert.text}`;
+  return {
+    text: text.length > TELEGRAM_LIMIT - 100
+      ? `${text.slice(0, TELEGRAM_LIMIT - 130)}\n…(truncated — open the order in the site)`
+      : text,
+  };
+}
+
+/* -------------------------------- Config ------------------------------- */
+
+/** Public origin used to build tracking links. Never guessed from a request. */
+export function publicBaseUrl() {
+  const configured = String(process.env.HB_PUBLIC_URL ?? '').trim();
+  return (configured || DEFAULT_PUBLIC_URL).replace(/\/+$/, '');
+}
+
+export function trackingUrlFor(order, token) {
+  if (!token) return '';
+  return `${publicBaseUrl()}/order/${encodeURIComponent(order.code)}?token=${encodeURIComponent(token)}`;
+}
+
+export function emailConfig() {
   if (process.env.HB_ORDER_EMAIL_ENABLED === 'false') return null;
 
   const host = process.env.HB_SMTP_HOST?.trim();
@@ -101,37 +258,39 @@ function emailConfig() {
     pass,
     from,
     to,
+    /* The customer receipt is on the same free SMTP account; this only turns it off. */
+    customer: process.env.HB_CUSTOMER_EMAIL_ENABLED !== 'false',
   };
 }
 
-/** Add exactly one outbox job per order. Missing SMTP config never blocks checkout. */
-export function enqueueOrderAlert(order) {
-  if (!order?.code) throw new Error('Cannot queue an order alert without an order code.');
-  const configured = Boolean(emailConfig());
-  const createdAt = new Date().toISOString();
-  let queued;
-
-  store.update(JOB_STORE, [], (jobs) => {
-    const existing = jobs.find((job) => job.orderCode === order.code);
-    if (existing) {
-      queued = existing;
-      return jobs;
-    }
-
-    queued = {
-      id: randomUUID(),
-      orderCode: order.code,
-      status: configured ? 'pending' : 'waiting_config',
-      attempts: 0,
-      createdAt,
-      nextAttemptAt: configured ? createdAt : null,
-      lastError: null,
-    };
-    return [queued, ...jobs];
-  });
-
-  return queued;
+/**
+ * Telegram bot configuration.
+ *
+ * A bot is created by messaging @BotFather and costs nothing: no card, no
+ * per-message fee, no application review. The owner messages the new bot once so
+ * Telegram opens a chat with them, then that chat id is the alert destination.
+ */
+export function telegramConfig() {
+  if (process.env.HB_TELEGRAM_ENABLED === 'false') return null;
+  const token = process.env.HB_TELEGRAM_BOT_TOKEN?.trim();
+  const chatId = process.env.HB_TELEGRAM_CHAT_ID?.trim();
+  if (!token || !chatId) return null;
+  return { token, chatId };
 }
+
+/** What is actually wired up — booleans only, no addresses or secrets. */
+export function notifyStatus() {
+  const email = emailConfig();
+  const telegram = telegramConfig();
+  return {
+    ownerEmail: Boolean(email),
+    customerEmail: Boolean(email?.customer),
+    telegram: Boolean(telegram),
+    publicUrl: publicBaseUrl(),
+  };
+}
+
+/* -------------------------------- Outbox ------------------------------- */
 
 function updateJob(id, patch) {
   store.update(JOB_STORE, [], (jobs) => jobs.map((job) => (
@@ -139,13 +298,71 @@ function updateJob(id, patch) {
   )));
 }
 
-function claimNextJob() {
+/**
+ * Queue one job per channel that applies to this order.
+ *
+ * Queue order matters: jobs are prepended, so the owner's ticket is queued after
+ * the customer's receipt and is therefore claimed first. The kitchen never waits
+ * behind a customer email, and a broken customer address cannot delay the ticket.
+ *
+ * A job also carries the one-time tracking token *until it is sent*, so the
+ * receipt can deep-link into the private order page. The saved order still keeps
+ * only the token digest; the token is cleared from the job the moment delivery
+ * succeeds or fails permanently.
+ */
+export function enqueueOrderAlert(order, context = {}) {
+  if (!order?.code) throw new Error('Cannot queue an order alert without an order code.');
+
+  const email = emailConfig();
+  const telegram = telegramConfig();
+  const createdAt = new Date().toISOString();
+  const plans = [];
+
+  if (email?.customer && validEmail(order.customer?.email)) {
+    plans.push({ channel: CUSTOMER_EMAIL, status: 'pending', trackingToken: context.trackingToken ?? null });
+  }
+  /* Always queued, even without SMTP: it waits as `waiting_config` so an order
+     taken before the App Password exists is still emailed once the worker starts. */
+  plans.push({ channel: OWNER_EMAIL, status: email ? 'pending' : 'waiting_config' });
+  if (telegram) plans.push({ channel: OWNER_TELEGRAM, status: 'pending' });
+
+  const queued = [];
+
+  store.update(JOB_STORE, [], (jobs) => {
+    let next = jobs;
+    for (const plan of plans) {
+      if (next.some((job) => job.orderCode === order.code && jobChannel(job) === plan.channel)) continue;
+      const job = {
+        id: randomUUID(),
+        orderCode: order.code,
+        channel: plan.channel,
+        status: plan.status,
+        attempts: 0,
+        createdAt,
+        startedAt: null,
+        nextAttemptAt: plan.status === 'pending' ? createdAt : null,
+        sentAt: null,
+        messageId: null,
+        lastError: null,
+        ...(plan.trackingToken ? { trackingToken: plan.trackingToken } : {}),
+      };
+      next = [job, ...next];
+      queued.push(job);
+    }
+    return next;
+  });
+
+  return queued;
+}
+
+function claimNextJob(accept) {
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   let claimed = null;
 
   store.update(JOB_STORE, [], (jobs) => {
     const index = jobs.findIndex((job) => {
+      if (!accept(job)) return false;
       if (job.status === 'waiting_config') return true;
       if (job.status === 'pending') return !job.nextAttemptAt || Date.parse(job.nextAttemptAt) <= now;
       return job.status === 'sending' && job.startedAt && now - Date.parse(job.startedAt) > STALE_SENDING_MS;
@@ -172,31 +389,55 @@ function savedOrder(orderCode) {
   return store.load('orders', []).find((order) => order.code === orderCode);
 }
 
+function failJob(job, error, terminal = true) {
+  updateJob(job.id, {
+    status: terminal ? 'failed' : 'pending',
+    lastError: String(error).slice(0, 400),
+    nextAttemptAt: terminal ? null : new Date(Date.now() + RETRY_DELAYS[Math.min((job.attempts ?? 1) - 1, RETRY_DELAYS.length - 1)]).toISOString(),
+    /* The receipt has either gone out or never will; stop holding the secret. */
+    ...(job.trackingToken ? { trackingToken: null } : {}),
+  });
+}
+
+/** One email job — the owner ticket or the customer receipt. */
 export async function processNextOrderAlert(transport, config) {
   if (workerBusy) return;
   workerBusy = true;
 
   try {
-    const job = claimNextJob();
+    const job = claimNextJob((candidate) => EMAIL_CHANNELS.includes(jobChannel(candidate)));
     if (!job) return;
 
+    const channel = jobChannel(job);
     const order = savedOrder(job.orderCode);
     if (!order) {
-      updateJob(job.id, {
-        status: 'failed',
-        lastError: 'The saved order could not be found.',
-        nextAttemptAt: null,
-      });
+      failJob(job, 'The saved order could not be found.');
+      return;
+    }
+
+    const settings = store.load('settings', {}) ?? {};
+    const message = channel === CUSTOMER_EMAIL
+      ? formatCustomerReceipt(order, {
+        settings,
+        trackingUrl: trackingUrlFor(order, job.trackingToken),
+      })
+      : formatOrderAlert(order);
+    const to = channel === CUSTOMER_EMAIL ? String(order.customer?.email ?? '').trim() : config.to;
+
+    if (!to) {
+      failJob(job, 'No customer email address was saved with this order.');
+      console.error(`[order-notifications] order ${order.code} ${channel} skipped: no recipient`);
       return;
     }
 
     try {
-      const message = formatOrderAlert(order);
       const result = await transport.sendMail({
         from: config.from,
-        to: config.to,
+        to,
         subject: message.subject,
         text: message.text,
+        /* A customer replying to their receipt reaches the kitchen inbox. */
+        ...(channel === CUSTOMER_EMAIL ? { replyTo: config.to } : {}),
       });
       updateJob(job.id, {
         status: 'sent',
@@ -204,47 +445,135 @@ export async function processNextOrderAlert(transport, config) {
         messageId: result.messageId ?? null,
         lastError: null,
         nextAttemptAt: null,
+        ...(job.trackingToken ? { trackingToken: null } : {}),
       });
-      console.info(`[order-notifications] emailed order ${order.code}`);
+      console.info(`[order-notifications] emailed ${channel} for order ${order.code}`);
     } catch (error) {
-      const terminal = job.attempts >= MAX_ATTEMPTS;
-      const delay = RETRY_DELAYS[Math.min(job.attempts - 1, RETRY_DELAYS.length - 1)];
-      updateJob(job.id, {
-        status: terminal ? 'failed' : 'pending',
-        lastError: String(error?.message ?? error).slice(0, 400),
-        nextAttemptAt: terminal ? null : new Date(Date.now() + delay).toISOString(),
-      });
-      console.error(`[order-notifications] order ${order.code} email ${terminal ? 'failed permanently' : 'will retry'}: ${String(error?.message ?? error).slice(0, 200)}`);
+      const terminal = (job.attempts ?? 1) >= MAX_ATTEMPTS;
+      failJob(job, error?.message ?? error, terminal);
+      console.error(`[order-notifications] order ${order.code} ${channel} ${terminal ? 'failed permanently' : 'will retry'}: ${String(error?.message ?? error).slice(0, 200)}`);
     }
   } finally {
     workerBusy = false;
   }
 }
 
-/** Start one non-blocking worker. Call after SMTP secrets are configured. */
+/* ------------------------------- Telegram ------------------------------ */
+
+/**
+ * Send one Telegram message.
+ *
+ * Returns a result instead of throwing so the caller can tell a permanent
+ * mistake (wrong chat id → 400) from something worth retrying (rate limit,
+ * Telegram outage). The bot token is part of the URL and is never logged.
+ */
+export async function sendTelegramMessage(config, text, fetchImpl = fetch) {
+  const res = await fetchImpl(`https://api.telegram.org/bot${config.token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: config.chatId, text, disable_web_page_preview: true }),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  let body = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+
+  if (res.ok && body?.ok !== false) return { ok: true };
+
+  return {
+    ok: false,
+    status: res.status,
+    description: String(body?.description ?? `Telegram responded ${res.status}`).slice(0, 200),
+    retryable: res.status === 429 || res.status >= 500,
+  };
+}
+
+export async function processNextTelegramAlert(send = sendTelegramMessage, config = telegramConfig()) {
+  if (!config) return;
+  if (workerBusy) return;
+  workerBusy = true;
+
+  try {
+    const job = claimNextJob((candidate) => jobChannel(candidate) === OWNER_TELEGRAM);
+    if (!job) return;
+
+    const order = savedOrder(job.orderCode);
+    if (!order) {
+      failJob(job, 'The saved order could not be found.');
+      return;
+    }
+
+    try {
+      const { text } = formatTelegramAlert(order);
+      const result = await send(config, text);
+      if (result?.ok) {
+        updateJob(job.id, {
+          status: 'sent',
+          sentAt: new Date().toISOString(),
+          lastError: null,
+          nextAttemptAt: null,
+        });
+        console.info(`[order-notifications] pushed order ${order.code} to Telegram`);
+        return;
+      }
+
+      const terminal = result?.retryable === false || (job.attempts ?? 1) >= MAX_ATTEMPTS;
+      failJob(job, result?.description ?? 'Telegram rejected the message.', terminal);
+      console.error(`[order-notifications] order ${order.code} Telegram ${terminal ? 'failed permanently' : 'will retry'}: ${String(result?.description ?? 'rejected').slice(0, 200)}`);
+    } catch (error) {
+      const terminal = (job.attempts ?? 1) >= MAX_ATTEMPTS;
+      failJob(job, error?.message ?? error, terminal);
+      console.error(`[order-notifications] order ${order.code} Telegram ${terminal ? 'failed permanently' : 'will retry'}: ${String(error?.message ?? error).slice(0, 200)}`);
+    }
+  } finally {
+    workerBusy = false;
+  }
+}
+
+/* -------------------------------- Worker ------------------------------- */
+
+/**
+ * Start one non-blocking worker. It runs whichever channels are configured and
+ * stays quiet when none are, so checkout never depends on notification setup.
+ */
 export function startOrderNotificationWorker() {
   if (workerStarted) return true;
-  const config = emailConfig();
-  if (!config) {
-    console.info('[order-notifications] waiting for SMTP configuration; orders will still be saved');
+
+  const email = emailConfig();
+  const telegram = telegramConfig();
+  if (!email && !telegram) {
+    console.info('[order-notifications] no SMTP or Telegram configuration yet; orders are still saved');
     return false;
   }
 
-  const transport = nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    auth: { user: config.user, pass: config.pass },
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 20_000,
-  });
+  const transport = email
+    ? nodemailer.createTransport({
+      host: email.host,
+      port: email.port,
+      secure: email.secure,
+      auth: { user: email.user, pass: email.pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
+    })
+    : null;
 
   workerStarted = true;
   const run = async () => {
-    await processNextOrderAlert(transport, config).catch((error) => {
-      console.error(`[order-notifications] worker error: ${String(error?.message ?? error).slice(0, 200)}`);
-    });
+    if (transport) {
+      await processNextOrderAlert(transport, email).catch((error) => {
+        console.error(`[order-notifications] email worker error: ${String(error?.message ?? error).slice(0, 200)}`);
+      });
+    }
+    if (telegram) {
+      await processNextTelegramAlert(undefined, telegram).catch((error) => {
+        console.error(`[order-notifications] Telegram worker error: ${String(error?.message ?? error).slice(0, 200)}`);
+      });
+    }
     if (!workerStarted) return;
     workerTimer = setTimeout(run, POLL_MS);
     workerTimer.unref?.();
@@ -252,6 +581,8 @@ export function startOrderNotificationWorker() {
 
   workerTimer = setTimeout(run, 0);
   workerTimer.unref?.();
-  console.info(`[order-notifications] email worker enabled for ${config.to}`);
+
+  const parts = [email ? `email → ${email.to}` : null, telegram ? 'Telegram → owner phone' : null].filter(Boolean);
+  console.info(`[order-notifications] worker enabled (${parts.join(', ')})`);
   return true;
 }

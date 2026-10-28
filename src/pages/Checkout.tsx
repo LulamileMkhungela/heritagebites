@@ -312,7 +312,7 @@ function LiveCheckout() {
               <Field label="Cell number" hint="so we can contact you" error={errors.phone}>
                 <input className={inputCls} value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="tel" placeholder="+27 82 000 0000" />
               </Field>
-              <Field label="Email" hint="optional" error={errors.email}>
+              <Field label="Email" hint="for your receipt" error={errors.email}>
                 <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
               </Field>
               {fulfilment === 'delivery' && (
@@ -338,6 +338,18 @@ function LiveCheckout() {
                 </Field>
               </div>
             </div>
+            {/*
+              Both free channels explained where the customer is actually
+              entering an address, rather than buried in a policy page: email is
+              automatic, WhatsApp is a tap. No promise of an automated WhatsApp
+              message is made, because one cannot be sent for free.
+            */}
+            <p className="mt-3 text-[11px] leading-relaxed text-ink/50">
+              {customer.email.trim()
+                ? 'We email your receipt and a private tracking link to that address as soon as the order is placed. '
+                : 'Add an email and we will send your receipt and a private tracking link. '}
+              The kitchen gets the order the moment you place it; WhatsApp replies come from a person, so they are not instant.
+            </p>
           </fieldset>
 
           {/* Payment */}

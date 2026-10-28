@@ -199,8 +199,12 @@ describe('checkout', () => {
     assert.equal(typeof body.order.serviceWindow.isPreOrder, 'boolean', 'every order carries a service window');
     assert.ok(body.order.serviceWindow.label);
 
+    /* Nothing is promised to the customer while SMTP is unconfigured. */
+    assert.equal(body.order.receiptEmail, null, 'no receipt is promised without SMTP');
+    assert.equal(body.order.receiptState, 'none');
+
     const jobs = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'));
-    const alert = jobs.find((job) => job.orderCode === body.order.code);
+    const alert = jobs.find((job) => job.orderCode === body.order.code && (job.channel ?? 'owner-email') === 'owner-email');
     assert.ok(alert, 'a saved order should enqueue a background owner email alert');
     assert.equal(alert.status, 'waiting_config', 'missing SMTP credentials must not block checkout');
     assert.equal(alert.attempts, 0);
@@ -219,9 +223,41 @@ describe('checkout', () => {
     assert.doesNotMatch(sentEmails[0].text, new RegExp(body.trackingToken));
 
     const sentJob = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'))
-      .find((job) => job.orderCode === body.order.code);
+      .find((job) => job.orderCode === body.order.code && (job.channel ?? 'owner-email') === 'owner-email');
     assert.equal(sentJob.status, 'sent');
     assert.equal(sentJob.messageId, 'mock-message-id');
+  });
+
+  test('with SMTP configured the customer receipt is queued and the address stays masked', async () => {
+    Object.assign(process.env, {
+      HB_ORDER_EMAIL_ENABLED: 'true',
+      HB_SMTP_HOST: 'smtp.example.com',
+      HB_SMTP_PORT: '465',
+      HB_SMTP_USER: 'alerts@example.com',
+      HB_SMTP_PASS: 'app-password',
+      HB_SMTP_FROM: 'alerts@example.com',
+      HB_ORDER_ALERT_EMAIL: 'kitchen@example.com',
+    });
+
+    try {
+      const { res, body } = await placeOrder();
+      assert.equal(res.status, 201);
+      assert.equal(body.order.receiptState, 'queued', 'the receipt job exists as soon as the order lands');
+      assert.equal(body.order.receiptEmail, 'i*@e.co.za', 'the page shows a masked address');
+      assert.doesNotMatch(JSON.stringify(body.order), /"i@e\.co\.za"/, 'the full address is never returned');
+
+      const jobs = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'))
+        .filter((job) => job.orderCode === body.order.code);
+      assert.deepEqual(jobs.map((job) => job.channel).sort(), ['customer-email', 'owner-email']);
+      const receipt = jobs.find((job) => job.channel === 'customer-email');
+      assert.ok(receipt.trackingToken, 'the receipt holds the one-time link until it is sent');
+      assert.doesNotMatch(JSON.stringify(body.order), new RegExp(receipt.trackingToken), 'the token never appears in the order payload');
+    } finally {
+      for (const key of ['HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL']) {
+        delete process.env[key];
+      }
+      process.env.HB_ORDER_EMAIL_ENABLED = 'false';
+    }
   });
 
   test('a declined card returns 402 and creates nothing', async () => {

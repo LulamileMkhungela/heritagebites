@@ -16,7 +16,7 @@ import { chargeCard, paymentDriver, paymentConfig, verifyYocoCheckout } from './
 import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents, orderCode, loyaltyPointsFor } from './lib/pricing.js';
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
-import { enqueueOrderAlert, startOrderNotificationWorker } from './lib/order-notifications.js';
+import { enqueueOrderAlert, notifyStatus, startOrderNotificationWorker } from './lib/order-notifications.js';
 import { deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
 import * as seed from './seed.js';
 
@@ -212,7 +212,39 @@ function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
   return { lines, errors, totals, discount: disc };
 }
 
+/**
+ * `t***@example.co.za` — enough to recognise your own inbox, not enough to leak
+ * it to anyone who happens to hold a tracking link.
+ */
+function maskEmail(value) {
+  const email = String(value ?? '').trim();
+  const at = email.indexOf('@');
+  if (at < 1) return null;
+  const local = email.slice(0, at);
+  return `${local[0]}${'*'.repeat(Math.max(1, Math.min(3, local.length - 1)))}${email.slice(at)}`;
+}
+
+/**
+ * What actually happened to the customer's receipt.
+ *
+ * The page must not promise an email that was never queued: with no SMTP
+ * configured no customer-email job exists at all, so the state is `none` and the
+ * order page stays quiet instead of claiming a receipt was sent.
+ */
+function receiptStatusFor(order) {
+  const jobs = store.load('orderNotificationJobs', []) ?? [];
+  const job = jobs.find((entry) => entry.orderCode === order.code
+    && (entry.channel ?? 'owner-email') === 'customer-email');
+  const state = !job
+    ? 'none'
+    : job.status === 'sent'
+      ? 'sent'
+      : job.status === 'failed' ? 'failed' : 'queued';
+  return { email: maskEmail(order.customer?.email), state };
+}
+
 function publicOrder(order) {
+  const receipt = receiptStatusFor(order);
   const settings = get('settings');
   return {
     id: order.id,
@@ -225,6 +257,13 @@ function publicOrder(order) {
     fulfilment: order.fulfilment,
     fulfilmentLabel: fulfilmentLabel(order.fulfilment),
     customer: { name: order.customer.name, phone: order.customer.phone },
+    /*
+     * Confirmation of where the receipt was emailed, masked. The full address is
+     * never returned: this payload is also served from the tracking link, and a
+     * masked address is enough for the customer to recognise their own inbox.
+     */
+    receiptEmail: receipt.state === 'none' ? null : receipt.email,
+    receiptState: receipt.state,
     items: order.items,
     totals: order.totals,
     payment: { method: order.payment.method, status: order.payment.status, reference: order.payment.reference, last4: order.payment.last4, brand: order.payment.brand },
@@ -339,7 +378,14 @@ async function forwardQuest(entry) {
 /* ------------------------------ Public API ---------------------------- */
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, paymentDriver: paymentDriver(), orders: get('orders').length, time: new Date().toISOString() });
+  res.json({
+    ok: true,
+    paymentDriver: paymentDriver(),
+    orders: get('orders').length,
+    /* Which free notification channels are configured — booleans, no secrets. */
+    notifications: notifyStatus(),
+    time: new Date().toISOString(),
+  });
 });
 
 app.get('/api/catalog', (_req, res) => {
@@ -549,7 +595,9 @@ app.post('/api/orders', async (req, res) => {
 
   set('orders', [order, ...get('orders')]);
   try {
-    enqueueOrderAlert(order);
+    /* The one-time tracking token lets the customer receipt deep-link into the
+       private order page; the saved order still keeps only its digest. */
+    enqueueOrderAlert(order, { trackingToken });
   } catch (error) {
     // The order remains valid even if its email-alert job cannot be recorded.
     console.error(`[order-notifications] could not queue order ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);

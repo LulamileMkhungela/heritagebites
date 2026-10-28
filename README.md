@@ -24,9 +24,9 @@ Outside the window the site still takes orders, but labels them **pre-orders** f
 
 ## Current product status
 
-The kitchen/manager console, staff roles, seeded staff logins and admin API have been removed. No staff-facing order workflow remains in this application. Successful orders are saved and queued for a background email alert to `heritagebitesfood@gmail.com`; delivery is not active until Gmail SMTP secrets are configured on the host. The email alert does not provide a staff queue or advance order statuses. Order receipts are secure contact points, not live kitchen tracking.
+The kitchen/manager console, staff roles, seeded staff logins and admin API have been removed. No staff-facing order workflow remains in this application. Successful orders are saved and queued for background alerts: an email ticket to `heritagebitesfood@gmail.com`, an email receipt to the customer (when they left an address) and, if a Telegram bot is configured, a phone push to the owner. Nothing is delivered until the SMTP or Telegram settings exist on the host — the order is still saved and still tracked. The alerts do not provide a staff queue or advance order statuses. Order receipts are secure contact points, not live kitchen tracking.
 
-The Contact form forwards each enquiry to the business Formspree endpoint **and** keeps a local copy, so a delivery failure never loses a message. WhatsApp customer updates remain manual.
+The Contact form forwards each enquiry to the business Formspree endpoint **and** keeps a local copy, so a delivery failure never loses a message. WhatsApp remains a tap-to-send channel in both directions: see [Free order notifications](#free-order-notifications-email--telegram--whatsapp) for why that is deliberate.
 
 Card payment has two modes. Without `YOCO_SECRET_KEY` checkout uses an offline sandbox test-card form. With a live Yoco key the sandbox form is replaced by Yoco's hosted payment window: the card is entered in Yoco's iframe, the browser returns only a checkout id, and the server verifies that checkout — including the amount — before the order exists. Card numbers never reach this server. See [`docs/production-payments-yoco.md`](docs/production-payments-yoco.md).
 
@@ -44,11 +44,78 @@ The **kitchen archive** (`comingSoon` in `server/seed.js`) brings back the pre-s
 
 Nothing is published that the business has not signed off. Specifically: no drinks, add-ons, discount codes, testimonials or day-of-week promotions are live, because none were approved. Two dishes (Tlhakwana and Smiley) have no photograph yet, so they render a "photo coming soon" panel instead of a picture of a different dish. `SEED_VERSION` in `server/seed.js` re-seeds catalogue content on boot when it changes; orders, messages and loyalty stamps are never touched.
 
-## Free order email alerts
+## Free order notifications (email + Telegram + WhatsApp)
 
-The chosen no-per-message-provider-fee route is email to the existing `heritagebitesfood@gmail.com` inbox. After an order is saved, the API adds an outbox job; a background worker sends it by SMTP and retries failures. This can notify the owner's phone through the Gmail app, but it is not an SMS or WhatsApp message. Gmail's normal account limits and policies apply.
+Every channel below costs nothing per message and needs no card on file. There is
+no SMS provider, no WhatsApp Cloud API account and no message bundle to buy.
 
-To enable it, turn on 2-step verification for the business Google account and create an App Password. Copy `.env.example` to `.env` locally, or set the same values in the production host's secret settings. Set `HB_SMTP_PASS` to that App Password without spaces, keep it private, and restart the API. Until SMTP is configured, jobs remain queued as `waiting_config`; checkout still saves the order.
+| Who | Channel | Automatic? | Cost |
+| --- | --- | --- | --- |
+| Owner | Email ticket to `HB_ORDER_ALERT_EMAIL` | Yes, background worker | R0 (Gmail App Password) |
+| Owner | Telegram push to the phone | Yes, background worker | R0 (free bot) |
+| Customer | Email receipt with private tracking link | Yes, when they left an email | R0 (same SMTP account) |
+| Customer / owner | WhatsApp | No — one tap, sent from their own app | R0, unlimited |
+
+### How it works
+
+Placing an order saves it first, then writes one small job per channel into the
+JSON outbox (`orderNotificationJobs`). A single background worker reads the saved
+order and delivers each job, retrying failures with backoff (30s → 2m → 10m → 1h →
+6h, five attempts). The order is never blocked by missing settings: with no SMTP
+configured the jobs simply wait as `waiting_config` and go out once the worker can
+start. `GET /api/health` reports which channels are live, as booleans only:
+
+```json
+"notifications": { "ownerEmail": true, "customerEmail": true, "telegram": false, "publicUrl": "https://heritagebites.co.za" }
+```
+
+The owner ticket is queued last and claimed first, so a broken customer address
+can never delay the kitchen seeing an order.
+
+### Owner email (and the customer receipt)
+
+Copy `.env.example` to `.env` locally, or set the same values in the production
+host's secret settings. Turn on 2-step verification for the business Google
+account, create an App Password, set `HB_SMTP_PASS` to those 16 characters without
+spaces, keep it private, and restart the API. `HB_CUSTOMER_EMAIL_ENABLED=false`
+keeps the owner ticket but stops the customer copy; `HB_ORDER_EMAIL_ENABLED=false`
+switches both off. Gmail's normal account sending limits and policies apply.
+
+The customer receipt is plain text on purpose — it renders everywhere and carries
+no remote images — and it contains the order, the totals, the service window, the
+collection/delivery details, the private tracking link and a WhatsApp handoff.
+Replying to it reaches the kitchen inbox. `HB_PUBLIC_URL` is the origin used in
+that tracking link; it is never inferred from the request `Host` header.
+
+The plaintext tracking token is held in the outbox job only until the receipt is
+sent or fails permanently, then it is cleared. The saved order still stores only
+its SHA-256 digest, so the private order page is exactly as private as before.
+
+### Telegram: the free instant phone alert
+
+Email is not a push notification. A Telegram bot is, and it costs nothing:
+
+1. Message **@BotFather**, `/newbot`, and copy the token into `HB_TELEGRAM_BOT_TOKEN`.
+2. Send the new bot any message once, then read the chat id from
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` and put it in `HB_TELEGRAM_CHAT_ID`.
+3. Restart the API. Each order arrives as a message from the bot within seconds.
+
+A wrong chat id fails permanently (and is logged as a rejected chat), while a rate
+limit or a Telegram outage is retried. The bot token is never written to a log line.
+
+### WhatsApp: free because a person presses send
+
+Automated WhatsApp push is not free: since October 2026 utility templates inside
+the service window are charged (about R0.16 per delivered message in South Africa)
+and need a verified Meta business account with a card on file. This build therefore
+does **not** claim to send WhatsApp notifications, and says so on the receipt page.
+
+What it does instead is hand the message to the customer's own WhatsApp, pre-filled:
+the receipt page has *Message us about HB-xxxx* (a structured ticket to the kitchen),
+*Keep this receipt on WhatsApp* (sends the receipt and tracking link into any chat
+they choose) and *Request WhatsApp updates*. Checkout carries the same basket-to-
+WhatsApp link. Replies come from a person on the kitchen phone, inside a normal
+WhatsApp chat, which is unlimited and free.
 
 ## Run locally
 
@@ -136,7 +203,7 @@ A successful checkout returns a random, high-entropy tracking token. The token i
 
 ## API overview
 
-- `GET /api/health` — service health and payment-driver label
+- `GET /api/health` — service health, payment-driver label and which notification channels are configured (booleans)
 - `GET /api/catalog` — catalogue, plate menus, policies, settings, live service status and payment configuration
 - `GET /api/search` — public catalogue search
 - `POST /api/quote` — server-priced basket quote
@@ -154,7 +221,7 @@ There are no `/api/admin/*` endpoints.
 
 Before relying on this as a live restaurant ordering system, complete the items in `docs/what-is-needed.md`. The most important are:
 
-1. Set the Gmail App Password so order emails actually send.
+1. Set the Gmail App Password so order emails actually send, and add the Telegram bot token if the owner wants a phone push.
 2. Set the live Yoco keys so card payments are real.
 3. Decide who watches the order inbox during the service window, or commission a protected order queue.
 4. Confirm the exact collection point and the Formspree inbox owner.

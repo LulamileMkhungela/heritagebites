@@ -713,16 +713,30 @@ await step('an approved card places the order and lands on the tracking page', a
   return code;
 });
 
-await step('the tracking page offers manual WhatsApp updates and an order ticket', async () => {
+await step('the tracking page offers manual WhatsApp updates, an order ticket and a shareable receipt', async () => {
   const links = [...s1.doc.querySelectorAll('a[href^="https://wa.me/"]')];
-  if (links.length < 2) throw new Error('expected update-request and order-message links');
-  if (links.some((a) => !/wa\.me\/27670137587/.test(a.href))) throw new Error('wrong WhatsApp number');
+  if (links.length < 3) throw new Error('expected update-request, order-message and keep-receipt links');
+
+  /*
+   * Two kinds of link are legitimate here: the ones that message the kitchen
+   * (which must always be the business number) and the share link that opens
+   * WhatsApp with no recipient so the customer can keep the receipt in a chat
+   * of their own choosing. A share link pointing at a *wrong* number never is.
+   */
+  const business = links.filter((a) => /wa\.me\/27670137587/.test(a.href));
+  const share = links.filter((a) => !/wa\.me\/27670137587/.test(a.href));
+  if (business.length < 2) throw new Error('wrong WhatsApp number');
+  if (share.length !== 1 || !/^https:\/\/wa\.me\/\?text=/.test(share[0].href)) {
+    throw new Error('unexpected WhatsApp link target');
+  }
 
   const body = (a) => new URL(a.href).searchParams.get('text') ?? '';
-  const updates = links.find((a) => body(a).includes('please send me WhatsApp updates'));
+  if (!body(share[0]).includes(s1.__code)) throw new Error('shareable receipt is missing the order code');
+
+  const updates = business.find((a) => body(a).includes('please send me WhatsApp updates'));
   if (!updates || !body(updates).includes(s1.__code)) throw new Error('manual update request is missing the order code');
 
-  const ticket = links.find((a) => body(a).includes('Heritage Bites order'));
+  const ticket = business.find((a) => body(a).includes('Heritage Bites order'));
   if (!ticket || !body(ticket).includes(s1.__code)) throw new Error('order ticket body missing');
   if (!/not automatic/i.test(s1.text())) throw new Error('page does not clarify that WhatsApp updates are manual');
   return 'manual update request + pre-filled order ticket';
