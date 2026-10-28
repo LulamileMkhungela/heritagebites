@@ -120,18 +120,27 @@ describe('rateLimit', () => {
     assert.equal(call(limiter, fakeReq({ method: 'POST' })).passed, true);
   });
 
-  test('does not leak memory: expired windows are swept away', () => {
+  test('does not leak memory: expired windows are swept away', async () => {
     const limiter = rateLimit({ windowMs: 1, max: 10, name: 'sweep' });
     for (let i = 0; i < 10; i += 1) call(limiter, fakeReq({ ip: `10.0.0.${i}` }));
     assert.ok(rateLimitBuckets() >= 10);
 
-    /* 5000+ tracked windows triggers the sweep on the next request. */
-    for (let i = 0; i < 5100; i += 1) call(limiter, fakeReq({ ip: `10.1.${Math.floor(i / 250)}.${i % 250}` }));
+    /* 5000+ tracked windows is what triggers the sweep on the next request. */
+    for (let i = 0; i < 5100; i += 1) {
+      call(limiter, fakeReq({ ip: `10.1.${Math.floor(i / 250)}.${i % 250}` }));
+    }
     const before = rateLimitBuckets();
-    setTimeout(() => {
-      call(limiter, fakeReq({ ip: '10.9.9.9' }));
-      assert.ok(rateLimitBuckets() < before + 2);
-    }, 20);
+
+    /*
+     * Awaited, not fired-and-forgotten. Asserting inside a bare setTimeout
+     * detaches the check from this test: it runs after the test has already
+     * reported, so a failure surfaces against whichever test happens to be
+     * running at the time — a flake that looks like someone else's bug.
+     */
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    call(limiter, fakeReq({ ip: '10.9.9.9' }));
+    assert.ok(rateLimitBuckets() < before + 2, `expected the sweep to drop expired windows, saw ${rateLimitBuckets()} of ${before}`);
   });
 });
 
