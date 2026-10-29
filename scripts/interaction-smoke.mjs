@@ -530,6 +530,165 @@ await step('quantity stepper changes the line and the total', async () => {
 });
 
 /* ------------------------------------------------------------------ */
+/* Flow 1a: the delivery address box and its area check                 */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The owner's report: choose Sandton, type a Rosebank address, and the order
+ * used to go through labelled with whichever area matched first. Two things fix
+ * it — suggestions from OpenStreetMap (so a picked address knows its own
+ * suburb), and a check that the address agrees with the area the customer chose.
+ *
+ * The geocoder is stubbed here: this suite must not depend on a third-party
+ * service being up, CORS-open, or reachable from CI, and the mapping itself is
+ * covered by the Node tests in server/lib/address.test.js.
+ */
+const s7 = boot('/checkout', {
+  seedCart: {
+    state: {
+      fulfilment: 'delivery',
+      lines: [{
+        key: 'mogodu-plate::starch=pap|veg=chakalaka',
+        itemId: 'mogodu-plate',
+        name: 'Mogodu Plate',
+        image: '/img/plate-mogodu.jpg',
+        unitPrice: 100,
+        qty: 1,
+        picks: [
+          { optionId: 'starch', choiceId: 'pap', label: 'Pap', priceDelta: 0 },
+          { optionId: 'veg', choiceId: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
+        ],
+        kind: 'menu',
+      }],
+    },
+    version: 2,
+  },
+});
+
+/** Two fake Photon features: one in Sandton, one in Rosebank. */
+const PHOTON_FIXTURE = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [28.05, -26.1] },
+      properties: { osm_type: 'N', osm_id: 111, housenumber: '12', street: 'Oxford Road', suburb: 'Illovo', city: 'Sandton', postcode: '2196' },
+    },
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [28.04, -26.14] },
+      properties: { osm_type: 'N', osm_id: 222, housenumber: '15', street: 'Oxford Road', suburb: 'Rosebank', city: 'Johannesburg', postcode: '2196' },
+    },
+  ],
+};
+
+s7.photonCalls = [];
+const liveFetch = s7.w.fetch;
+s7.w.fetch = async (input, init) => {
+  const url = String(typeof input === 'string' ? input : input?.url ?? '');
+  if (url.startsWith('https://photon.komoot.io/')) {
+    s7.photonCalls.push(url);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => PHOTON_FIXTURE,
+    };
+  }
+  return liveFetch(input, init);
+};
+
+await s7.waitFor(() => /Almost there/i.test(s7.text()), 'checkout page');
+
+await step('typing a delivery address offers OpenStreetMap suggestions', async () => {
+  const addressInput = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo, Sandton/.test(el.placeholder ?? ''));
+  if (!addressInput) throw new Error('no delivery address field');
+
+  /* Focus first: the field only asks while it has the customer's attention. */
+  addressInput.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
+  s7.setInput(addressInput, '12 Oxford');
+
+  await s7.waitFor(() => s7.photonCalls.length > 0, 'a geocoder request', 6000);
+  const queried = new URL(s7.photonCalls[0]);
+  if (queried.searchParams.get('q') !== '12 Oxford') throw new Error(`unexpected query: ${queried.searchParams.get('q')}`);
+  /* Bias, so a Johannesburg street beats Oxford in England. */
+  if (!queried.searchParams.get('lat') || !queried.searchParams.get('lon')) throw new Error('the geocoder query is not biased to Johannesburg');
+
+  await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Address suggestions"]'), 'the suggestion list', 6000);
+  const options = [...s7.doc.querySelectorAll('[role="option"]')];
+  if (options.length !== 2) throw new Error(`expected 2 suggestions, saw ${options.length}`);
+  if (!/Sandton delivery/.test(options[0].textContent ?? '')) throw new Error('the suggestions do not say which are inside the delivery area');
+  if (!/OpenStreetMap/.test(s7.doc.querySelector('[role="listbox"]')?.parentElement?.textContent ?? '')) {
+    throw new Error('OpenStreetMap attribution is missing');
+  }
+  return `2 suggestions from ${queried.host}`;
+});
+
+await step('picking a suggestion fills the address and the delivery area', async () => {
+  const [sandton] = [...s7.doc.querySelectorAll('[role="option"]')];
+  const button = sandton.querySelector('button');
+  button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));
+
+  await s7.waitFor(() => {
+    const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+    return input?.value === '12 Oxford Road, Illovo, Sandton';
+  }, 'the address to autofill', 4000);
+
+  const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
+  if (!select) throw new Error('no delivery area select');
+  if (select.value !== 'Sandton') throw new Error(`the area was not autofilled, it is "${select.value}"`);
+  return 'address and area autofilled from the picked result';
+});
+
+await step('an address that contradicts the chosen area is refused with both names', async () => {
+  const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
+  /* The customer now switches the area instead of the address. */
+  select.value = 'Rosebank';
+  select.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
+
+  await s7.waitFor(() => /but you chose Rosebank|is in Sandton/.test(s7.text()), 'the mismatch message', 4000);
+  const message = s7.text();
+  if (!/Sandton/.test(message) || !/Rosebank/.test(message)) {
+    throw new Error('the mismatch message does not name both areas');
+  }
+
+  /* And the order must not go through while it stands. */
+  if (!s7.byText('button[type="submit"]', /Place order/i)[0]) throw new Error('no place-order button');
+  s7.click(s7.byText('button[type="submit"]', /Place order/i)[0]);
+  await sleep(400);
+  if (/Order tracking/i.test(s7.text())) throw new Error('a mismatched delivery address placed an order');
+  return 'refused, and nothing was ordered';
+});
+
+await step('an address with no suburb only asks the customer to check', async () => {
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
+  select.value = 'Sandton';
+  select.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
+  s7.setInput(input, '9 Rivonia Road');
+
+  await s7.waitFor(() => /Check the suburb/.test(s7.text()), 'the suburb hint', 4000);
+  /* A warning, not an error: this address must still be submittable. */
+  if (/but you chose/.test(s7.text())) throw new Error('a plain street address was treated as a mismatch');
+  return 'warned, not blocked';
+});
+
+await step('address suggestions fail quietly when the geocoder is unreachable', async () => {
+  s7.w.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : input?.url ?? '');
+    if (url.startsWith('https://photon.komoot.io/')) throw new Error('network down');
+    return liveFetch(input, init);
+  };
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
+  s7.setInput(input, '12 Katherine Street');
+  await sleep(900);
+  /* No crash, no stuck spinner, and the box still holds what was typed. */
+  if (!/12 Katherine Street/.test(input.value)) throw new Error('the typed address was lost');
+  if (/Looking up addresses…/.test(s7.text())) throw new Error('the field is stuck on "Looking up addresses"');
+  return 'no suggestions, field still usable';
+});
+
+/* ------------------------------------------------------------------ */
 /* Flow 1b: contact form + loyalty card lookup                          */
 /* ------------------------------------------------------------------ */
 

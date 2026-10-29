@@ -612,6 +612,33 @@ describe('checkout', () => {
     assert.match(body.errors[0], /Rosebank and Sandton/i);
   });
 
+  test('a typed address that contradicts the selected area is refused, and says both', async () => {
+    /*
+     * The exact bug the owner hit: choose Sandton, type a Rosebank street. The
+     * old rule matched the suburb and the address together and took the first
+     * hit, so the order was silently relabelled Rosebank. It must be refused,
+     * with a message naming the contradiction so the customer can fix either
+     * half — not a generic "we do not deliver there".
+     */
+    const { res, body } = await placeOrder({
+      fulfilment: 'delivery',
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '15 Oxford Road, Rosebank', suburb: 'Sandton' },
+    });
+    assert.equal(res.status, 422);
+    assert.match(body.errors[0], /Rosebank/);
+    assert.match(body.errors[0], /Sandton/);
+    assert.match(body.errors[0], /Change the delivery area/i);
+  });
+
+  test('an address that names the area is trusted even when the select was skipped', async () => {
+    const { res, body } = await placeOrder({
+      fulfilment: 'delivery',
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '15 Oxford Road, Rosebank', suburb: '' },
+    });
+    assert.equal(res.status, 201);
+    assert.equal(body.order.deliveryArea, 'Rosebank', 'the typed address decides where the food goes');
+  });
+
   test('cash on collection cannot be used for a delivery order', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',

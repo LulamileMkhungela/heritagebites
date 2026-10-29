@@ -28,7 +28,7 @@ import {
   removeSubscription,
   saveSubscription,
 } from './lib/web-push.js';
-import { deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
+import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
 import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
 
@@ -641,8 +641,26 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
      * The delivery boundary is enforced, not just described. A Rosebank/Sandton
      * kitchen cannot promise a delivery to Pretoria, so the order is refused
      * with a route to collection rather than accepted and cancelled later.
+     *
+     * The typed address is checked against the area the customer *selected*,
+     * not merged with it. Matching the whole string used to answer "which area
+     * is this" by first match, so an address that said Rosebank was silently
+     * relabelled to Rosebank while the customer believed they had chosen
+     * Sandton — a delivery outside the boundary they thought they were inside.
      */
-    const area = deliveryAreaFor(`${customer.suburb ?? ''} ${customer.address}`, get('settings'));
+    const chosen = String(customer.suburb ?? '').trim();
+    const named = areasNamedIn(customer.address, get('settings'));
+    if (chosen && named.length && !named.some((area) => area.toLowerCase() === chosen.toLowerCase())) {
+      return res.status(422).json({
+        errors: [
+          `That address is in ${named.join(' and ')}, but you chose ${chosen}. Change the delivery area, or give us a ${chosen} address.`,
+        ],
+        deliveryAreas: get('settings')?.deliveryAreas ?? [],
+      });
+    }
+    /* The address itself decides where the food goes; the select only breaks a tie
+       when the address carries no suburb at all (plenty of real ones do not). */
+    const area = deliveryAreaFor(customer.address, get('settings')) ?? deliveryAreaFor(chosen, get('settings'));
     if (!area) {
       return res.status(422).json({
         errors: [`We deliver in ${deliveryAreasLabel(get('settings'))} only. Choose collection, or contact us on WhatsApp to arrange something else.`],

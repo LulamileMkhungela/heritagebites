@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 5;
+export const SEED_VERSION = 6;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -590,6 +590,16 @@ export const policies = [
       {
         heading: 'Sharing',
         body: 'We do not sell your personal information to third parties. Your information may be shared only with trusted service providers involved in processing payments, delivering orders, or providing website services.',
+      },
+      {
+        /*
+         * The checkout sends what you type in the address box to OpenStreetMap's
+         * Photon geocoder to suggest addresses. That is a third party receiving
+         * personal information (a home address, typed character by character),
+         * so POPIA requires it to be named here rather than buried in code.
+         */
+        heading: 'Address suggestions',
+        body: 'When you type a delivery address at checkout, the text you have typed so far is sent to the OpenStreetMap address service (photon.komoot.io) to suggest matching addresses. Only that address text is sent — never your name, phone number, email address or payment details — and we do not store the suggestions. You can ignore the suggestions and type your address in full; nothing else changes.',
       },
       {
         heading: 'Your rights',

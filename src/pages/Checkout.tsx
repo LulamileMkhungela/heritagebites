@@ -7,6 +7,9 @@ import { detectCardBrand, formatCardNumber, formatExpiry, luhnValid, normalisePh
 import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { basketHref, waChatHref, waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
+import { AddressField } from '../components/AddressField';
+import { deliveryAddressProblem } from '../../shared/service.js';
+import type { AddressSuggestion } from '../lib/address';
 
 type PayMethod = 'card' | 'cash-on-collection';
 
@@ -63,6 +66,13 @@ function LiveCheckout() {
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
   const [card, setCardRaw] = useState({ number: '', expiry: '', cvc: '', holder: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  /*
+   * Which delivery area the *picked* address belongs to, according to the map
+   * data behind the address suggestions. It is the one piece of evidence the
+   * typed text cannot give us: a street line rarely repeats its suburb, so this
+   * is what lets the checkout catch "Sandton selected, Rosebank street typed".
+   */
+  const [addressArea, setAddressArea] = useState<string | null>(null);
   const [quote, setQuote] = useState<{ subtotal: number; delivery: number; total: number } | null>(null);
   const [state, setState] = useState<'idle' | 'quoting' | 'paying'>('idle');
   const [fatal, setFatal] = useState<string | null>(null);
@@ -192,6 +202,15 @@ function LiveCheckout() {
     if (fulfilment === 'delivery') {
       if (!customer.suburb.trim()) e.suburb = 'Which delivery area are you in?';
       if (!customer.address.trim()) e.address = 'Where should we deliver?';
+      /*
+       * The address has to belong to the area the customer chose. A hard
+       * mismatch is refused here as well as on the server, so the customer is
+       * told before paying rather than after the order is rejected.
+       */
+      if (customer.suburb.trim() && customer.address.trim()) {
+        const problem = deliveryAddressProblem(customer.address, customer.suburb, settings, addressArea);
+        if (problem?.level === 'error') e.address = problem.message;
+      }
     }
     if (needsCard) {
       if (!cardNumberOk) e.number = 'That card number is not valid.';
@@ -358,9 +377,35 @@ function LiveCheckout() {
               )}
               {fulfilment === 'delivery' && (
                 <div className="sm:col-span-2">
-                  <Field label="Delivery address" error={errors.address} hint="house number, street and suburb">
-                    <input className={inputCls} value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} autoComplete="street-address" placeholder="12 Oxford Road, Illovo" />
-                  </Field>
+                  {/*
+                    Suggestions come from OpenStreetMap (free, keyless) and fill
+                    the street line; picking one also knows its suburb, which is
+                    what makes the area check trustworthy rather than a guess at
+                    the spelling of a street name.
+                  */}
+                  <AddressField
+                    address={customer.address}
+                    area={customer.suburb}
+                    settings={settings}
+                    hintArea={addressArea}
+                    error={errors.address}
+                    onChange={(value) => {
+                      setCustomer({ ...customer, address: value });
+                      /* Typing over a picked address drops its map evidence. */
+                      setAddressArea(null);
+                      setErrors((e) => ({ ...e, address: '' }));
+                    }}
+                    onPick={(suggestion: AddressSuggestion) => {
+                      setCustomer({
+                        ...customer,
+                        address: suggestion.line,
+                        /* Autofill the area the kitchen actually delivers to. */
+                        suburb: suggestion.area ?? customer.suburb,
+                      });
+                      setAddressArea(suggestion.area);
+                      setErrors((e) => ({ ...e, address: '', suburb: '' }));
+                    }}
+                  />
                 </div>
               )}
               <div className="sm:col-span-2">

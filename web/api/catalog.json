@@ -1057,6 +1057,10 @@
           "body": "We do not sell your personal information to third parties. Your information may be shared only with trusted service providers involved in processing payments, delivering orders, or providing website services."
         },
         {
+          "heading": "Address suggestions",
+          "body": "When you type a delivery address at checkout, the text you have typed so far is sent to the OpenStreetMap address service (photon.komoot.io) to suggest matching addresses. Only that address text is sent — never your name, phone number, email address or payment details — and we do not store the suggestions. You can ignore the suggestions and type your address in full; nothing else changes."
+        },
+        {
           "heading": "Your rights",
           "body": "You have the right to request access to, correction of, or deletion of your personal information, subject to legal requirements. Contact us on +27 67 013 7587 or heritagebitesfood@gmail.com to make a request."
         }
@@ -1251,7 +1255,7 @@
     "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Thursday",
-    "timeLabel": "20:12",
+    "timeLabel": "20:27",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Thursday 12:00–13:30",
     "nextWindowLabel": "Friday 12:00–13:30",
