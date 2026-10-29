@@ -170,26 +170,95 @@ await check('checkout is a preview that prices the basket without charging', asy
   return 'R200,00 basket, no live order button, WhatsApp handoff pre-filled';
 });
 
-await check('a customer cannot submit a quest or an enquiry on the preview', async () => {
-  await goto('quest');
-  await page.evaluate(() => {
-    const field = (re) => [...document.querySelectorAll('input, textarea')].find((f) => re.test(f.placeholder ?? ''));
-    const setValue = (el, value) => {
-      const setter = Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value')?.set;
-      setter?.call(el, value);
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-    setValue(field(/Thabo Mahlangu/), 'Preview Test');
-    setValue(field(/\+27 82 000 0000/), '+27 82 555 0000');
-    setValue(field(/Dombolo with tshotlo/), 'A dish that is not on the menu');
-    const submit = [...document.querySelectorAll('button[type="submit"]')].find((b) => /Send my quest/i.test(b.textContent ?? ''));
-    submit?.click();
-  });
-  await new Promise((r) => setTimeout(r, 1200));
-  const body = await text();
-  if (/Quest sent|Quest received/i.test(body)) throw new Error('the preview claimed a quest was delivered');
-  if (!/switched off|preview/i.test(body)) throw new Error('no explanation after a blocked submit');
-  return 'blocked, with an explanation';
+await check('the enquiry and quest forms really submit from the static build', async () => {
+  /*
+   * The owner's point: the POST endpoints exist, so a form must submit — and on
+   * the static build there is no server to receive it. The fix is that an
+   * enquiry needs an inbox, not a server: the browser posts straight to the
+   * business's Formspree endpoint. This check intercepts that request (so the
+   * run makes no outbound call), asserts the payload is complete, and only then
+   * lets the form see a success response.
+   */
+  const posted = [];
+  await page.setRequestInterception(true);
+  const onRequest = (request) => {
+    if (!request.url().startsWith('https://formspree.io/')) return request.continue();
+    /* A JSON cross-origin POST is preflighted; answer that first. */
+    if (request.method() === 'OPTIONS') {
+      return request.respond({
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'content-type, accept',
+          'Access-Control-Max-Age': '600',
+        },
+      });
+    }
+    posted.push({ url: request.url(), body: request.postData() ?? '' });
+    return request.respond({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  };
+  page.on('request', onRequest);
+
+  try {
+    /* --- the customer quest --- */
+    await goto('quest');
+    await page.evaluate(() => {
+      const field = (re) => [...document.querySelectorAll('input, textarea')].find((f) => re.test(f.placeholder ?? ''));
+      const setValue = (el, value) => {
+        const setter = Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value')?.set;
+        setter?.call(el, value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      setValue(field(/Thabo Mahlangu/), 'Preview Test');
+      setValue(field(/\+27 82 000 0000/), '+27 82 555 0000');
+      setValue(field(/Dombolo with tshotlo/), 'Dombolo with extra morogo');
+      [...document.querySelectorAll('button[type="submit"]')]
+        .find((b) => /Send my quest/i.test(b.textContent ?? ''))
+        ?.click();
+    });
+    await new Promise((r) => setTimeout(r, 1500));
+    if (!/Quest sent/i.test(await text())) throw new Error('the quest form did not report a successful send');
+
+    /* --- the contact form --- */
+    await goto('contact');
+    await page.evaluate(() => {
+      const field = (re) => [...document.querySelectorAll('input, textarea')].find((f) => re.test(f.placeholder ?? ''));
+      const setValue = (el, value) => {
+        const setter = Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value')?.set;
+        setter?.call(el, value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      setValue(field(/Thabo Mahlangu/), 'Preview Enquiry');
+      setValue(field(/\+27 82 000 0000/), '+27 82 555 0001');
+      setValue(field(/Tell us/), 'Can you cater 30 plates on a Friday?');
+      [...document.querySelectorAll('button[type="submit"]')]
+        .find((b) => /Send/i.test(b.textContent ?? ''))
+        ?.click();
+    });
+    await new Promise((r) => setTimeout(r, 1500));
+    if (!/Message sent/i.test(await text())) throw new Error('the contact form did not report a successful send');
+  } finally {
+    page.off('request', onRequest);
+    await page.setRequestInterception(false);
+  }
+
+  if (posted.length !== 2) throw new Error(`expected 2 inbox posts (quest + contact), saw ${posted.length}`);
+  const quest = posted.find((p) => /Meal quest/i.test(p.body));
+  const contact = posted.find((p) => /website enquiry/i.test(p.body));
+  if (!quest) throw new Error('the quest was not posted to the inbox');
+  if (!/Dombolo with extra morogo/.test(quest.body)) throw new Error('the quest post is missing the dish');
+  if (!/Preview Test/.test(quest.body) || !/555 0000/.test(quest.body)) throw new Error('the quest post is missing the contact details');
+  if (!contact) throw new Error('the enquiry was not posted to the inbox');
+  if (!/cater 30 plates/.test(contact.body)) throw new Error('the enquiry post is missing the message');
+  if (!/Preview Enquiry/.test(contact.body)) throw new Error('the enquiry post is missing the name');
+
+  return `${posted.length} real inbox posts (quest + enquiry), nothing refused`;
 });
 
 await check('the loyalty lookup is replaced by guidance, not a dead form', async () => {

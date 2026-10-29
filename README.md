@@ -49,6 +49,10 @@ Every WhatsApp link on the site is built in `src/lib/whatsapp.ts`, and every one
 - **Enquiry links** (footer, service strip, contact card, the WhatsApp channel card, the loyalty page, the customer quest) carry a sentence that names the reason for the message, so the kitchen can answer without a round trip. The quest link also carries anything the customer has typed into the form so far.
 - The order-tracking page's "Message us about HB-XXXX" link is built server-side in `server/lib/notify.js` and includes the order lines too.
 
+**Enquiries submit from the static build too.** An enquiry does not need the Heritage Bites server — only an inbox — so `web/` (the Pages build) posts the contact form and the customer quest straight to the business's Formspree endpoint (`settings.contactFormspreeUrl`) from the browser, with the same payload shape the server sends via `/api/contact` and `/api/quests`. Orders, payments, loyalty lookups and tracking still need the server and are refused on that build with an explanation.
+
+If the storefront is ever served from a different origin than the API, set `HB_ALLOWED_ORIGINS` on the server (comma-separated, exact origins). Without it the browser blocks those requests — the API sends no wildcard CORS grant by default.
+
 WhatsApp silently drops over-long `text` parameters, so the basket message lists up to 12 lines and summarises the rest. `scripts/interaction-smoke.mjs` walks six pages and fails if any `wa.me` link opens without a message.
 
 Nothing is published that the business has not signed off. Specifically: no drinks, add-ons, discount codes, testimonials or day-of-week promotions are live, because none were approved. Two dishes (Tlhakwana and Smiley) have no photograph yet, so they render a "photo coming soon" panel instead of a picture of a different dish. `SEED_VERSION` in `server/seed.js` re-seeds catalogue content on boot when it changes; orders, messages and loyalty stamps are never touched.

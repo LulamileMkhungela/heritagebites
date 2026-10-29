@@ -237,7 +237,8 @@ function PreviewStrip() {
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
         <span className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-ochre">Preview</span>
         <p className="min-w-0 flex-1 text-[12px] leading-snug text-bone/75">
-          Ordering and payments are switched off on this preview. Real orders: call or WhatsApp us.
+          Ordering and payments are switched off on this preview. Messages sent through the contact form still reach us — for
+          an order, call or WhatsApp us.
         </p>
         <a
           href={wa}

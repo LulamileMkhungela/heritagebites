@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { Button, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { waHref, GENERAL_ENQUIRY } from '../lib/whatsapp';
@@ -16,6 +16,18 @@ export default function Contact() {
   /* "Open chat" used to open an empty WhatsApp box. It now opens with the first
      line already typed, so the customer knows what to say next. */
   const waLink = waHref(s?.whatsapp, GENERAL_ENQUIRY);
+  /*
+   * Can this build actually deliver an enquiry?
+   *
+   * On the live site the server forwards to the inbox and reports
+   * `contact.inboxConfigured`. On the static build there is no server, so the
+   * browser posts to the same Formspree endpoint directly — which means the
+   * answer is the endpoint being present, not the server's flag (the exported
+   * snapshot always reports false there).
+   */
+  const inboxReady = STATIC_PREVIEW
+    ? Boolean(s?.contactFormspreeUrl)
+    : Boolean(catalog?.contact?.inboxConfigured);
 
   const [form, setForm] = useState({ name: '', phone: '', email: '', subject: SUBJECTS[0], message: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -38,7 +50,7 @@ export default function Contact() {
 
     setState('sending');
     try {
-      const result = await api.contact(form);
+      const result = await api.contact(form, s?.contactFormspreeUrl);
       setDelivered(result.delivered);
       setState('sent');
       setForm({ name: '', phone: '', email: '', subject: SUBJECTS[0], message: '' });
@@ -126,7 +138,7 @@ export default function Contact() {
             <div className="rounded-[2rem] border-2 border-ink/10 bg-white p-6 md:p-8">
               <h2 className="font-display text-3xl font-semibold">Send us a message</h2>
               <p className="mt-2 text-sm text-ink/60">
-                {catalog?.contact?.inboxConfigured
+                {inboxReady
                   ? 'Your message goes straight to the Heritage Bites inbox, and we reply by phone, WhatsApp or email.'
                   : 'This form saves your message. If you need an answer today, call or WhatsApp us directly.'}
               </p>
@@ -140,7 +152,9 @@ export default function Contact() {
                   <p className="mt-2 text-sm text-ink/65">
                     {delivered
                       ? 'Thank you — it is in our inbox and we will come back to you. If it is about an order in the next service window, please call or WhatsApp us as well.'
-                      : 'Your message is saved with us, but our email notification did not go through just now. Please call or WhatsApp us if you need an answer today.'}
+                      : STATIC_PREVIEW
+                        ? 'Your message reached the site, but it could not be delivered to our inbox. Please call or WhatsApp us so it is not missed.'
+                        : 'Your message is saved with us, but our email notification did not go through just now. Please call or WhatsApp us if you need an answer today.'}
                   </p>
                   {/*
                     These two actions used to sit inline next to each other — an
