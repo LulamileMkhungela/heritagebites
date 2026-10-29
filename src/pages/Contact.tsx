@@ -4,6 +4,7 @@ import { useCatalog } from '../store/catalog';
 import { api, ApiError } from '../lib/api';
 import { Button, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { waHref, GENERAL_ENQUIRY } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
 const SUBJECTS = ['General enquiry', 'Catering quote', 'Feedback', 'Something went wrong with my order', 'Work with us'];
@@ -12,7 +13,9 @@ export default function Contact() {
   useDocumentTitle('Contact');
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
-  const waLink = `https://wa.me/${s?.whatsapp ?? '27670137587'}`;
+  /* "Open chat" used to open an empty WhatsApp box. It now opens with the first
+     line already typed, so the customer knows what to say next. */
+  const waLink = waHref(s?.whatsapp, GENERAL_ENQUIRY);
 
   const [form, setForm] = useState({ name: '', phone: '', email: '', subject: SUBJECTS[0], message: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});

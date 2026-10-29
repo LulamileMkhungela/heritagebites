@@ -203,6 +203,33 @@ await step('a category heading carries its plate count inline and folds its sect
   return 'count inline with the name; section folds and unfolds';
 });
 
+await step('every WhatsApp link opens with a written message, never an empty box', async () => {
+  /*
+   * The owner's complaint was a "send on WhatsApp" button that opened an empty
+   * chat. That bug was one link built by hand, so this walks the whole site and
+   * checks every wa.me href: a message has to be there, and a number has to be
+   * there too (except the receipt link, which deliberately has no recipient).
+   */
+  const pages = ['/', '/menu', '/specials', '/contact', '/passport', '/quest'];
+  const empty = [];
+  for (const path of pages) {
+    const session = boot(path);
+    await session.waitFor(() => session.doc.querySelectorAll('a[href^="https://wa.me/"]').length > 0, `WhatsApp links on ${path}`, 20000);
+    const links = await Promise.all(
+      [...session.doc.querySelectorAll('a[href^="https://wa.me/"]')].map((a) => {
+        const url = new URL(a.href);
+        return { href: a.href, text: url.searchParams.get('text') ?? '', label: (a.textContent ?? '').trim().slice(0, 30) };
+      }),
+    );
+    for (const link of links) {
+      if (!link.text.trim()) empty.push(`${path} → "${link.label}" (${link.href.slice(0, 60)})`);
+    }
+    session.close();
+  }
+  if (empty.length) throw new Error(`WhatsApp link(s) open an empty message: ${empty.join(' | ')}`);
+  return `${pages.length} pages, every WhatsApp link pre-filled`;
+});
+
 await step('the phone menu closes when the customer taps away from it', async () => {
   const toggle = s1.byLabel('button', /Toggle navigation/i)[0];
   if (!toggle) throw new Error('the hamburger button is missing');

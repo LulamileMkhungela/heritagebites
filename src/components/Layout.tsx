@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { zar } from '../lib/format';
 import { useOverlay } from '../lib/useOverlay';
 import { HeritageBand } from './ui';
-import { basketHref } from '../lib/whatsapp';
+import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY } from '../lib/whatsapp';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -224,8 +224,13 @@ export default function Layout() {
  */
 function PreviewStrip() {
   const catalog = useCatalog((s) => s.data);
+  const lines = useCart((s) => s.lines);
+  const fulfilment = useCart((s) => s.fulfilment);
   if (!STATIC_PREVIEW) return null;
-  const wa = `https://wa.me/${catalog?.settings?.whatsapp ?? '27670137587'}`;
+  /* Ordering is off on the preview, so this is the real order path: it opens
+     WhatsApp with the basket already in the message, or an order enquiry when
+     there is nothing in the basket yet. */
+  const wa = basketHref(catalog?.settings?.whatsapp, lines, { fulfilment });
 
   return (
     <div className="bg-ink text-bone">
@@ -261,7 +266,7 @@ function PreviewStrip() {
 function ServiceStrip() {
   const catalog = useCatalog((s) => s.data);
   const service = catalog?.service;
-  const wa = `https://wa.me/${catalog?.settings?.whatsapp ?? '27670137587'}`;
+  const wa = waHref(catalog?.settings?.whatsapp, serviceEnquiry(service?.headline));
 
   if (!service || service.open) return null;
 
@@ -298,7 +303,7 @@ function ServiceStrip() {
 function Footer() {
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
-  const wa = `https://wa.me/${s?.whatsapp ?? '27670137587'}`;
+  const wa = waHref(s?.whatsapp, CHANNEL_ENQUIRY);
 
   return (
     <footer className="mt-24 bg-ink text-bone">

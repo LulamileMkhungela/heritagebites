@@ -93,8 +93,62 @@ export function waChatHref(number?: string): string {
   return `https://wa.me/${waNumber(number)}`;
 }
 
-/** The basket link used by checkout, the cart drawer and the preview checkout. */
+/* --------------------------- Canned enquiries -------------------------- */
+
+/*
+ * Every WhatsApp button on the site opens a message that is already written.
+ * An empty chat box is where a customer gives up — they either retype what the
+ * site already knows or they close the tab — so even the buttons with no basket
+ * behind them (the footer, the service strip, the contact card, the loyalty
+ * page) open with a sentence that makes the reason for the message obvious.
+ */
+
+/** Nothing in the basket: a plain "I would like to order" opener. */
+export const ORDER_ENQUIRY =
+  'Hi Heritage Bites! I would like to place an order. What is on the menu today?';
+
+/** A general question — the catch-all for contact-style buttons. */
+export const GENERAL_ENQUIRY = 'Hi Heritage Bites! I have a question.';
+
+/** Asked from the service strip, which explains the Thursday/Friday window. */
+export function serviceEnquiry(headline?: string): string {
+  const lead = headline ? `I see "${headline}" — ` : '';
+  return `Hi Heritage Bites! ${lead}can I still place an order today?`;
+}
+
+/** Asked from the loyalty page, carrying whatever number the customer typed. */
+export function loyaltyEnquiry(phone?: string): string {
+  const digits = String(phone ?? '').trim();
+  return digits
+    ? `Hi Heritage Bites! Please can you check my loyalty stamps? My number is ${digits}.`
+    : 'Hi Heritage Bites! Please can you check my loyalty stamps?';
+}
+
+/** Asked from the WhatsApp channel card, and from the footer. */
+export const CHANNEL_ENQUIRY =
+  'Hi Heritage Bites! I would like to order. Please tell me what is available and how to pay.';
+
+/**
+ * A basket link, or an order enquiry when the basket is empty: a WhatsApp
+ * button must never open a blank message box.
+ */
 export function basketHref(number: string | undefined, lines: CartLine[], opts: OrderMessageOptions = {}): string {
-  if (!lines.length) return waChatHref(number);
+  if (!lines.length) return waHref(number, ORDER_ENQUIRY);
   return waHref(number, basketMessage(lines, opts));
+}
+
+/**
+ * Put a message into an already-configured WhatsApp URL.
+ *
+ * `settings.channels.whatsapp.url` is owner-editable and ships as a bare
+ * `https://wa.me/27670137587`, which opens an empty chat. Where the configured
+ * URL is a WhatsApp link this returns it with the message attached (using the
+ * configured number if it has one); anything else — a link to another app — is
+ * returned untouched rather than rewritten into a WhatsApp link by mistake.
+ */
+export function waUrlWithText(url: string | undefined, number: string | undefined, text: string): string {
+  if (!url) return waHref(number, text);
+  if (!/^(https?:\/\/)?(wa\.me|api\.whatsapp\.com|web\.whatsapp\.com)/i.test(url)) return url;
+  const configured = String(url).replace(/\D/g, '');
+  return waHref(configured || number, text);
 }
