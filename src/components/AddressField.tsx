@@ -75,7 +75,7 @@ export function AddressField({
     let alive = true;
     setBusy(true);
     const timer = setTimeout(async () => {
-      const found = await suggestAddresses(q, { signal: controller.signal, settings });
+      const found = await suggestAddresses(q, { signal: controller.signal, settings, area });
       if (!alive) return;
       setBusy(false);
       setSearched(true);
@@ -89,9 +89,10 @@ export function AddressField({
       clearTimeout(timer);
     };
     /* `settings` is deliberately not a dependency: it is static for the session,
-       and including the object would re-run the debounce on every render. */
+       and including the object would re-run the debounce on every render. The
+       chosen area IS a dependency: switching area must re-ask the geocoder. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, open]);
+  }, [address, open, area]);
 
   const choose = (suggestion: AddressSuggestion) => {
     setOpen(false);
@@ -197,7 +198,15 @@ export function AddressField({
             ))}
           </ul>
           <p className="border-t border-ink/8 px-3 py-1.5 text-[11px] text-ink/40">
-            {busy && !suggestions.length ? 'Looking up addresses…' : searched && !suggestions.length ? 'No addresses found — type it in full.' : 'Address suggestions'}
+            {busy && !suggestions.length
+              ? 'Looking up addresses…'
+              : searched && !suggestions.length
+                ? area
+                  ? `No ${area} address found — type it in full, or check the area.`
+                  : 'No address found in Rosebank or Sandton — type it in full.'
+                : area
+                  ? `${area} addresses only`
+                  : 'Rosebank and Sandton addresses only'}
             {' · '}
             <a
               href="https://www.openstreetmap.org/copyright"

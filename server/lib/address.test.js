@@ -9,7 +9,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { areasNamedIn, deliveryAddressProblem, deliveryAreaFor } from '../../shared/service.js';
-import { mapPhotonFeature, mapPhotonResponse, MIN_QUERY_LENGTH, PHOTON_ENDPOINT } from '../../shared/address.js';
+import {
+  DELIVERY_BBOX,
+  DELIVERY_BBOX_PARAM,
+  MIN_QUERY_LENGTH,
+  PHOTON_ENDPOINT,
+  filterSuggestions,
+  mapPhotonFeature,
+  mapPhotonResponse,
+} from '../../shared/address.js';
 
 const settings = { deliveryAreas: ['Rosebank', 'Sandton'] };
 
@@ -110,4 +118,41 @@ test('the geocoder is keyless OpenStreetMap, not Google', () => {
   assert.ok(!/google/i.test(PHOTON_ENDPOINT));
   /* Short queries are not sent at all — every keystroke is somebody's bandwidth. */
   assert.ok(MIN_QUERY_LENGTH >= 3);
+});
+
+/* -------------------------- Suggestion filter --------------------------- */
+
+test('only addresses inside the delivery areas are ever offered', () => {
+  const mixed = [
+    { id: '1', line: '12 Oxford Road, Sandton', detail: '', area: 'Sandton' },
+    { id: '2', line: '15 Oxford Road, Rosebank', detail: '', area: 'Rosebank' },
+    { id: '3', line: '1 Church Street, Pretoria', detail: '', area: null },
+  ];
+  const kept = filterSuggestions(mixed, { areas: ['Rosebank', 'Sandton'] });
+  assert.deepEqual(kept.map((s) => s.area), ['Sandton', 'Rosebank']);
+});
+
+test('a selected area narrows the list to that area', () => {
+  const mixed = [
+    { id: '1', line: '12 Oxford Road, Sandton', detail: '', area: 'Sandton' },
+    { id: '2', line: '15 Oxford Road, Rosebank', detail: '', area: 'Rosebank' },
+  ];
+  assert.deepEqual(filterSuggestions(mixed, { areas: ['Rosebank', 'Sandton'], onlyArea: 'Rosebank' }).map((s) => s.line), [
+    '15 Oxford Road, Rosebank',
+  ]);
+  /* An area the business does not deliver to narrows to nothing, not to everything. */
+  assert.deepEqual(filterSuggestions(mixed, { areas: ['Rosebank', 'Sandton'], onlyArea: 'Pretoria' }), []);
+});
+
+test('the geocoder is bounded to the Rosebank/Sandton envelope', () => {
+  const box = DELIVERY_BBOX;
+  assert.ok(box.minLat < box.maxLat && box.minLon < box.maxLon);
+  /* Rosebank and Sandton themselves must be inside the box. */
+  for (const [lat, lon] of [[-26.146, 28.041], [-26.108, 28.056]]) {
+    assert.ok(lat > box.minLat && lat < box.maxLat, `latitude ${lat} is outside the bbox`);
+    assert.ok(lon > box.minLon && lon < box.maxLon, `longitude ${lon} is outside the bbox`);
+  }
+  /* Pretoria (-25.75, 28.19) must not be. */
+  assert.ok(-25.75 > box.maxLat && 28.19 > box.maxLon);
+  assert.equal(DELIVERY_BBOX_PARAM, [box.minLon, box.minLat, box.maxLon, box.maxLat].join(','));
 });

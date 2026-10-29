@@ -17,7 +17,7 @@ import { chargeCard, paymentDriver, paymentConfig, verifyYocoCheckout } from './
 import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents, orderCode, loyaltyPointsFor } from './lib/pricing.js';
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
-import { enqueueOrderAlert, notifyStatus, startOrderNotificationWorker } from './lib/order-notifications.js';
+import { customerEmailConfig, emailConfig, enqueueOrderAlert, notifyStatus, startOrderNotificationWorker } from './lib/order-notifications.js';
 import {
   confirmOrderSubscription,
   notifyOrderDevices,
@@ -568,6 +568,19 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
     service: serviceStatus(settings),
     payments: paymentConfig(),
     contact: { inboxConfigured: contactEndpoint() !== null },
+    /*
+     * Which automatic channels are actually live, as booleans.
+     *
+     * The checkout used to promise "we email your receipt as soon as the order
+     * is placed" unconditionally. That is only true when SMTP is configured —
+     * without it no receipt is sent and the customer waits for an email that
+     * never arrives. The page needs to know, so it can say what will really
+     * happen instead of what the copy hopes will happen.
+     */
+    notifications: {
+      customerEmail: Boolean(customerEmailConfig()),
+      ownerEmail: Boolean(emailConfig()),
+    },
     today: todayDay(),
   });
 });

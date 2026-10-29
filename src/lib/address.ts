@@ -23,9 +23,17 @@
  * here resolves to "no suggestions". The field stays a plain text box and the
  * checkout still works; suggestions are an assist, never a requirement.
  */
-import { MIN_QUERY_LENGTH, PHOTON_ENDPOINT, mapPhotonResponse } from '../../shared/address.js';
+import { DELIVERY_BBOX_PARAM, MIN_QUERY_LENGTH, PHOTON_ENDPOINT, filterSuggestions, mapPhotonResponse } from '../../shared/address.js';
 
-export { MIN_QUERY_LENGTH, PHOTON_ENDPOINT, mapPhotonFeature, mapPhotonResponse } from '../../shared/address.js';
+export {
+  DELIVERY_BBOX,
+  DELIVERY_BBOX_PARAM,
+  MIN_QUERY_LENGTH,
+  PHOTON_ENDPOINT,
+  filterSuggestions,
+  mapPhotonFeature,
+  mapPhotonResponse,
+} from '../../shared/address.js';
 
 /** One address the customer can pick. Mirrors the typedef in `shared/address.js`. */
 export interface AddressSuggestion {
@@ -50,18 +58,31 @@ const BIAS = { lat: -26.1076, lng: 28.0567 };
  */
 export async function suggestAddresses(
   query: string,
-  options: { signal?: AbortSignal; settings?: { deliveryAreas?: string[] } | null; limit?: number; timeoutMs?: number } = {},
+  options: {
+    signal?: AbortSignal;
+    settings?: { deliveryAreas?: string[] } | null;
+    /** The area the customer already chose, so only that one is offered. */
+    area?: string | null;
+    limit?: number;
+    timeoutMs?: number;
+  } = {},
 ): Promise<AddressSuggestion[]> {
   const q = query.trim();
   if (q.length < MIN_QUERY_LENGTH) return [];
 
   const url = new URL(PHOTON_ENDPOINT);
   url.searchParams.set('q', q);
-  url.searchParams.set('limit', String(options.limit ?? 6));
+  /* Ask for more than we show: the area filter throws some away, and a short
+     final list is better than an empty one when a street straddles both areas. */
+  url.searchParams.set('limit', String(Math.max(10, options.limit ?? 6)));
   url.searchParams.set('lang', 'en');
-  /* Bias, not a bounding box: the customer may legitimately type an address in
-     another province, and we want that result to come back so the checkout can
-     say "that is not Rosebank or Sandton" rather than pretending it does not exist. */
+  /*
+   * Restrict the search to the Rosebank/Sandton envelope rather than biasing
+   * towards Johannesburg: the kitchen does not deliver outside it, so a Pretoria
+   * address is not a suggestion worth offering and then rejecting.
+   */
+  url.searchParams.set('bbox', DELIVERY_BBOX_PARAM);
+  /* The point bias still helps rank two in-area results sensibly. */
   url.searchParams.set('lat', String(BIAS.lat));
   url.searchParams.set('lon', String(BIAS.lng));
 
@@ -75,7 +96,10 @@ export async function suggestAddresses(
   try {
     const res = await fetch(url.toString(), { signal: controller.signal, headers: { Accept: 'application/json' } });
     if (!res.ok) return [];
-    return mapPhotonResponse(await res.json(), options.settings);
+    return filterSuggestions(mapPhotonResponse(await res.json(), options.settings), {
+      areas: options.settings?.deliveryAreas,
+      onlyArea: options.area ?? null,
+    }).slice(0, options.limit ?? 6);
   } catch {
     return [];
   } finally {

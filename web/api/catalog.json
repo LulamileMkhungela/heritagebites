@@ -1255,7 +1255,7 @@
     "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Thursday",
-    "timeLabel": "20:27",
+    "timeLabel": "20:39",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Thursday 12:00–13:30",
     "nextWindowLabel": "Friday 12:00–13:30",
@@ -1277,6 +1277,10 @@
   },
   "contact": {
     "inboxConfigured": false
+  },
+  "notifications": {
+    "customerEmail": false,
+    "ownerEmail": false
   },
   "today": 4
 }

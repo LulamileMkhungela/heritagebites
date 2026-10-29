@@ -599,6 +599,44 @@ s7.w.fetch = async (input, init) => {
 
 await s7.waitFor(() => /Almost there/i.test(s7.text()), 'checkout page');
 
+await step('the checkout only promises a receipt email when one can actually be sent', async () => {
+  /*
+   * The owner's question, turned into a test: this copy used to say "we email
+   * your receipt ... as soon as the order is placed" on every deployment. With
+   * no SMTP configured that email never arrives, so the page must not say it.
+   *
+   * The answer comes from the API (`notifications.customerEmail`), so the same
+   * code is honest on a host with email set up and on one without.
+   */
+  const health = await fetch(`${BASE}/api/health`).then((r) => r.json());
+  const canEmail = Boolean(health.notifications?.customerEmail);
+  const text = s7.text();
+
+  const emailInput = [...s7.doc.querySelectorAll('input')].find((el) => /you@example/.test(el.placeholder ?? ''));
+  if (!emailInput) throw new Error('no email field on the checkout');
+  s7.setInput(emailInput, 'thabo@example.co.za');
+  await sleep(300);
+
+  if (canEmail) {
+    if (!/We email your receipt and a private tracking link/.test(s7.text())) {
+      throw new Error('this server can send receipts but the checkout does not say so');
+    }
+    return 'email is configured, and the page promises it';
+  }
+
+  if (/We email your receipt and a private tracking link/.test(s7.text())) {
+    throw new Error('the checkout promises a receipt email this server cannot send');
+  }
+  if (!/Email receipts are not switched on|tracking page after checkout is your record/.test(s7.text())) {
+    throw new Error('the checkout does not tell the customer where their record actually is');
+  }
+  /* The kitchen notification is separate and still true: the order is queued. */
+  if (!/The kitchen gets the order the moment you place it/.test(text)) {
+    throw new Error('the kitchen-notification line went missing');
+  }
+  return 'no receipt email promised, and the customer is told what to keep';
+});
+
 await step('typing a delivery address offers OpenStreetMap suggestions', async () => {
   const addressInput = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo, Sandton/.test(el.placeholder ?? ''));
   if (!addressInput) throw new Error('no delivery address field');
@@ -610,12 +648,21 @@ await step('typing a delivery address offers OpenStreetMap suggestions', async (
   await s7.waitFor(() => s7.photonCalls.length > 0, 'a geocoder request', 6000);
   const queried = new URL(s7.photonCalls[0]);
   if (queried.searchParams.get('q') !== '12 Oxford') throw new Error(`unexpected query: ${queried.searchParams.get('q')}`);
-  /* Bias, so a Johannesburg street beats Oxford in England. */
+  /* The search is bounded to Rosebank/Sandton, and biased to Johannesburg. */
+  if (!queried.searchParams.get('bbox')) throw new Error('the geocoder query is not limited to the delivery envelope');
   if (!queried.searchParams.get('lat') || !queried.searchParams.get('lon')) throw new Error('the geocoder query is not biased to Johannesburg');
 
   await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Address suggestions"]'), 'the suggestion list', 6000);
   const options = [...s7.doc.querySelectorAll('[role="option"]')];
-  if (options.length !== 2) throw new Error(`expected 2 suggestions, saw ${options.length}`);
+  /*
+   * The fixture holds three results — Sandton, Rosebank and Pretoria. Only the
+   * two the kitchen can drive to may be offered: an out-of-area address must not
+   * appear and then be rejected after the customer has picked it.
+   */
+  if (options.length !== 2) throw new Error(`expected the 2 in-area suggestions, saw ${options.length}`);
+  if (/Pretoria/.test(s7.doc.querySelector('[role="listbox"]').textContent ?? '')) {
+    throw new Error('an address outside Rosebank and Sandton was offered');
+  }
   if (!/Sandton delivery/.test(options[0].textContent ?? '')) throw new Error('the suggestions do not say which are inside the delivery area');
   if (!/OpenStreetMap/.test(s7.doc.querySelector('[role="listbox"]')?.parentElement?.textContent ?? '')) {
     throw new Error('OpenStreetMap attribution is missing');
@@ -623,7 +670,38 @@ await step('typing a delivery address offers OpenStreetMap suggestions', async (
   return `2 suggestions from ${queried.host}`;
 });
 
+await step('choosing a delivery area narrows the suggestions to that area', async () => {
+  const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
+  select.value = 'Rosebank';
+  select.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
+
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
+  s7.setInput(input, '12 Oxford');
+
+  /* The geocoder is asked again, now with the chosen area in hand. */
+  await s7.waitFor(() => s7.photonCalls.length > 1, 'a second geocoder request', 6000);
+  await s7.waitFor(() => {
+    const list = s7.doc.querySelector('[role="listbox"]');
+    return list && /Oxford/.test(list.textContent ?? '');
+  }, 'the narrowed list', 6000);
+
+  const shown = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
+  if (shown.some((text) => /Illovo, Sandton/.test(text))) throw new Error('a Sandton address is still offered while Rosebank is selected');
+  if (!shown.some((text) => /Rosebank/.test(text))) throw new Error('the Rosebank address is missing from a Rosebank search');
+  return `${shown.length} Rosebank result(s) only`;
+});
+
 await step('picking a suggestion fills the address and the delivery area', async () => {
+  /* Back to no area, so both delivery areas are offered again. */
+  const areaSelect = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
+  areaSelect.value = '';
+  areaSelect.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
+  s7.setInput(input, '12 Oxfor');
+  await s7.waitFor(() => (s7.doc.querySelectorAll('[role="option"]').length ?? 0) >= 2, 'both areas offered again', 6000);
+
   const [sandton] = [...s7.doc.querySelectorAll('[role="option"]')];
   const button = sandton.querySelector('button');
   button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));

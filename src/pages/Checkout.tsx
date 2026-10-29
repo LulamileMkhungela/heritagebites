@@ -61,6 +61,8 @@ function LiveCheckout() {
   const payments = catalog?.payments;
   const service = catalog?.service;
   const liveCards = Boolean(payments?.hostedCheckout && payments.publicKey);
+  /* Whether a receipt email can actually be sent from this deployment. */
+  const receiptsByEmail = Boolean(catalog?.notifications?.customerEmail);
 
   const [method, setMethodRaw] = useState<PayMethod>('card');
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
@@ -420,12 +422,25 @@ function LiveCheckout() {
               automatic, WhatsApp is a tap. No promise of an automated WhatsApp
               message is made, because one cannot be sent for free.
             */}
+            {/*
+              Only promise the email when this server can actually send one.
+
+              `notifications.customerEmail` comes from the API and is false when
+              no SMTP account is configured; promising a receipt then leaves the
+              customer waiting for an email that was never going to arrive.
+            */}
             <p className="mt-3 text-xs leading-relaxed text-ink/50">
-              {customer.email.trim()
-                ? 'We email your receipt and a private tracking link to that address as soon as the order is placed. '
-                : method2 === 'card'
-                  ? 'A card order needs an email address — it is the only place your receipt can go. '
-                  : 'Add an email and we will send your receipt and a private tracking link. '}
+              {receiptsByEmail
+                ? customer.email.trim()
+                  ? 'We email your receipt and a private tracking link to that address as soon as the order is placed. '
+                  : method2 === 'card'
+                    ? 'A card order needs an email address — it is the only place your receipt can go. '
+                    : 'Add an email and we will send your receipt and a private tracking link. '
+                : customer.email.trim()
+                  ? 'Email receipts are not switched on for this site yet, so no email will be sent — the tracking page after checkout is your record. '
+                  : method2 === 'card'
+                    ? 'A card order needs an email address so the kitchen can reach you. '
+                    : 'The tracking page after checkout is your record — keep it. '}
               The kitchen gets the order the moment you place it; WhatsApp replies come from a person, so they are not instant.
             </p>
           </fieldset>

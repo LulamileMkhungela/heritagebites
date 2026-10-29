@@ -171,6 +171,11 @@ export interface Catalog {
   service: ServiceStatus;
   payments: PaymentConfig;
   contact: { inboxConfigured: boolean };
+  /**
+   * Which automatic channels are live. `customerEmail` false means no receipt
+   * will be sent, so the checkout must not promise one.
+   */
+  notifications?: { customerEmail: boolean; ownerEmail: boolean };
   today: number;
 }
 

@@ -20,6 +20,58 @@ export const PHOTON_ENDPOINT = 'https://photon.komoot.io/api/';
 export const MIN_QUERY_LENGTH = 4;
 
 /**
+ * The envelope the geocoder is allowed to answer from: Rosebank and Sandton,
+ * with a little margin so a road on the edge of either is not cut in half.
+ *
+ * Photon takes `bbox=minLon,minLat,maxLon,maxLat`. Restricting the search this
+ * way means the customer is never offered a Pretoria address in the first place,
+ * instead of being offered one and then told it is out of area — and it keeps the
+ * free service answering a much smaller, faster query.
+ *
+ * Values: Rosebank is about -26.146, 28.041 and Sandton about -26.108, 28.056.
+ * The box deliberately stops short of Bryanston, Randburg and the Johannesburg
+ * CBD, which the kitchen does not deliver to.
+ */
+export const DELIVERY_BBOX = {
+  minLon: 28.0,
+  minLat: -26.185,
+  maxLon: 28.085,
+  maxLat: -26.075,
+};
+
+/** `bbox` query value in the order Photon expects. */
+export const DELIVERY_BBOX_PARAM = [DELIVERY_BBOX.minLon, DELIVERY_BBOX.minLat, DELIVERY_BBOX.maxLon, DELIVERY_BBOX.maxLat].join(',');
+
+/**
+ * Keep only suggestions the kitchen can deliver to.
+ *
+ * A suggestion is kept when the map puts it in one of the approved areas. When
+ * the customer has already picked an area, only that one is kept — so
+ * choosing "Rosebank" first and typing "Oxford" offers the Rosebank end of
+ * Oxford Road, not the Sandton one.
+ *
+ * Results the map cannot place confidently are dropped rather than guessed at:
+ * an address autofilled into the wrong suburb is worse than no suggestion, and
+ * the field still accepts anything typed by hand.
+ *
+ * @param {AddressSuggestion[]} suggestions
+ * @param {{ areas?: string[], onlyArea?: string | null }} [options]
+ * @returns {AddressSuggestion[]}
+ */
+export function filterSuggestions(suggestions, options) {
+  const areas = (options?.areas ?? []).map((a) => a.toLowerCase());
+  const only = String(options?.onlyArea ?? '').toLowerCase();
+  const allowed = only ? areas.filter((a) => a === only) : areas;
+
+  const kept = (suggestions ?? []).filter((s) => Boolean(s?.area) && allowed.includes(String(s.area).toLowerCase()));
+  /* The selected area first, so the top of the list matches what was chosen. */
+  if (only) {
+    kept.sort((a, b) => Number(String(b.area).toLowerCase() === only) - Number(String(a.area).toLowerCase() === only));
+  }
+  return kept;
+}
+
+/**
  * @typedef {object} AddressSuggestion
  * @property {string} id      stable key, derived from the OSM object
  * @property {string} line    one-line human label, e.g. "12 Oxford Road, Illovo, Sandton"
