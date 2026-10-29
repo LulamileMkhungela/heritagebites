@@ -9,6 +9,7 @@
     "dev:web": "vite",
     "dev:api": "node server/index.js",
     "sandbox:yoco": "node scripts/yoco-sandbox.mjs",
+    "check:payments": "node scripts/payment-check.mjs",
     "build": "tsc -b && vite build",
     "build:pages": "node scripts/build-pages.mjs",
     "preview": "vite preview",

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Field, inputCls } from './ui';
 import { MIN_QUERY_LENGTH, suggestAddresses, type AddressSuggestion } from '../lib/address';
-import { deliveryAddressProblem } from '../../shared/service.js';
+import { deliveryAreasLabel, deliveryAddressProblem } from '../../shared/service.js';
 import type { Settings } from '../lib/types';
 
 /**
@@ -75,7 +75,17 @@ export function AddressField({
     let alive = true;
     setBusy(true);
     const timer = setTimeout(async () => {
-      const found = await suggestAddresses(q, { signal: controller.signal, settings, area });
+      /*
+       * Deliberately *not* narrowed to the selected area.
+       *
+       * The checkout now opens with Rosebank already selected, and filtering the
+       * geocoder by that choice would leave a Sandton customer typing a real
+       * Sandton street into an empty list — the one outcome worse than the
+       * "Choose an area" select this replaced. Both delivery areas are searched;
+       * everything outside them is still dropped (see `filterSuggestions`), and
+       * picking a result moves the area select to match.
+       */
+      const found = await suggestAddresses(q, { signal: controller.signal, settings });
       if (!alive) return;
       setBusy(false);
       setSearched(true);
@@ -89,10 +99,9 @@ export function AddressField({
       clearTimeout(timer);
     };
     /* `settings` is deliberately not a dependency: it is static for the session,
-       and including the object would re-run the debounce on every render. The
-       chosen area IS a dependency: switching area must re-ask the geocoder. */
+       and including the object would re-run the debounce on every render. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, open, area]);
+  }, [address, open]);
 
   const choose = (suggestion: AddressSuggestion) => {
     setOpen(false);
@@ -201,12 +210,8 @@ export function AddressField({
             {busy && !suggestions.length
               ? 'Looking up addresses…'
               : searched && !suggestions.length
-                ? area
-                  ? `No ${area} address found — type it in full, or check the area.`
-                  : 'No address found in Rosebank or Sandton — type it in full.'
-                : area
-                  ? `${area} addresses only`
-                  : 'Rosebank and Sandton addresses only'}
+                ? `No address in ${deliveryAreasLabel(settings)} found — type it in full.`
+                : `${deliveryAreasLabel(settings)} addresses only`}
             {' · '}
             <a
               href="https://www.openstreetmap.org/copyright"

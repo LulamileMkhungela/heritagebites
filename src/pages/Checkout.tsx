@@ -8,7 +8,7 @@ import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls 
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { basketHref, waChatHref, waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
-import { deliveryAddressProblem } from '../../shared/service.js';
+import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
 import type { AddressSuggestion } from '../lib/address';
 
 type PayMethod = 'card' | 'cash-on-collection';
@@ -56,6 +56,16 @@ function LiveCheckout() {
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   /*
+   * Rosebank is where most orders go, so it is the area the checkout opens on.
+   *
+   * The business asked for it explicitly: "Choose an area" made the customer take
+   * a decision before they could place an order at all, and the shop delivers to
+   * two areas that sit four kilometres apart. It stays a select — a Sandton
+   * customer changes it in one tap, and a typed address that names the other area
+   * moves it on its own (see `onAddressChange`).
+   */
+  const defaultArea = defaultDeliveryArea(settings);
+  /*
    * Which delivery area the *picked* address belongs to, according to the map
    * data behind the address suggestions. It is the one piece of evidence the
    * typed text cannot give us: a street line rarely repeats its suburb, so this
@@ -95,6 +105,17 @@ function LiveCheckout() {
     setFatal(null);
     setErrors((e) => ({ ...e, form: '' }));
   };
+
+  /*
+   * Preselect the default area as soon as there is a catalogue to read it from,
+   * and again if the customer switches back to delivery after clearing it. It only
+   * ever fills a blank: a customer who has chosen Sandton keeps Sandton.
+   */
+  useEffect(() => {
+    if (fulfilment !== 'delivery' || !defaultArea) return;
+    if (customer.suburb.trim()) return;
+    setCustomerRaw((current) => (current.suburb.trim() ? current : { ...current, suburb: defaultArea }));
+  }, [fulfilment, defaultArea, customer.suburb]);
 
   /* Live, server-authoritative totals. The server re-prices every line from its
      own catalogue, so what is displayed is what will actually be charged. */
@@ -344,9 +365,14 @@ function LiveCheckout() {
                 <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
               </Field>
               {fulfilment === 'delivery' && (
-                <Field label="Delivery area" error={errors.suburb}>
+                <Field label="Delivery area" hint={defaultArea ? `${defaultArea} preselected` : undefined} error={errors.suburb}>
+                  {/*
+                    No empty "Choose an area" row: it turned a two-option select
+                    into a required decision, and every order in the shop is in one
+                    of these two areas. A typed address that belongs to the other
+                    one moves this on its own.
+                  */}
                   <select className={inputCls} value={customer.suburb} onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}>
-                    <option value="">Choose an area</option>
                     {(settings?.deliveryAreas ?? []).map((area) => (
                       <option key={area} value={area}>{area}</option>
                     ))}
@@ -368,10 +394,27 @@ function LiveCheckout() {
                     hintArea={addressArea}
                     error={errors.address}
                     onChange={(value) => {
-                      setCustomer({ ...customer, address: value });
+                      /*
+                       * The area follows the address when the address names one.
+                       *
+                       * With Rosebank preselected, a Sandton customer who types
+                       * "12 Oxford Road, Sandton" would otherwise be told they
+                       * picked the wrong area — a decision they never made. Moving
+                       * the select to the area the address actually names is the
+                       * honest reading of it: the address decides where the food
+                       * goes, and the select is there to break a tie.
+                       *
+                       * Only one unambiguous name moves it. "Corner Rosebank Road
+                       * and Sandton Drive" leaves the choice alone, and the
+                       * contradiction check below still catches a customer who
+                       * deliberately switches the area afterwards.
+                       */
+                      const named = areasNamedIn(value, settings);
+                      const followed = named.length === 1 ? named[0] : customer.suburb;
+                      setCustomer({ ...customer, address: value, suburb: followed });
                       /* Typing over a picked address drops its map evidence. */
                       setAddressArea(null);
-                      setErrors((e) => ({ ...e, address: '' }));
+                      setErrors((e) => ({ ...e, address: '', suburb: '' }));
                     }}
                     onPick={(suggestion: AddressSuggestion) => {
                       setCustomer({

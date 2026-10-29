@@ -726,27 +726,43 @@ await step('typing a delivery address offers OpenStreetMap suggestions', async (
   return `2 suggestions from ${queried.host}`;
 });
 
-await step('choosing a delivery area narrows the suggestions to that area', async () => {
+await step('Rosebank is preselected, and there is no empty "choose an area" row', async () => {
+  /*
+   * The owner's request: "rosebank must be selected by default and remove choose
+   * an area". A blank select made the area a required decision before the
+   * customer could see whether their plate could even reach them.
+   */
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
-  select.value = 'Rosebank';
-  select.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
+  if (!select) throw new Error('no delivery area select');
 
+  const values = [...select.options].map((o) => o.value);
+  if (values.join(',') !== 'Rosebank,Sandton') throw new Error(`unexpected area options: ${JSON.stringify(values)}`);
+  if (values.includes('')) throw new Error('an empty "Choose an area" option is still offered');
+  if (select.value !== 'Rosebank') throw new Error(`the checkout opens on "${select.value}", not Rosebank`);
+  return 'Rosebank preselected, two areas, no empty row';
+});
+
+await step('the other delivery area is still searchable while Rosebank is selected', async () => {
+  /*
+   * Preselecting Rosebank must not hide Sandton streets: a Sandton customer types
+   * their address first and reads the area off the result. Narrowing the geocoder
+   * to the preselected area would leave them typing into an empty list — worse
+   * than the "Choose an area" row this replaced.
+   */
   const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Oxford');
 
-  /* The geocoder is asked again, now with the chosen area in hand. */
-  const before = s7.photonCalls.length;
-  await s7.waitFor(() => s7.photonCalls.length > before, 'a second geocoder request', 6000);
   await s7.waitFor(() => {
     const list = s7.doc.querySelector('[role="listbox"]');
     return list && /Oxford/.test(list.textContent ?? '');
-  }, 'the narrowed list', 6000);
+  }, 'the suggestion list', 6000);
 
   const shown = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
-  if (shown.some((text) => /Illovo, Sandton/.test(text))) throw new Error('a Sandton address is still offered while Rosebank is selected');
-  if (!shown.some((text) => /Rosebank/.test(text))) throw new Error('the Rosebank address is missing from a Rosebank search');
-  return `${shown.length} Rosebank result(s) only`;
+  if (!shown.some((text) => /Illovo, Sandton/.test(text))) throw new Error('the Sandton address is missing while Rosebank is selected');
+  if (!shown.some((text) => /Rosebank/.test(text))) throw new Error('the Rosebank address is missing');
+  if (shown.some((text) => /Pretoria/.test(text))) throw new Error('an address outside the delivery areas was offered');
+  return `${shown.length} in-area result(s), both areas`;
 });
 
 await step('typing a house number and a half-typed street still finds the address', async () => {
@@ -758,10 +774,6 @@ await step('typing a house number and a half-typed street still finds the addres
    * without the number, place the street by its coordinates, and put the number
    * back on the line.
    */
-  const areaSelect = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
-  areaSelect.value = '';
-  areaSelect.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
-
   const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '');
@@ -802,11 +814,12 @@ await step('typing a house number and a half-typed street still finds the addres
   return 'half-typed street found, house number kept, area filled';
 });
 
-await step('picking a suggestion fills the address and the delivery area', async () => {
-  /* Back to no area, so both delivery areas are offered again. */
-  const areaSelect = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
-  areaSelect.value = '';
-  areaSelect.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
+await step('picking a suggestion moves the delivery area to match the address', async () => {
+  /*
+   * Rosebank is the default at this point; the picked result is in Sandton. The
+   * area must follow the address, otherwise the customer is told they contradicted
+   * a select they never touched.
+   */
   const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Oxfor');

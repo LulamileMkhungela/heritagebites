@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { areasNamedIn, deliveryAddressProblem, deliveryAreaFor } from '../../shared/service.js';
+import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaFor } from '../../shared/service.js';
 import {
   DELIVERY_BBOX,
   DELIVERY_BBOX_PARAM,
@@ -25,6 +25,25 @@ import {
 } from '../../shared/address.js';
 
 const settings = { deliveryAreas: ['Rosebank', 'Sandton'] };
+
+/* --------------------------- The default area --------------------------- */
+
+test('the checkout opens on Rosebank', () => {
+  /*
+   * The owner's instruction: "rosebank must be selected by default and remove
+   * choose an area". Rosebank is preferred by name, not by position, so a
+   * reordered catalogue cannot quietly change which area a customer orders for.
+   */
+  assert.equal(defaultDeliveryArea({ deliveryAreas: ['Rosebank', 'Sandton'] }), 'Rosebank');
+  assert.equal(defaultDeliveryArea({ deliveryAreas: ['Sandton', 'Rosebank'] }), 'Rosebank');
+  assert.equal(defaultDeliveryArea({ deliveryAreas: ['sandton', 'ROSEBANK'] }), 'ROSEBANK');
+});
+
+test('a catalogue without Rosebank still preselects something in-area', () => {
+  assert.equal(defaultDeliveryArea({ deliveryAreas: ['Sandton'] }), 'Sandton');
+  assert.equal(defaultDeliveryArea({ deliveryAreas: [] }), '');
+  assert.equal(defaultDeliveryArea(null), '');
+});
 
 /* ----------------------------- Area matching ---------------------------- */
 

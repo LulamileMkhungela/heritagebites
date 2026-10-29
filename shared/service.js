@@ -190,6 +190,23 @@ export function deliveryAreaFor(address, settings) {
 }
 
 /**
+ * Which delivery area the checkout should start on.
+ *
+ * The business asked for Rosebank to be preselected: most orders go there, and a
+ * select that opens on "Choose an area" is a required choice the customer has to
+ * make before they can even see whether the plate can reach them. Rosebank is
+ * preferred by name rather than by position so that reordering the area list in
+ * the catalogue does not silently change which one is the default.
+ *
+ * @param {{ deliveryAreas?: string[] } | null} [settings]
+ * @returns {string} the area to preselect, or '' if none is configured
+ */
+export function defaultDeliveryArea(settings) {
+  const areas = settings?.deliveryAreas ?? [];
+  return areas.find((area) => String(area).toLowerCase() === 'rosebank') ?? areas[0] ?? '';
+}
+
+/**
  * Every approved area named in a piece of text.
  *
  * `deliveryAreaFor` answers "which area does this belong to", which is the wrong

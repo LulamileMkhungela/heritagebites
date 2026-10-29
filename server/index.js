@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { store, has } from './lib/store.js';
-import { paymentConfig, paymentDriver, readYocoEvent, startYocoPayment, verifyYocoWebhook, yocoMode } from './lib/payments.js';
+import { paymentConfig, paymentDriver, paymentWarnings, readYocoEvent, startYocoPayment, verifyYocoWebhook, yocoMode } from './lib/payments.js';
 import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents, orderCode, loyaltyPointsFor } from './lib/pricing.js';
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
@@ -1264,5 +1264,11 @@ if (process.env.NODE_ENV !== 'test') {
   // Bound to 0.0.0.0 so the sandbox preview host can reach this process.
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[heritagebites api] listening on http://0.0.0.0:${PORT} (payments: ${paymentDriver()})`);
+    /*
+     * Say the payment problems out loud at boot. A missing webhook secret or a
+     * payment link that does not exist is invisible until the first customer
+     * meets it, and by then the order has already been handed over.
+     */
+    for (const warning of paymentWarnings()) console.warn(`[payments] ${warning}`);
   });
 }

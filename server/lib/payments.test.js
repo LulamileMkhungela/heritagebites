@@ -18,6 +18,9 @@ import { createHmac } from 'node:crypto';
 
 import {
   DEFAULT_CHECKOUT_ENDPOINT,
+  EXAMPLE_PAYMENT_LINK,
+  isExamplePaymentLink,
+  paymentWarnings,
   paymentConfig,
   paymentDriver,
   readYocoEvent,
@@ -266,5 +269,57 @@ describe('reading a webhook payload', () => {
   test('a payload with no order code reports that rather than guessing', () => {
     const event = readYocoEvent({ type: 'payment.succeeded', payload: { id: 'pay_1' } });
     assert.equal(event.orderCode, null);
+  });
+});
+
+/* -------------------- What the deployment is told at boot -------------------- */
+
+describe('payment warnings', () => {
+  test('a correct API setup has nothing to warn about', () => {
+    process.env.HB_YOCO_SECRET_KEY = 'sk_live_abc';
+    process.env.HB_YOCO_WEBHOOK_SECRET = webhookSecret;
+    assert.deepEqual(paymentWarnings(), []);
+  });
+
+  test('the example link from the docs is named as the reason a customer sees a 404', () => {
+    /*
+     * This is the fault the owner reported: the shop was pointed at an invented
+     * link, and the first customer met Yoco's "page could not be found". The
+     * server now says so at startup.
+     */
+    process.env.HB_YOCO_PAYMENT_URL = EXAMPLE_PAYMENT_LINK;
+    process.env.HB_YOCO_WEBHOOK_SECRET = webhookSecret;
+    assert.equal(isExamplePaymentLink(EXAMPLE_PAYMENT_LINK), true);
+    assert.equal(isExamplePaymentLink(`${EXAMPLE_PAYMENT_LINK}/`), true);
+    assert.equal(isExamplePaymentLink('https://pay.yoco.com/business/abc123'), false);
+
+    const warnings = paymentWarnings().join(' ');
+    assert.match(warnings, /example link/i);
+    assert.match(warnings, /page could not be found/i);
+    assert.match(warnings, /Yoco dashboard/i);
+  });
+
+  test('a link on another domain is flagged, because that is not Yoco', () => {
+    process.env.HB_YOCO_PAYMENT_URL = 'https://pay.yoco.com.heritagebites.co.za/pay';
+    process.env.HB_YOCO_WEBHOOK_SECRET = webhookSecret;
+    assert.match(paymentWarnings().join(' '), /not on yoco\.com/i);
+  });
+
+  test('a test key is called out: no real money will move', () => {
+    process.env.HB_YOCO_SECRET_KEY = 'sk_test_abc';
+    process.env.HB_YOCO_WEBHOOK_SECRET = webhookSecret;
+    assert.match(paymentWarnings().join(' '), /test key/i);
+  });
+
+  test('a missing webhook secret is called out even when payments are on', () => {
+    process.env.HB_YOCO_SECRET_KEY = 'sk_live_abc';
+    const warnings = paymentWarnings();
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /HB_YOCO_WEBHOOK_SECRET is empty/i);
+    assert.match(warnings[0], /marked paid/i);
+  });
+
+  test('nothing configured is not a warning, because nothing is claimed', () => {
+    assert.deepEqual(paymentWarnings(), []);
   });
 });

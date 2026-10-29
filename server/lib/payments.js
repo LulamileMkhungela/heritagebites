@@ -65,6 +65,67 @@ export function yocoWebhookSecret() {
 }
 
 /**
+ * The link printed throughout the documentation as an *example*.
+ *
+ * It does not exist, and pointing the shop at it sends customers to Yoco's own
+ * "the page you are looking for could not be found". It is named here so the
+ * server can say so out loud at startup instead of discovering it from a
+ * customer.
+ */
+export const EXAMPLE_PAYMENT_LINK = 'https://pay.yoco.com/heritagebites';
+
+/** Is this URL the example from the docs rather than a real payment link? */
+export function isExamplePaymentLink(value) {
+  const link = String(value ?? '').trim().toLowerCase().replace(/\/+$/, '');
+  return link === EXAMPLE_PAYMENT_LINK;
+}
+
+/**
+ * Everything about the payment configuration a person should be told about.
+ *
+ * Returned rather than logged so the server, the test suite and
+ * `npm run check:payments` all describe the same problems in the same words.
+ * Nothing here is fatal: an order can still be taken by cash, and refusing to
+ * boot over a warning would take the whole shop down.
+ *
+ * @returns {string[]} one line per problem, empty when the setup looks right
+ */
+export function paymentWarnings() {
+  const warnings = [];
+  const mode = yocoMode();
+
+  if (mode === 'link') {
+    const link = String(yocoPaymentUrl() ?? '').trim();
+    let url = null;
+    try {
+      url = new URL(link);
+    } catch {
+      warnings.push(`HB_YOCO_PAYMENT_URL is not a URL: "${link}"`);
+    }
+    if (url) {
+      if (isExamplePaymentLink(link)) {
+        warnings.push(
+          `HB_YOCO_PAYMENT_URL is still the example link from the docs (${EXAMPLE_PAYMENT_LINK}). ` +
+            'It does not exist, so customers are sent to Yoco’s "page could not be found". Paste the Payment Link from the Yoco dashboard.',
+        );
+      } else if (!/(^|\.)yoco\.com$/i.test(url.hostname)) {
+        warnings.push(`HB_YOCO_PAYMENT_URL is not on yoco.com (${url.hostname}) — check that it is a Yoco payment page and not another site.`);
+      }
+    }
+  }
+
+  if (mode === 'api' && /^sk_test_/.test(String(yocoSecretKey() ?? ''))) {
+    warnings.push('HB_YOCO_SECRET_KEY is a test key (sk_test_…): no real money will move.');
+  }
+
+  if (mode && !yocoWebhookSecret()) {
+    warnings.push('HB_YOCO_WEBHOOK_SECRET is empty: payments will arrive but no order can be marked paid automatically.');
+  }
+
+  return warnings;
+}
+
+/**
  * How online payment is wired up right now.
  *
  * `api`  — a secret key is present: exact-amount checkouts, best option.

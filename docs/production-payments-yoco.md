@@ -39,13 +39,20 @@ better, because it fixes the amount.
 
 1. In the Yoco dashboard, create a **payment link** (Yoco calls these “Payment
    Links” / “pay.yoco.com” links) for Heritage Bites.
-2. Send the link. It looks like `https://pay.yoco.com/heritagebites` or
+2. Copy the link exactly as the dashboard shows it, e.g.
    `https://pay.yoco.com/business/<id>`.
 3. It is set as one host variable:
 
    ```
-   HB_YOCO_PAYMENT_URL=https://pay.yoco.com/…
+   HB_YOCO_PAYMENT_URL=https://pay.yoco.com/business/<id>
    ```
+
+> **A payment link cannot be guessed or invented.** Yoco only answers links that
+> exist on your account. Anything else — including the
+> `https://pay.yoco.com/heritagebites` used as an example in earlier drafts of
+> this document — returns Yoco's own **“Sorry, unfortunately the page you are
+> looking for could not be found.”** A customer reported exactly that page, which
+> is what `npm run check:payments` (below) exists to catch first.
 
    The site appends three parameters that Yoco's payment page understands:
 
@@ -159,6 +166,31 @@ Yoco directly in this design.
    EFT on Yoco's secure page”**. If it says *“Online payment is not switched on
    yet”*, the variables are missing.
 
+## Check it before a customer does
+
+Run this on the server after setting the variables, before telling anyone the shop
+takes cards:
+
+```
+npm run check:payments
+```
+
+It reads exactly the environment the site reads and prints one line per item:
+
+| Check | Why it matters |
+| --- | --- |
+| Which mode is configured | `off` means the checkout will honestly say online payment is not switched on yet |
+| **The payment link resolves** | A 404, or Yoco's “page could not be found” served with a 200, is the failure a customer actually hit — the link was an invented example, not one from the dashboard |
+| The webhook secret is present and starts `whsec_` | Without it, money arrives but no order is ever marked paid |
+| The key is `sk_test_` or `sk_live_` | A test key takes no real money; a public key does not work here at all |
+| `HB_PUBLIC_URL` is the real https address | Customers are returned to it after paying |
+
+Exit code is 1 if something would bite a customer, so it can gate a deploy. Use
+`HB_PAYMENT_CHECK_SKIP_NETWORK=1` to check the settings without making requests.
+The server also prints the same problems as `[payments] …` warnings when it
+starts, so a bad link shows up in the deploy log rather than in a customer's
+browser.
+
 ## The first real payment
 
 Do this before announcing the site:
@@ -181,6 +213,8 @@ Do this before announcing the site:
 | Customer closes the tab on Yoco's page | The order stays **awaiting payment**; its page offers *Pay now on Yoco* to resume |
 | The card is declined | Yoco returns the customer to `failureUrl`; the order stays **awaiting payment** and can be retried, or paid by cash on collection |
 | The customer abandons and orders again | One checkout per order code (`Idempotency-Key`), so there is one payment to reconcile, not two |
+| The payment link does not exist | Yoco shows its own “page you are looking for could not be found” — the customer cannot pay. `npm run check:payments` catches this before launch, and the server warns at startup |
+| Yoco is unreachable when an order is placed | The API refuses with 502 and “Nothing was charged”, and no order is stored, so nothing needs cancelling |
 | A webhook with a bad signature, or none | Rejected (401/400), logged, order unchanged |
 | A replayed webhook | Rejected if older than five minutes |
 | The same webhook delivered twice | Acknowledged and ignored — no double receipt, no double alert |
@@ -292,7 +326,8 @@ there is nothing to rebuild in the browser.
   (order creation, webhook → paid, duplicates, stale and forged signatures,
   refusal when unconfigured) and `server/yoco-checkout-flow.test.js` (the whole
   redirect, above).
-- `HB_YOCO_PAYMENT_URL=https://pay.yoco.com/heritagebites npm start` shows the
-  link mode in a browser, with no keys at all.
+- `HB_YOCO_PAYMENT_URL=https://pay.yoco.com/business/<id> npm start` shows the
+  link mode in a browser, with no keys at all (any real link; an invented one
+  only proves that Yoco's 404 page loads).
 - `npm run test:interaction` exercises the paid path end to end when the server
   is started with the same `HB_YOCO_WEBHOOK_SECRET` that the suite exports.
