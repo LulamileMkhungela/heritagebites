@@ -146,9 +146,32 @@ export async function startYocoPayment(input) {
   if (mode === 'link') {
     try {
       const url = new URL(String(yocoPaymentUrl()));
-      /* The customer sees this reference on Yoco's page and the kitchen sees it
-         on the order, which is what lets a person match the two. */
+      /*
+       * A Yoco payment page (pay.yoco.com/…) accepts these query parameters and
+       * pre-fills the page with them, which closes most of the gap between a link
+       * and a real checkout:
+       *
+       *   amount                   the total, in RANDS with cents ("130.00")
+       *   reference                shown on Yoco's page and in the dashboard
+       *   redirectOnPaymentSuccess where to send the customer afterwards
+       *
+       * The amount is still editable on Yoco's page in link mode — only the API
+       * mode can pin it — so the webhook and the order code stay the source of
+       * truth for what was actually paid.
+       */
+      url.searchParams.set('amount', (amountCents / 100).toFixed(2));
       url.searchParams.set('reference', orderCode);
+      const base = input?.baseUrl ? String(input.baseUrl).replace(/\/+$/, '') : '';
+      if (base) {
+        /*
+         * Deliberately no tracking token on this one. A payment link is a static
+         * page: the return address is stored by Yoco and echoed in the browser's
+         * history, and the token is the only thing protecting the order page. The
+         * checkout already parks the token in the customer's browser before it
+         * redirects, so the page opens without it.
+         */
+        url.searchParams.set('redirectOnPaymentSuccess', `${base}/order/${encodeURIComponent(orderCode)}`);
+      }
       return { ok: true, mode, redirectUrl: url.toString(), reference: null };
     } catch {
       return {
@@ -169,6 +192,12 @@ export async function startYocoPayment(input) {
     currency: String(input?.currency ?? 'ZAR').toUpperCase(),
     metadata: { orderCode },
   };
+  /*
+   * One checkout per order. If a request is retried after a timeout — or a
+   * customer double-taps — Yoco returns the same checkout instead of opening a
+   * second one, so there is exactly one payment attempt to reconcile.
+   */
+  const idempotencyKey = `hb-${orderCode}`;
   const base = input?.baseUrl ? String(input.baseUrl).replace(/\/+$/, '') : '';
   if (base) {
     const back = `${base}/order/${encodeURIComponent(orderCode)}`;
@@ -185,6 +214,7 @@ export async function startYocoPayment(input) {
         Authorization: `Bearer ${yocoSecretKey()}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify(body),
     });

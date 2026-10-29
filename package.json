@@ -8,6 +8,7 @@
     "dev": "concurrently -k -n api,web -c yellow,cyan \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite",
     "dev:api": "node server/index.js",
+    "sandbox:yoco": "node scripts/yoco-sandbox.mjs",
     "build": "tsc -b && vite build",
     "build:pages": "node scripts/build-pages.mjs",
     "preview": "vite preview",

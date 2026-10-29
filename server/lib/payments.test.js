@@ -87,6 +87,30 @@ describe('starting a payment', () => {
     const url = new URL(started.redirectUrl);
     assert.equal(url.origin + url.pathname, 'https://pay.yoco.com/heritagebites');
     assert.equal(url.searchParams.get('reference'), 'HB-1042A');
+    /* Pre-filled, so the customer confirms a figure instead of inventing one. */
+    assert.equal(url.searchParams.get('amount'), '130.00');
+  });
+
+  test('link mode: the customer is sent back to their own order, without a tracking token', async () => {
+    process.env.HB_YOCO_PAYMENT_URL = 'https://pay.yoco.com/heritagebites';
+    const started = await startYocoPayment({
+      amountCents: 13000,
+      orderCode: 'HB-1042A',
+      trackingToken: 'tok_abc',
+      baseUrl: 'https://heritagebites.co.za/',
+    });
+    const url = new URL(started.redirectUrl);
+    assert.equal(
+      url.searchParams.get('redirectOnPaymentSuccess'),
+      'https://heritagebites.co.za/order/HB-1042A',
+      'the way back is the order page',
+    );
+    /*
+     * No token: a payment link is a static page, the return address is stored by
+     * Yoco, and the tracking token is the only thing protecting the order. The
+     * browser remembers it instead (see Checkout.tsx).
+     */
+    assert.doesNotMatch(started.redirectUrl, /tok_abc|token=/);
   });
 
   test('link mode: a nonsense link is refused rather than followed', async () => {
@@ -118,6 +142,8 @@ describe('starting a payment', () => {
     assert.equal(seen.url, DEFAULT_CHECKOUT_ENDPOINT);
     assert.equal(seen.init.method, 'POST');
     assert.equal(seen.init.headers.Authorization, 'Bearer sk_test_123');
+    /* One checkout per order: a double tap cannot open a second payment. */
+    assert.equal(seen.init.headers['Idempotency-Key'], 'hb-HB-1042A');
     assert.equal(seen.body.amount, 13000, 'Yoco takes cents');
     assert.equal(seen.body.currency, 'ZAR');
     assert.equal(seen.body.metadata.orderCode, 'HB-1042A');

@@ -47,12 +47,20 @@ better, because it fixes the amount.
    HB_YOCO_PAYMENT_URL=https://pay.yoco.com/…
    ```
 
-   The site appends `?reference=HB-1234A` so the order code is visible on Yoco's
-   page and in the Yoco dashboard.
+   The site appends three parameters that Yoco's payment page understands:
 
-   **Trade-off:** a link cannot fix the amount. The customer types it on Yoco's
-   page, so someone has to check that what was paid matches the order. Good for
-   starting today; use Option B when you can.
+   ```
+   ?amount=130.00&reference=HB-1234A&redirectOnPaymentSuccess=https://<site>/order/HB-1234A?token=…
+   ```
+
+   `reference` is the order code, shown on Yoco's page and in the dashboard;
+   `amount` pre-fills the total; `redirectOnPaymentSuccess` brings the customer
+   back to their own order.
+
+   **Trade-off:** a link cannot *pin* the amount — the customer can still edit it
+   on Yoco's page, and Yoco will take whatever figure is there. So someone has to
+   check that what was paid matches the order, and the webhook stays the only
+   thing that marks it paid. Good for starting today; use Option B when you can.
 
 ### Option B — the Checkout API (recommended)
 
@@ -70,6 +78,40 @@ Optional overrides:
 HB_YOCO_CHECKOUT_ENDPOINT=https://payments.yoco.com/api/checkouts   # default; only change for a sandbox
 HB_PUBLIC_URL=https://heritagebites.co.za                            # used for the return URLs
 ```
+
+### What actually happens on the redirect
+
+This is the part worth being precise about, because it is the whole payment
+design: **the card is never typed on this site.**
+
+```
+browser                       this site (server)                 Yoco
+   |  POST /api/orders  ----------> |                               |
+   |                                |  POST /api/checkouts ---------> |
+   |                                |  { amount, currency, metadata }|
+   |                                | <----- { id, redirectUrl } ---- |
+   | <-- 201 { payment.redirectUrl }|                               |
+   |                                                                |
+   |  window.location.assign(redirectUrl) ------------------------> |
+   |                     card is typed on Yoco's page               |
+   | <----------- 303 successUrl ----------------------------------- |
+   |                                   <---- webhook: payment.succeeded
+   |                                        (signed) ---- |
+   |                                order.payment.status = 'approved'
+```
+
+- The server asks Yoco for **`amount` in cents**, the order code in `metadata`,
+  and the three return addresses (`successUrl`, `cancelUrl`, `failureUrl`).
+- Yoco answers with `redirectUrl`. The checkout screen stores it, shows
+  “Order HB-1042 is saved — taking you to Yoco”, and sends the browser there.
+- Every request carries `Idempotency-Key: hb-<order code>`, so a double tap or a
+  retried request reuses the same checkout instead of opening a second payment.
+- The order is saved **before** the customer leaves, as `awaiting_payment`, so a
+  closed tab or a flat battery never loses a paid-for order. The order page keeps
+  the `redirectUrl` and offers **Pay now on Yoco** to resume.
+- The `successUrl` is **not** proof of payment. Only the signed webhook moves an
+  order to `approved`; the docs say so and so does the code (`server/index.js`,
+  `POST /api/payments/yoco/webhook` is the single writer).
 
 ### The webhook (needed for either option)
 
@@ -137,6 +179,8 @@ Do this before announcing the site:
 | No Yoco configuration | “Online payment is not switched on yet”, a WhatsApp basket button, and the place-order button disabled for online orders — the API refuses with 503 rather than creating an unpayable order |
 | Yoco refuses to create the payment | The message from Yoco plus “Nothing was charged”, and no order is stored |
 | Customer closes the tab on Yoco's page | The order stays **awaiting payment**; its page offers *Pay now on Yoco* to resume |
+| The card is declined | Yoco returns the customer to `failureUrl`; the order stays **awaiting payment** and can be retried, or paid by cash on collection |
+| The customer abandons and orders again | One checkout per order code (`Idempotency-Key`), so there is one payment to reconcile, not two |
 | A webhook with a bad signature, or none | Rejected (401/400), logged, order unchanged |
 | A replayed webhook | Rejected if older than five minutes |
 | The same webhook delivered twice | Acknowledged and ignored — no double receipt, no double alert |
@@ -149,14 +193,106 @@ receipt tells the customer to contact the business, and someone with Yoco
 dashboard access issues the refund there. That matches the approved Refund and
 Cancellation policies on `/policies`.
 
-## Testing without money
+## Test mode: proving the flow before real money
 
-- The whole money path is covered by tests that never touch Yoco:
-  `server/lib/payments.test.js` (configuration, request building, signature
-  checks) and `server/integration.test.js` (order creation, webhook → paid,
-  duplicate and stale webhooks, unconfigured refusal).
-- To see the flow in a browser with a fake link:
-  `HB_YOCO_PAYMENT_URL=https://pay.yoco.com/heritagebites npm start`.
-- To let the interaction suite exercise the paid path, start the server with the
-  same `HB_YOCO_WEBHOOK_SECRET` you export when running
-  `npm run test:interaction`.
+There are two layers, and it is worth using both: **Yoco's own test mode** proves
+the live gateway agrees with us, and the **local stand-in** proves the site's side
+of the conversation on any machine with no account at all.
+
+### 1. Proven locally already (no Yoco account, no network)
+
+`server/yoco-checkout-flow.test.js` runs the entire redirect against
+`scripts/yoco-sandbox.mjs` — a small server that speaks the same three exchanges
+as Yoco (`POST /api/checkouts` → `redirectUrl`, a payment page, a signed
+`payment.succeeded` webhook). It asserts:
+
+| # | What is proven |
+| --- | --- |
+| 1 | The site reports `mode: "api"` and `exactAmount: true`, not a payment link. |
+| 2 | A card order returns a `redirectUrl` pointing **off this site**, and the order is `awaiting_payment`. |
+| 3 | That URL is a payment page showing the order total and code — with **no card fields of ours**. |
+| 4 | Pressing Pay sends the browser back to `successUrl`, and the **signed webhook** flips the order to `approved` (brand `visa`, last4 `1111`, `paidAt`, history entry). |
+| 5 | A declined payment leaves the order `awaiting_payment`, with the payment URL kept for a retry. |
+| 6 | Opening the return URL by hand changes **nothing** — the order stays `awaiting_payment`. |
+| 7 | A forged webhook signature is refused with 401 and changes nothing. |
+
+Run it with `npm test`, or on its own:
+
+```
+node --test server/yoco-checkout-flow.test.js
+```
+
+To watch it in a browser instead, in two terminals:
+
+```
+node scripts/yoco-sandbox.mjs                     # fake Yoco on :4555
+```
+
+```
+HB_YOCO_SECRET_KEY=sk_test_sandbox_only \
+HB_YOCO_CHECKOUT_ENDPOINT=http://127.0.0.1:4555/api/checkouts \
+HB_YOCO_WEBHOOK_SECRET=whsec_$(printf %s local-webhook-secret | base64) \
+HB_PUBLIC_URL=http://localhost:4000 \
+npm start
+```
+
+Then order a plate in the browser, press **Pay** on the stand-in page, and land
+back on the order as **Paid**. What this does *not* prove is that
+`payments.yoco.com` behaves as documented — that is what step 2 is for.
+
+### 2. Yoco test mode (the real gateway, no real money)
+
+Yoco has **no public anonymous sandbox**: test mode lives inside your own Yoco
+account. You need an account (a test-mode key is available before the business is
+fully verified), then:
+
+1. Yoco dashboard → **Selling online → Payment Gateway → API keys** and copy the
+   key that starts **`sk_test_`**. (Do not use `sk_live_` yet.)
+2. Put it in the host's environment as `HB_YOCO_SECRET_KEY`, keep
+   `HB_YOCO_CHECKOUT_ENDPOINT` at its default, restart the app.
+3. Check `https://<your domain>/api/payments/config` says
+   `{"online":true,"mode":"api","webhook":true}`.
+4. Add the webhook endpoint (`https://<your domain>/api/payments/yoco/webhook`) in
+   the dashboard's **test** webhooks and copy that signing secret into
+   `HB_YOCO_WEBHOOK_SECRET`.
+5. Place a real order on the site and pay on Yoco's page with a test card:
+
+   | Card number | Result |
+   | --- | --- |
+   | `4111 1111 1111 1111` | succeeds |
+   | `5105 1051 0510 5100` | declined |
+   | `4000 0000 0000 0002` | declined |
+
+   Any future expiry date and any 3-digit CVC work. Nothing is charged.
+6. Expect: the order page shows **Paid**, the kitchen alert arrives, and the
+   payment appears in the Yoco dashboard in test mode.
+7. Repeat with `5105 1051 0510 5100`: the customer is returned to the order,
+   which stays **Awaiting payment** and offers **Pay now on Yoco** to retry.
+8. Delete any test orders from the shop before launch.
+
+### 3. Going live
+
+Swap `sk_test_…` for `sk_live_…`, re-point the webhook to the live one and copy
+its **live** signing secret, restart, and confirm
+`/api/payments/config` still reports `mode: "api"` and `webhook: true`. Then make
+**one real payment of a small amount** (R100, a single traditional plate) on your
+own card, confirm it shows as Paid and the alert arrives, and refund it in the
+Yoco dashboard. That one rand is the only way to be sure live keys, the live
+webhook and the bank all agree.
+
+### Redeploying after a config change
+
+The values are read from the environment at request time, so a restart is enough;
+there is nothing to rebuild in the browser.
+
+## Testing without money (summary)
+
+- `npm test` covers the money path with no network: `server/lib/payments.test.js`
+  (configuration, request building, signatures), `server/integration.test.js`
+  (order creation, webhook → paid, duplicates, stale and forged signatures,
+  refusal when unconfigured) and `server/yoco-checkout-flow.test.js` (the whole
+  redirect, above).
+- `HB_YOCO_PAYMENT_URL=https://pay.yoco.com/heritagebites npm start` shows the
+  link mode in a browser, with no keys at all.
+- `npm run test:interaction` exercises the paid path end to end when the server
+  is started with the same `HB_YOCO_WEBHOOK_SECRET` that the suite exports.
