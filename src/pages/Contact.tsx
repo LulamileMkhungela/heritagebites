@@ -127,13 +127,19 @@ export default function Contact() {
 
             <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
               <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Opening hours</p>
+              {/*
+                Only the days the kitchen actually cooks. Five greyed "Closed"
+                rows pushed the two real windows off the card and made a
+                two-day service look like a business that is mostly shut. The
+                footer has always done it this way, so the two now agree.
+              */}
               <ul className="mt-3 space-y-1.5 text-sm">
-                {(s?.hours ?? []).map((h) => {
+                {(s?.hours ?? []).filter((h) => !h.closed).map((h) => {
                   const isToday = h.day === new Date().getDay();
                   return (
-                    <li key={h.day} className={`flex justify-between gap-4 ${isToday ? 'font-bold' : h.closed ? 'text-ink/35' : 'text-ink/65'}`}>
+                    <li key={h.day} className={`flex justify-between gap-4 ${isToday ? 'font-bold' : 'text-ink/65'}`}>
                       <span>{h.label}{isToday && <span className="ml-2 rounded-full bg-ochre px-2 py-0.5 text-xs uppercase text-ink">Today</span>}</span>
-                      <span className="font-mono text-xs">{h.closed ? 'Closed' : `${h.open} – ${h.close}`}</span>
+                      <span className="font-mono text-xs">{h.open} – {h.close}</span>
                     </li>
                   );
                 })}
@@ -204,7 +210,7 @@ export default function Contact() {
               ) : (
                 <form onSubmit={submit} className="mt-6 grid gap-4" noValidate>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Your name *" error={errors.name}>
+                    <Field label="Your name" required error={errors.name}>
                       <input
                         className={inputCls}
                         value={form.name}
@@ -248,7 +254,7 @@ export default function Contact() {
                       </select>
                     </Field>
                   </div>
-                  <Field label="Message *" error={errors.message}>
+                  <Field label="Message" required error={errors.message}>
                     <textarea
                       className={`${inputCls} min-h-36 resize-y`}
                       value={form.message}

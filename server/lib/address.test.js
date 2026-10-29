@@ -194,6 +194,25 @@ test('an untagged result outside the delivery envelope is dropped', () => {
   assert.deepEqual(filterSuggestions([mapped], { areas: ['Rosebank', 'Sandton'] }), []);
 });
 
+test('an untagged result inside the envelope but outside both areas is dropped', () => {
+  /*
+   * "12 Oxford Road, Johannesburg · 2001" — the CBD. Inside the search envelope,
+   * seven kilometres from Rosebank, and with no suburb tag to say otherwise.
+   * Showing it under a Sandton search was the owner's complaint; being inside the
+   * envelope is not evidence that the kitchen can reach it.
+   */
+  const cbd = at(28.0455, -26.2035, { osm_type: 'W', osm_id: 777, name: 'Oxford Road', city: 'Johannesburg', postcode: '2001' });
+  const [mapped] = mapPhotonResponse({ features: [cbd] }, { deliveryAreas: ['Rosebank', 'Sandton'] });
+  assert.equal(mapped.area, null);
+  assert.equal(insideDeliveryBox(mapped.lat, mapped.lng), false);
+  assert.deepEqual(filterSuggestions([mapped], { areas: ['Rosebank', 'Sandton'] }), []);
+
+  /* Still dropped when it sits just inside the envelope but near no area. */
+  const edge = { ...mapped, lat: -26.18, lng: 28.05 };
+  assert.equal(insideDeliveryBox(edge.lat, edge.lng), true);
+  assert.deepEqual(filterSuggestions([edge], { areas: ['Rosebank', 'Sandton'] }), []);
+});
+
 test('an OpenStreetMap suburb tag beats the coordinates', () => {
   /* Deliberately contradictory: tagged Sandton, sitting on Rosebank's centre. */
   const contradictory = {

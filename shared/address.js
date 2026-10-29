@@ -103,11 +103,13 @@ export function insideDeliveryBox(lat, lng) {
  * Keep only suggestions the kitchen can deliver to, and label the ones the map
  * left untagged.
  *
- * A result is dropped when it is *provably* outside: a tag naming another area,
- * or a point outside the delivery envelope. It is kept when its tags name an
- * approved area, or when its coordinates do, or when it is inside the envelope
- * and the map simply did not say — that last case is what makes typing work as
- * well as pasting.
+ * A result is kept only when it can be *placed*: its tags name an approved area,
+ * or its coordinates fall near that area's centre. Anything that cannot be
+ * placed is dropped, even if it sits inside the search envelope — that is how
+ * "12 Oxford Road, Johannesburg · 2001" (the CBD, seven kilometres from
+ * Rosebank) used to appear under a Sandton search: the map gave no suburb, so it
+ * survived on the envelope alone. Envelope membership is not evidence of an
+ * address the kitchen can reach.
  *
  * When the customer has already picked an area, only that area is offered, so
  * "Rosebank" + "Oxford" gives the Rosebank end of Oxford Road.
@@ -126,28 +128,19 @@ export function filterSuggestions(suggestions, options) {
   for (const suggestion of suggestions ?? []) {
     if (!suggestion) continue;
     const tagged = suggestion.area ? String(suggestion.area) : null;
-    const inBox = insideDeliveryBox(suggestion.lat, suggestion.lng);
-    /* Tags beat coordinates; coordinates beat nothing; nothing is only allowed
-       while the point is still inside the envelope. */
+    /* Tags beat coordinates; a result neither of them can place is not offered. */
     const resolved = tagged ?? areaForPoint(suggestion.lat, suggestion.lng);
-    if (resolved) {
-      if (!allowed.includes(resolved.toLowerCase())) continue;
-    } else if (!inBox) {
-      continue;
-    }
+    if (!resolved) continue;
+    if (!allowed.includes(resolved.toLowerCase())) continue;
 
-    kept.push(
-      resolved
-        ? {
-            ...suggestion,
-            area: resolved,
-            /* Put the area where a South African address puts it — after the
-               street, before the city — when the map left the suburb out. */
-            line: lineWithArea(suggestion.line, resolved),
-            detail: detailWithArea(suggestion.detail, resolved),
-          }
-        : { ...suggestion, area: null },
-    );
+    kept.push({
+      ...suggestion,
+      area: resolved,
+      /* Put the area where a South African address puts it — after the street,
+         before the city — when the map left the suburb out. */
+      line: lineWithArea(suggestion.line, resolved),
+      detail: detailWithArea(suggestion.detail, resolved),
+    });
   }
 
   /* The chosen area first, so the top of the list matches what was picked. */

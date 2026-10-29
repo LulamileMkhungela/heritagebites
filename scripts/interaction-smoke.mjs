@@ -608,6 +608,15 @@ const PHOTON_STREET_FIXTURE = {
       geometry: { type: 'Point', coordinates: [28.19, -25.75] },
       properties: { osm_type: 'W', osm_id: 555, name: 'Church Street', city: 'Pretoria', postcode: '0002', osm_key: 'highway' },
     },
+    /*
+     * The owner's complaint: a Johannesburg CBD result with no suburb tag used to
+     * slip through under a Sandton search because it was inside the envelope.
+     */
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [28.0455, -26.2035] },
+      properties: { osm_type: 'W', osm_id: 777, name: 'Oxford Road', city: 'Johannesburg', postcode: '2001', osm_key: 'highway' },
+    },
   ],
 };
 
@@ -762,6 +771,9 @@ await step('typing a house number and a half-typed street still finds the addres
   /* The number the customer typed must survive the fallback. */
   if (!/^\s*173 Oxford Road/.test(rosebank)) throw new Error(`the house number was dropped: ${rosebank}`);
   if (/Pretoria/.test(options.join(' '))) throw new Error('an address outside the delivery areas was offered');
+  /* Nor a Johannesburg CBD street that the map left untagged. */
+  if (/2001|Johannesburg · 2001/.test(options.join(' '))) throw new Error('a Johannesburg CBD address was offered');
+  if (options.length !== 1) throw new Error(`expected exactly the Rosebank street, saw ${JSON.stringify(options)}`);
 
   const button = [...s7.doc.querySelectorAll('[role="option"]')]
     .find((o) => /173 Oxford Road/.test(o.textContent ?? ''))
@@ -855,6 +867,53 @@ await step('address suggestions fail quietly when the geocoder is unreachable', 
 
 const s3 = boot('/contact');
 await s3.waitFor(() => /Send us a message/i.test(s3.text()), 'contact page');
+
+await step('opening hours list only the days the kitchen cooks', async () => {
+  /*
+   * The contact card used to print all seven days: five greyed "Closed" rows
+   * around two real windows. The footer already showed only the cooking days, so
+   * the two disagreed and the card read as a business that is mostly shut.
+   */
+  const card = [...s3.doc.querySelectorAll('div')].find((el) => /^Opening hours/.test(el.textContent ?? '') && el.querySelector('ul'));
+  if (!card) throw new Error('no opening-hours card on the contact page');
+  const rows = [...card.querySelectorAll('li')].map((li) => li.textContent ?? '');
+
+  if (/Closed/.test(rows.join(' '))) throw new Error(`a "Closed" row is still shown: ${JSON.stringify(rows)}`);
+  if (rows.some((row) => /Sunday|Monday|Tuesday|Wednesday|Saturday/.test(row))) {
+    throw new Error(`a day the kitchen does not cook is listed: ${JSON.stringify(rows)}`);
+  }
+  if (rows.length !== 2 || !rows.some((r) => /Thursday/.test(r)) || !rows.some((r) => /Friday/.test(r))) {
+    throw new Error(`expected Thursday and Friday only, saw ${JSON.stringify(rows)}`);
+  }
+  return `${rows.length} cooking days, no closed rows`;
+});
+
+await step('only the asterisk on a required field is red', async () => {
+  /*
+   * Checked as markup, not computed colour: this harness loads the app with the
+   * stylesheet stripped out, so every colour would read as black. What matters is
+   * that the asterisk is its own element carrying the error colour, and that it
+   * is not part of the label's text — the label must stay ink, because a red
+   * "Your name" reads as an error before the customer has typed anything.
+   * The rendered colour is verified in the browser screenshot.
+   */
+  const label = [...s3.doc.querySelectorAll('label')].find((el) => /Your name/.test(el.textContent ?? ''));
+  if (!label) throw new Error('no name field on the contact form');
+  const head = label.querySelector('span > span');
+  const star = [...head.querySelectorAll('span')].find((el) => el.textContent === '*');
+  if (!star) throw new Error('the name field is not marked required');
+
+  if (!/text-chili/.test(star.className)) throw new Error(`the asterisk is not the error colour: "${star.className}"`);
+  if (/\*/.test([...head.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(''))) {
+    throw new Error('the asterisk is still part of the label text');
+  }
+  if (!/text-ink\b/.test(head.className)) throw new Error(`the label is not ink-coloured: "${head.className}"`);
+  /* The asterisk is decoration; a screen reader gets the word instead. */
+  if (![...head.querySelectorAll('span')].some((el) => /sr-only/.test(el.className) && /required/i.test(el.textContent))) {
+    throw new Error('the required marker is not announced to screen readers');
+  }
+  return 'asterisk carries the error colour, label stays ink';
+});
 
 await step('the contact form refuses a message with no name, body or reply channel', async () => {
   /*

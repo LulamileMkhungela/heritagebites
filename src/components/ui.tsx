@@ -201,17 +201,37 @@ export function Field({
   label,
   hint,
   error,
+  required,
   children,
 }: {
   label: string;
   hint?: string;
   error?: string;
+  /**
+   * Marks the field as mandatory with a red asterisk.
+   *
+   * Only the asterisk is red: the label stays ink, because a red "Your name"
+   * reads as an error before the customer has typed anything. The word itself is
+   * not written out either — an asterisk is the convention, and "required" next
+   * to a field the browser already enforces is noise.
+   */
+  required?: boolean;
   children: ReactNode;
 }) {
   return (
     <label className="block">
       <span className="mb-1.5 flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-semibold text-ink">{label}</span>
+        <span className="text-[13px] font-semibold text-ink">
+          {label}
+          {required && (
+            <>
+              <span aria-hidden="true" className="ml-1 text-chili">
+                *
+              </span>
+              <span className="sr-only"> (required)</span>
+            </>
+          )}
+        </span>
         {hint && !error && <span className="text-xs text-ink/45">{hint}</span>}
       </span>
       {children}

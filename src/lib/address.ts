@@ -44,7 +44,6 @@ export {
   areaForPoint,
   expandStreetAbbreviations,
   filterSuggestions,
-  insideDeliveryBox,
   mapPhotonFeature,
   mapPhotonResponse,
   stripHouseNumber,
