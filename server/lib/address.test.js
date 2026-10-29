@@ -14,9 +14,14 @@ import {
   DELIVERY_BBOX_PARAM,
   MIN_QUERY_LENGTH,
   PHOTON_ENDPOINT,
+  applyHouseHint,
+  areaForPoint,
+  expandStreetAbbreviations,
   filterSuggestions,
+  insideDeliveryBox,
   mapPhotonFeature,
   mapPhotonResponse,
+  stripHouseNumber,
 } from '../../shared/address.js';
 
 const settings = { deliveryAreas: ['Rosebank', 'Sandton'] };
@@ -155,4 +160,90 @@ test('the geocoder is bounded to the Rosebank/Sandton envelope', () => {
   /* Pretoria (-25.75, 28.19) must not be. */
   assert.ok(-25.75 > box.maxLat && 28.19 > box.maxLon);
   assert.equal(DELIVERY_BBOX_PARAM, [box.minLon, box.minLat, box.maxLon, box.maxLat].join(','));
+});
+
+/* ------------------- Typing, not pasting: the reported bug ---------------- */
+
+/** A point feature, GeoJSON order: [lon, lat]. */
+const at = (lon, lat, properties) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties });
+
+test('a street result with no suburb tag is still placed by its coordinates', () => {
+  /*
+   * This is the exact shape Photon returns while the street name is half typed:
+   * the street object, no housenumber and — the important part — no `suburb`.
+   * Tag-only matching threw it away, which is why typing found nothing while
+   * pasting the full address worked.
+   */
+  const street = at(28.0425, -26.1425, { osm_type: 'W', osm_id: 444, name: 'Oxford Road', city: 'Johannesburg', postcode: '2196' });
+  const [mapped] = mapPhotonResponse({ features: [street] }, { deliveryAreas: ['Rosebank', 'Sandton'] });
+  assert.equal(mapped.area, null, 'the raw mapping has no tag to go on');
+  assert.equal(mapped.lat, -26.1425);
+  assert.equal(mapped.lng, 28.0425);
+
+  const shown = filterSuggestions([mapped], { areas: ['Rosebank', 'Sandton'] });
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0].area, 'Rosebank');
+  /* The area goes where a South African address puts it: after the street. */
+  assert.equal(shown[0].line, 'Oxford Road, Rosebank, Johannesburg');
+  assert.equal(shown[0].detail, 'Rosebank · Johannesburg · 2196');
+});
+
+test('an untagged result outside the delivery envelope is dropped', () => {
+  const pretoria = at(28.19, -25.75, { osm_type: 'W', osm_id: 555, name: 'Church Street', city: 'Pretoria' });
+  const [mapped] = mapPhotonResponse({ features: [pretoria] }, { deliveryAreas: ['Rosebank', 'Sandton'] });
+  assert.deepEqual(filterSuggestions([mapped], { areas: ['Rosebank', 'Sandton'] }), []);
+});
+
+test('an OpenStreetMap suburb tag beats the coordinates', () => {
+  /* Deliberately contradictory: tagged Sandton, sitting on Rosebank's centre. */
+  const contradictory = {
+    id: 'x',
+    line: '1 Somewhere',
+    detail: '',
+    area: 'Sandton',
+    lat: -26.1445,
+    lng: 28.043,
+  };
+  const [kept] = filterSuggestions([contradictory], { areas: ['Rosebank', 'Sandton'] });
+  assert.equal(kept.area, 'Sandton');
+  /* …and it is still refused when the customer asked for Rosebank only. */
+  assert.deepEqual(filterSuggestions([contradictory], { areas: ['Rosebank', 'Sandton'], onlyArea: 'Rosebank' }), []);
+});
+
+test('the area centres and their radii agree with reality', () => {
+  /* 173 Oxford Road, Rosebank. */
+  assert.equal(areaForPoint(-26.1425, 28.0425), 'Rosebank');
+  /* Sandton CBD. */
+  assert.equal(areaForPoint(-26.1075, 28.055), 'Sandton');
+  /* Pretoria, Bryanston and the Joburg CBD are all outside. */
+  for (const [lat, lng] of [[-25.75, 28.19], [-26.05, 28.02], [-26.2041, 28.0473]]) {
+    assert.equal(areaForPoint(lat, lng), null, `${lat},${lng} should not be in a delivery area`);
+  }
+  assert.equal(areaForPoint(undefined, 28), null);
+  assert.equal(insideDeliveryBox(-26.1425, 28.0425), true);
+  assert.equal(insideDeliveryBox(-25.75, 28.19), false);
+});
+
+test('the house number typed is put back onto a street-only result', () => {
+  const street = { id: 'w444', line: 'Oxford Road, Rosebank, Johannesburg', detail: 'Rosebank · Johannesburg · 2196', area: 'Rosebank' };
+  assert.equal(applyHouseHint([street], '173 oxf')[0].line, '173 Oxford Road, Rosebank, Johannesburg');
+  /* A real house-number hit already has its own number: it must not be doubled. */
+  const real = { ...street, line: '12 Oxford Road, Rosebank, Johannesburg' };
+  assert.equal(applyHouseHint([real], '173 oxf')[0].line, '12 Oxford Road, Rosebank, Johannesburg');
+  /* No number typed, nothing to restore. */
+  assert.equal(applyHouseHint([street], 'oxf')[0].line, 'Oxford Road, Rosebank, Johannesburg');
+  assert.equal(applyHouseHint([street], '173 oxf')[0].house, '173');
+});
+
+test('the house number can be stripped for a second attempt', () => {
+  assert.equal(stripHouseNumber('173 oxf'), 'oxf');
+  assert.equal(stripHouseNumber('173b oxford'), 'oxford');
+  assert.equal(stripHouseNumber('oxford road'), 'oxford road');
+});
+
+test('street abbreviations are expanded, but a leading St stays a saint', () => {
+  assert.equal(expandStreetAbbreviations('173 oxford rd'), '173 oxford road');
+  assert.equal(expandStreetAbbreviations('12 Oxford Ave, rosebank'), '12 Oxford avenue, rosebank');
+  assert.equal(expandStreetAbbreviations('St Andrews Rd'), 'St Andrews road');
+  assert.equal(expandStreetAbbreviations('173 oxf'), '173 oxf');
 });

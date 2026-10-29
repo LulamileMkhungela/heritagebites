@@ -565,19 +565,48 @@ const s7 = boot('/checkout', {
   },
 });
 
-/** Two fake Photon features: one in Sandton, one in Rosebank. */
+/*
+ * What Photon really answers, in three shapes. This is a reproduction of the
+ * owner's report rather than a happy path:
+ *
+ *  - "12 Oxford" resolves to house numbers, which carry a `suburb` tag.
+ *  - "173 oxf" — a house number plus a *partial* street — finds nothing at all.
+ *    That is the real behaviour that made the field look broken when typing and
+ *    fine when pasting.
+ *  - "oxf" on its own resolves to the street Oxford Road, which has no `suburb`
+ *    tag, only a city. Placing it needs the coordinates.
+ *
+ * Plus a Pretoria street, which the kitchen does not deliver to, to prove
+ * out-of-area results never reach the list.
+ */
+const house = (osmId, lon, lat, housenumber, street, suburb, city) => ({
+  type: 'Feature',
+  geometry: { type: 'Point', coordinates: [lon, lat] },
+  properties: { osm_type: 'N', osm_id: osmId, housenumber, street, suburb, city, postcode: '2196' },
+});
+
 const PHOTON_FIXTURE = {
+  type: 'FeatureCollection',
+  features: [
+    house(111, 28.05, -26.1, '12', 'Oxford Road', 'Illovo', 'Sandton'),
+    house(222, 28.04, -26.14, '15', 'Oxford Road', 'Rosebank', 'Johannesburg'),
+    house(333, 28.19, -25.75, '9', 'Church Street', 'Pretoria Central', 'Pretoria'),
+  ],
+};
+
+/** The street object Photon returns for a prefix: no housenumber, no suburb. */
+const PHOTON_STREET_FIXTURE = {
   type: 'FeatureCollection',
   features: [
     {
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: [28.05, -26.1] },
-      properties: { osm_type: 'N', osm_id: 111, housenumber: '12', street: 'Oxford Road', suburb: 'Illovo', city: 'Sandton', postcode: '2196' },
+      geometry: { type: 'Point', coordinates: [28.0425, -26.1425] },
+      properties: { osm_type: 'W', osm_id: 444, name: 'Oxford Road', city: 'Johannesburg', postcode: '2196', osm_key: 'highway' },
     },
     {
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: [28.04, -26.14] },
-      properties: { osm_type: 'N', osm_id: 222, housenumber: '15', street: 'Oxford Road', suburb: 'Rosebank', city: 'Johannesburg', postcode: '2196' },
+      geometry: { type: 'Point', coordinates: [28.19, -25.75] },
+      properties: { osm_type: 'W', osm_id: 555, name: 'Church Street', city: 'Pretoria', postcode: '0002', osm_key: 'highway' },
     },
   ],
 };
@@ -588,10 +617,13 @@ s7.w.fetch = async (input, init) => {
   const url = String(typeof input === 'string' ? input : input?.url ?? '');
   if (url.startsWith('https://photon.komoot.io/')) {
     s7.photonCalls.push(url);
+    const q = (new URL(url).searchParams.get('q') ?? '').trim().toLowerCase();
+    /* A house number followed by a partial street name: nothing, as in real life. */
+    const body = /^173\s+oxf/.test(q) ? { type: 'FeatureCollection', features: [] } : /^oxf/.test(q) ? PHOTON_STREET_FIXTURE : PHOTON_FIXTURE;
     return {
       ok: true,
       status: 200,
-      json: async () => PHOTON_FIXTURE,
+      json: async () => body,
     };
   }
   return liveFetch(input, init);
@@ -680,7 +712,8 @@ await step('choosing a delivery area narrows the suggestions to that area', asyn
   s7.setInput(input, '12 Oxford');
 
   /* The geocoder is asked again, now with the chosen area in hand. */
-  await s7.waitFor(() => s7.photonCalls.length > 1, 'a second geocoder request', 6000);
+  const before = s7.photonCalls.length;
+  await s7.waitFor(() => s7.photonCalls.length > before, 'a second geocoder request', 6000);
   await s7.waitFor(() => {
     const list = s7.doc.querySelector('[role="listbox"]');
     return list && /Oxford/.test(list.textContent ?? '');
@@ -690,6 +723,56 @@ await step('choosing a delivery area narrows the suggestions to that area', asyn
   if (shown.some((text) => /Illovo, Sandton/.test(text))) throw new Error('a Sandton address is still offered while Rosebank is selected');
   if (!shown.some((text) => /Rosebank/.test(text))) throw new Error('the Rosebank address is missing from a Rosebank search');
   return `${shown.length} Rosebank result(s) only`;
+});
+
+await step('typing a house number and a half-typed street still finds the address', async () => {
+  /*
+   * The owner's report, exactly: "paste 173 Oxford Rd and it detects it, type
+   * 173 oxf and nothing comes up". Photon answers a house number plus a partial
+   * street with nothing, and answers the partial street alone with the street
+   * object — which carries no suburb tag. The field must survive both: retry
+   * without the number, place the street by its coordinates, and put the number
+   * back on the line.
+   */
+  const areaSelect = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
+  areaSelect.value = '';
+  areaSelect.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
+
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
+  s7.setInput(input, '');
+  await sleep(50);
+
+  const before = s7.photonCalls.length;
+  s7.setInput(input, '173 oxf');
+
+  /* Two requests: "173 oxf" (empty), then "oxf" (the street). */
+  await s7.waitFor(() => s7.photonCalls.length >= before + 2, 'the retry without the house number', 8000);
+  const queries = s7.photonCalls.slice(before).map((u) => new URL(u).searchParams.get('q'));
+  if (queries[0] !== '173 oxf' || queries[1] !== 'oxf') throw new Error(`unexpected queries: ${queries.join(' | ')}`);
+
+  await s7.waitFor(() => {
+    const list = s7.doc.querySelector('[role="listbox"]');
+    return list && /Oxford/.test(list.textContent ?? '');
+  }, 'a suggestion for the half-typed street', 8000);
+
+  const options = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
+  const rosebank = options.find((text) => /Oxford Road/.test(text) && /Rosebank/.test(text));
+  if (!rosebank) throw new Error(`no Rosebank suggestion for "173 oxf": ${JSON.stringify(options)}`);
+  /* The number the customer typed must survive the fallback. */
+  if (!/^\s*173 Oxford Road/.test(rosebank)) throw new Error(`the house number was dropped: ${rosebank}`);
+  if (/Pretoria/.test(options.join(' '))) throw new Error('an address outside the delivery areas was offered');
+
+  const button = [...s7.doc.querySelectorAll('[role="option"]')]
+    .find((o) => /173 Oxford Road/.test(o.textContent ?? ''))
+    ?.querySelector('button');
+  button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  await sleep(200);
+
+  if (input.value !== '173 Oxford Road, Rosebank, Johannesburg') throw new Error(`picking filled "${input.value}"`);
+  const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
+  if (select.value !== 'Rosebank') throw new Error(`the delivery area was filled with "${select.value}"`);
+  return 'half-typed street found, house number kept, area filled';
 });
 
 await step('picking a suggestion fills the address and the delivery area', async () => {
