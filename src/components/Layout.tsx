@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { zar } from '../lib/format';
 import { useOverlay } from '../lib/useOverlay';
 import { HeritageBand } from './ui';
+import { basketHref } from '../lib/whatsapp';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -27,10 +28,28 @@ export default function Layout() {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
 
   useEffect(() => setMenuOpen(false), [pathname, hash]);
 
-  /* Cmd/Ctrl-K opens search; Esc closes everything. */
+  /*
+   * The phone navigation is a panel, not a modal: it pushes the page down and
+   * leaves the rest of the site visible. That makes "tap anywhere else to close"
+   * the behaviour people expect, and without it the panel stayed open behind
+   * them — the owner's complaint. A pointerdown outside the header closes it,
+   * which covers the page under the panel as well as the overlay-less backdrop.
+   */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && headerRef.current && !headerRef.current.contains(target)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [menuOpen]);
+
+  /* Cmd/Ctrl-K opens search; Esc closes everything, the phone menu included. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -40,6 +59,7 @@ export default function Layout() {
       if (e.key === 'Escape') {
         setSearchOpen(false);
         setOpen(false);
+        setMenuOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -56,9 +76,9 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-bone">
       {/* Main navigation */}
-      <header className="sticky top-0 z-50 border-b border-bone/15 bg-ink text-bone backdrop-blur">
+      <header ref={headerRef} className="sticky top-0 z-50 border-b border-bone/15 bg-ink text-bone backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-4 sm:px-4 sm:py-3">
-          <Link to="/" className="group flex min-h-11 min-w-11 items-center gap-2 sm:gap-3" aria-label="Heritage Bites home">
+          <Link to="/" onClick={() => setMenuOpen(false)} className="group flex min-h-11 min-w-11 items-center gap-2 sm:gap-3" aria-label="Heritage Bites home">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-bone text-ink transition-transform group-hover:rotate-3">
               <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                 <path d="M4 12h16M4 12c0 4.4 3.6 8 8 8s8-3.6 8-8" />
@@ -96,7 +116,10 @@ export default function Layout() {
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 xl:ml-2">
             <button
               type="button"
-              onClick={() => setSearchOpen(true)}
+              onClick={() => {
+                setSearchOpen(true);
+                setMenuOpen(false);
+              }}
               className="grid h-11 w-11 shrink-0 place-items-center rounded-full border-2 border-bone/25 text-[13px] text-bone/75 transition-colors hover:border-ochre hover:text-bone lg:flex lg:w-auto lg:gap-2 lg:px-3 lg:py-2"
               aria-label="Search the menu"
             >
@@ -110,7 +133,10 @@ export default function Layout() {
 
             <button
               type="button"
-              onClick={() => setOpen(true)}
+              onClick={() => {
+                setOpen(true);
+                setMenuOpen(false);
+              }}
               className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-bone/25 bg-transparent text-[13px] font-semibold text-bone transition-colors hover:border-ochre hover:text-ochre sm:flex sm:w-auto sm:gap-2 sm:px-4 sm:py-2.5"
               /*
                 The visible "Basket" label is hidden below sm, so without this
@@ -155,12 +181,15 @@ export default function Layout() {
                   key={n.label}
                   to={n.to}
                   end={n.end}
+                  /* Tapping the route you are already on does not change the URL,
+                     so the location effect never fires — close it here instead. */
+                  onClick={() => setMenuOpen(false)}
                   className={({ isActive }) => `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-ochre text-ink' : 'text-bone/75 hover:bg-bone/10'}`}
                 >
                   {n.label}
                 </NavLink>
               ))}
-              <Link to="/passport" className="rounded-xl px-3 py-2.5 text-sm font-semibold text-bone/75 hover:bg-bone/10">
+              <Link to="/passport" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2.5 text-sm font-semibold text-bone/75 hover:bg-bone/10">
                 Loyalty card
               </Link>
             </div>
@@ -462,6 +491,21 @@ function CartDrawerPanel() {
               >
                 Checkout
               </Link>
+              {/*
+                The basket as a WhatsApp message, one tap from the drawer it is
+                already visible in. Useful on the preview build, where the
+                checkout cannot take an order, and for a customer who would
+                rather chat than fill in the form.
+              */}
+              <a
+                href={basketHref(settings?.whatsapp, lines, { fulfilment })}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setOpen(false)}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+              >
+                Send this basket on WhatsApp
+              </a>
             </footer>
           </>
         )}

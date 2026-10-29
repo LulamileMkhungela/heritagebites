@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -145,15 +145,25 @@ export const categories = [
 
 /*
  * The categories the site carried before the owner signed off the two-tier
- * menu. They are back as a *look*, not as stock: nothing here can be ordered,
- * nothing here has a price, and nothing here opens a dish page.
+ * menu. Customers asked to see them again, and asked for the cards to read like
+ * the rest of the menu: a photo, the dish name, a price and one line about it.
+ * The one thing that separates them from a sellable plate is the "Coming soon"
+ * tag on the photo and the absence of a basket button — the owner confirmed
+ * these are not on sale yet.
  *
  * Rules for this list:
- *   - No `price` key, deliberately. Add one and the archive starts to read like
- *     a menu.
+ *   - No dish that is already sellable belongs here. Anything a customer can
+ *     order today — as a plate or as a component of one — was removed, because
+ *     a "coming soon" tag on food that is already on the menu only confuses
+ *     people (owner, October 2026). That is why Mogodu & Samp, Tshotlo, Beef
+ *     Short Ribs and Flame-Grilled Wings are gone, and why the old Modern
+ *     Favourites category went with them: every dish in it is already a
+ *     Contemporary plate.
+ *   - Prices are the kitchen's indication of what the dish will cost when it
+ *     returns, supplied by the owner ("put any amount"). They are a guide, not a
+ *     quote, and the card says so.
  *   - Only a photo that is actually of that dish. Anything we would have had to
- *     pad with somebody else's picture is commented out below instead of shown,
- *     and a dish with no honest photo can come back when the owner sends one.
+ *     pad with somebody else's picture stays commented out below instead.
  *   - Nothing here is added to `menu`, so the API can never sell it, price it,
  *     search it or put it in a basket.
  */
@@ -162,31 +172,28 @@ export const comingSoon = [
     id: 'heritage-pots',
     name: 'Heritage Pots',
     tagline: 'Slow-cooked the way grandmothers taught us',
-    blurb: 'Tripe, pounded beef, samp and grains — the pots that carry memory.',
+    blurb: 'Samp, beans and grains — the pots that carry memory.',
     accent: 'chili',
     items: [
-      { id: 'archive-mogodu-samp', name: 'Mogodu & Samp', image: img('mogodu'), status: 'coming-soon' },
-      { id: 'archive-tshotlo', name: 'Tshotlo', image: img('tshotlo'), status: 'coming-soon' },
-      { id: 'archive-isistambu', name: 'Isistambu — Samp & Beans', image: img('samp-beans'), status: 'coming-soon' },
-      { id: 'archive-dombolo', name: 'Dombolo', image: img('dumplings'), status: 'coming-soon' },
-      { id: 'archive-motogo', name: 'Motogo wa Mabele', image: img('mabele'), status: 'coming-soon' },
+      {
+        id: 'archive-isistambu', name: 'Isistambu — Samp & Beans', price: 100, image: img('samp-beans'),
+        description: 'Samp and sugar beans slow-cooked until creamy, finished with a little butter.',
+        status: 'coming-soon',
+      },
+      {
+        id: 'archive-dombolo', name: 'Dombolo', price: 100, image: img('dumplings'),
+        description: 'Steamed bread, soft in the middle, made to soak up the gravy on the plate.',
+        status: 'coming-soon',
+      },
+      {
+        id: 'archive-motogo', name: 'Motogo wa Mabele', price: 100, image: img('mabele'),
+        description: 'Sorghum porridge cooked the old way and served warm, the way it is made at home.',
+        status: 'coming-soon',
+      },
       // Tlhakwana only ever had a short-rib photo to sit on, and a photo of the
       // wrong dish is worse than no card. It is already on the Traditional menu
-      // as a plate component, so nothing is lost by leaving it out here.
+      // as a protein, so nothing is lost by leaving it out here.
       // { id: 'archive-tlhakwana', name: 'Tlhakwana', image: img('short-ribs'), status: 'coming-soon' },
-    ],
-  },
-  {
-    id: 'modern-favourites',
-    name: 'Modern Favourites',
-    tagline: 'Contemporary plates, heritage seasoning',
-    blurb: 'Bold, generous mains for when you want something hearty.',
-    accent: 'clay',
-    items: [
-      { id: 'archive-short-ribs', name: 'Beef Short Ribs', image: img('short-ribs'), status: 'coming-soon' },
-      { id: 'archive-wings', name: 'Flame-Grilled Wings', image: img('wings'), status: 'coming-soon' },
-      // Chicken hardbody's only photo is a wings picture.
-      // { id: 'archive-hardbody', name: 'Chicken Hardbody Quarter', image: img('wings'), status: 'coming-soon' },
     ],
   },
   {
@@ -196,9 +203,21 @@ export const comingSoon = [
     blurb: 'Kota, russians, chips and magwinya — South African street classics.',
     accent: 'ochre',
     items: [
-      { id: 'archive-kota', name: 'Sphatlo (Kota)', image: img('kota'), status: 'coming-soon' },
-      { id: 'archive-russian-chips', name: 'Russian & Chips', image: img('russian-chips'), status: 'coming-soon' },
-      { id: 'archive-magwinya-polony', name: 'Magwinya & Polony', image: img('magwinya'), status: 'coming-soon' },
+      {
+        id: 'archive-kota', name: 'Sphatlo (Kota)', price: 70, image: img('kota'),
+        description: 'Quarter loaf loaded with chips, polony, atchaar and a slice of cheese.',
+        status: 'coming-soon',
+      },
+      {
+        id: 'archive-russian-chips', name: 'Russian & Chips', price: 60, image: img('russian-chips'),
+        description: 'Grilled russian sausage with a portion of slap chips and a dash of atchaar.',
+        status: 'coming-soon',
+      },
+      {
+        id: 'archive-magwinya-polony', name: 'Magwinya & Polony', price: 40, image: img('magwinya'),
+        description: 'Fat cakes split and filled with polony, atchaar and a little chilli.',
+        status: 'coming-soon',
+      },
       // Slap chips would be shown with a russian-and-chips photo.
       // { id: 'archive-slap-chips', name: 'Slap Chips', image: img('russian-chips'), status: 'coming-soon' },
     ],
@@ -210,8 +229,16 @@ export const comingSoon = [
     blurb: 'Warm porridge and fresh fat cakes, made the way they are made at home.',
     accent: 'morogo',
     items: [
-      { id: 'archive-magwinya', name: 'Fresh Magwinya', image: img('magwinya'), status: 'coming-soon' },
-      { id: 'archive-motogo-magwinya', name: 'Motogo & Magwinya', image: img('mabele'), status: 'coming-soon' },
+      {
+        id: 'archive-magwinya', name: 'Fresh Magwinya', price: 25, image: img('magwinya'),
+        description: 'Golden fat cakes, fried in the morning and best eaten warm.',
+        status: 'coming-soon',
+      },
+      {
+        id: 'archive-motogo-magwinya', name: 'Motogo & Magwinya', price: 45, image: img('mabele'),
+        description: 'Warm sorghum porridge with two fat cakes on the side.',
+        status: 'coming-soon',
+      },
       // The breakfast plate had no photograph of its own.
       // { id: 'archive-breakfast-plate', name: 'Heritage Breakfast Plate', image: img('magwinya'), status: 'coming-soon' },
     ],
@@ -220,12 +247,24 @@ export const comingSoon = [
     id: 'sides-relishes',
     name: 'Sides & Relishes',
     tagline: 'The things that make the plate',
-    blurb: 'Chakalaka, atchaar, cabbage and pap — the supporting cast that steals the show.',
+    blurb: 'Chakalaka, atchaar and stywe pap — the supporting cast that steals the show.',
     accent: 'sky',
     items: [
-      { id: 'archive-chakalaka', name: 'Chakalaka', image: img('chakalaka'), status: 'coming-soon' },
-      { id: 'archive-atchaar', name: 'Atchaar', image: img('atchaar'), status: 'coming-soon' },
-      { id: 'archive-stywe-pap', name: 'Stywe Pap', image: img('pap-cabbage'), status: 'coming-soon' },
+      {
+        id: 'archive-chakalaka', name: 'Chakalaka', price: 35, image: img('chakalaka'),
+        description: 'Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.',
+        status: 'coming-soon',
+      },
+      {
+        id: 'archive-atchaar', name: 'Atchaar', price: 30, image: img('atchaar'),
+        description: 'Tangy mango atchaar, made in the kitchen and spooned over the plate.',
+        status: 'coming-soon',
+      },
+      {
+        id: 'archive-stywe-pap', name: 'Stywe Pap', price: 30, image: img('pap-cabbage'),
+        description: 'Stiff maize pap, the traditional partner to a braai or a pot of mogodu.',
+        status: 'coming-soon',
+      },
       // Braised cabbage was photographed as chakalaka, so it waits for a photo.
       // { id: 'archive-braised-cabbage', name: 'Braised Cabbage', image: img('chakalaka'), status: 'coming-soon' },
     ],

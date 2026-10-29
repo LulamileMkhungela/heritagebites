@@ -6,6 +6,7 @@ import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { detectCardBrand, formatCardNumber, formatExpiry, luhnValid, normalisePhone, zar } from '../lib/format';
 import { Button, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { basketHref, waChatHref } from '../lib/whatsapp';
 
 type PayMethod = 'card' | 'cash-on-collection';
 
@@ -573,13 +574,19 @@ function LiveCheckout() {
             <div className="mt-4 rounded-3xl border-2 border-ink/10 bg-ink p-5 text-bone">
               <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Prefer not to pay online?</p>
               <p className="mt-2 text-sm text-bone/70">Send the same basket to us on WhatsApp and pay cash when you collect.</p>
+              {/*
+                The message is built from the basket itself — dishes, choices,
+                quantities, line totals and the delivery or collection choice —
+                so WhatsApp opens with the whole order already typed and the
+                customer only has to press send.
+              */}
               <a
-                href={`https://wa.me/${settings?.whatsapp ?? '27670137587'}?text=${encodeURIComponent('Hi Heritage Bites! I would like to order:\n' + lines.map((l) => `• ${l.qty} × ${l.name}`).join('\n'))}`}
+                href={basketHref(settings?.whatsapp, lines, { fulfilment, customer })}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full bg-ochre px-4 py-2 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"
               >
-                Order on WhatsApp
+                Send this basket on WhatsApp
               </a>
             </div>
           </Reveal>
@@ -602,7 +609,11 @@ function PreviewCheckout() {
   const catalog = useCatalog((s) => s.data);
   const lines = useCart((s) => s.lines);
   const fulfilment = useCart((s) => s.fulfilment);
-  const wa = `https://wa.me/${catalog?.settings?.whatsapp ?? '27670137587'}`;
+  /* The whole basket, not just the shop's number: this button is the only way
+     to order from the preview, so it has to arrive pre-filled. */
+  const wa = lines.length
+    ? basketHref(catalog?.settings?.whatsapp, lines, { fulfilment })
+    : waChatHref(catalog?.settings?.whatsapp);
 
   return (
     <section className="mx-auto max-w-3xl px-4 py-14">
@@ -646,7 +657,9 @@ function PreviewCheckout() {
         </p>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          <LinkButton href={wa} variant="primary">Send the basket on WhatsApp</LinkButton>
+          <LinkButton href={wa} variant="primary">
+            {lines.length ? 'Send the basket on WhatsApp' : 'Chat to us on WhatsApp'}
+          </LinkButton>
           <LinkButton to="/menu" variant="outline">Back to the menu</LinkButton>
         </div>
       </div>

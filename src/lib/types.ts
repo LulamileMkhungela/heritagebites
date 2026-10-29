@@ -52,12 +52,17 @@ export interface Category {
 /* ------------------------------ Archive ------------------------------- */
 
 /**
- * A dish from the kitchen archive. Card only: there is no price, no options and
- * no order path, which is exactly what the type says.
+ * A dish from the kitchen archive. It reads like a normal menu card — photo,
+ * name, price and a description — but there is no option list, no add-to-basket
+ * control and nothing in `menu`, so the only way to buy one is for the kitchen
+ * to put it back on sale.
  */
 export interface ComingSoonItem {
   id: string;
   name: string;
+  /** Indicative price for when the dish returns; a guide, not a quote. */
+  price: number;
+  description: string;
   image: string;
   status: 'coming-soon';
 }

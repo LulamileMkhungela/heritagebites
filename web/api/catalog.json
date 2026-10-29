@@ -20,58 +20,31 @@
       "id": "heritage-pots",
       "name": "Heritage Pots",
       "tagline": "Slow-cooked the way grandmothers taught us",
-      "blurb": "Tripe, pounded beef, samp and grains — the pots that carry memory.",
+      "blurb": "Samp, beans and grains — the pots that carry memory.",
       "accent": "chili",
       "items": [
         {
-          "id": "archive-mogodu-samp",
-          "name": "Mogodu & Samp",
-          "image": "/img/mogodu.jpg",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-tshotlo",
-          "name": "Tshotlo",
-          "image": "/img/tshotlo.jpg",
-          "status": "coming-soon"
-        },
-        {
           "id": "archive-isistambu",
           "name": "Isistambu — Samp & Beans",
+          "price": 100,
           "image": "/img/samp-beans.jpg",
+          "description": "Samp and sugar beans slow-cooked until creamy, finished with a little butter.",
           "status": "coming-soon"
         },
         {
           "id": "archive-dombolo",
           "name": "Dombolo",
+          "price": 100,
           "image": "/img/dumplings.jpg",
+          "description": "Steamed bread, soft in the middle, made to soak up the gravy on the plate.",
           "status": "coming-soon"
         },
         {
           "id": "archive-motogo",
           "name": "Motogo wa Mabele",
+          "price": 100,
           "image": "/img/mabele.jpg",
-          "status": "coming-soon"
-        }
-      ]
-    },
-    {
-      "id": "modern-favourites",
-      "name": "Modern Favourites",
-      "tagline": "Contemporary plates, heritage seasoning",
-      "blurb": "Bold, generous mains for when you want something hearty.",
-      "accent": "clay",
-      "items": [
-        {
-          "id": "archive-short-ribs",
-          "name": "Beef Short Ribs",
-          "image": "/img/short-ribs.jpg",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-wings",
-          "name": "Flame-Grilled Wings",
-          "image": "/img/wings.jpg",
+          "description": "Sorghum porridge cooked the old way and served warm, the way it is made at home.",
           "status": "coming-soon"
         }
       ]
@@ -86,19 +59,25 @@
         {
           "id": "archive-kota",
           "name": "Sphatlo (Kota)",
+          "price": 70,
           "image": "/img/kota.jpg",
+          "description": "Quarter loaf loaded with chips, polony, atchaar and a slice of cheese.",
           "status": "coming-soon"
         },
         {
           "id": "archive-russian-chips",
           "name": "Russian & Chips",
+          "price": 60,
           "image": "/img/russian-chips.jpg",
+          "description": "Grilled russian sausage with a portion of slap chips and a dash of atchaar.",
           "status": "coming-soon"
         },
         {
           "id": "archive-magwinya-polony",
           "name": "Magwinya & Polony",
+          "price": 40,
           "image": "/img/magwinya.jpg",
+          "description": "Fat cakes split and filled with polony, atchaar and a little chilli.",
           "status": "coming-soon"
         }
       ]
@@ -113,13 +92,17 @@
         {
           "id": "archive-magwinya",
           "name": "Fresh Magwinya",
+          "price": 25,
           "image": "/img/magwinya.jpg",
+          "description": "Golden fat cakes, fried in the morning and best eaten warm.",
           "status": "coming-soon"
         },
         {
           "id": "archive-motogo-magwinya",
           "name": "Motogo & Magwinya",
+          "price": 45,
           "image": "/img/mabele.jpg",
+          "description": "Warm sorghum porridge with two fat cakes on the side.",
           "status": "coming-soon"
         }
       ]
@@ -128,25 +111,31 @@
       "id": "sides-relishes",
       "name": "Sides & Relishes",
       "tagline": "The things that make the plate",
-      "blurb": "Chakalaka, atchaar, cabbage and pap — the supporting cast that steals the show.",
+      "blurb": "Chakalaka, atchaar and stywe pap — the supporting cast that steals the show.",
       "accent": "sky",
       "items": [
         {
           "id": "archive-chakalaka",
           "name": "Chakalaka",
+          "price": 35,
           "image": "/img/chakalaka.jpg",
+          "description": "Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.",
           "status": "coming-soon"
         },
         {
           "id": "archive-atchaar",
           "name": "Atchaar",
+          "price": 30,
           "image": "/img/atchaar.jpg",
+          "description": "Tangy mango atchaar, made in the kitchen and spooned over the plate.",
           "status": "coming-soon"
         },
         {
           "id": "archive-stywe-pap",
           "name": "Stywe Pap",
+          "price": 30,
           "image": "/img/pap-cabbage.jpg",
+          "description": "Stiff maize pap, the traditional partner to a braai or a pot of mogodu.",
           "status": "coming-soon"
         }
       ]
@@ -1259,16 +1248,16 @@
   },
   "service": {
     "open": false,
-    "isServiceDay": false,
+    "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Wednesday",
-    "timeLabel": "17:15",
+    "dayLabel": "Thursday",
+    "timeLabel": "08:39",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Wednesday: closed",
+    "todayLabel": "Thursday 12:00–13:30",
     "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Wednesday is a rest day",
-    "message": "The pots are resting today — and honestly, so are we. We cook on Thursdays and Fridays, 12:00–13:30, and we are working towards being open every day. Your order will go in first for Thursday 12:00–13:30.",
-    "shortMessage": "Rest day — we cook Thursdays and Fridays, 12:00–13:30. Your order goes in first on Thursday.",
+    "headline": "Not cooking yet",
+    "message": "The pots go on at 12:00. Place your order now and it goes in first — today's window is 12:00–13:30.",
+    "shortMessage": "Pots go on at 12:00 today — order now and you are first in the queue.",
     "serviceDays": [
       "Thursday",
       "Friday"
@@ -1285,5 +1274,5 @@
   "contact": {
     "inboxConfigured": false
   },
-  "today": 3
+  "today": 4
 }

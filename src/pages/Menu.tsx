@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 import { zar } from '../lib/format';
-import { Badge, Button, Reveal, SectionLabel, Spinner } from '../components/ui';
+import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateMenu } from '../lib/types';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
@@ -21,6 +21,15 @@ export default function MenuPage() {
   const [filter, setFilter] = useState<string>('all');
   const [q, setQ] = useState('');
   const [builder, setBuilder] = useState<PlateMenu | null>(null);
+  /*
+   * Category sections fold away. They all start open — nothing is hidden from a
+   * customer who has just arrived — but on a phone the full menu is a long
+   * scroll, so tapping a heading tucks that category up and brings the next one
+   * into view. A chip in the sticky nav always expands the category it jumps to,
+   * and a search or filter resets everything to open so no result stays hidden.
+   */
+  const [closed, setClosed] = useState<Record<string, boolean>>({});
+  const toggleSection = (id: string) => setClosed((prev) => ({ ...prev, [id]: !prev[id] }));
 
   /*
    * Deep links from search (/menu?item=mogodu-plate) open that dish directly,
@@ -120,6 +129,11 @@ export default function MenuPage() {
     }
   }, [sections, activeCategory]);
 
+  /* A search or a filter must never land inside a folded section. */
+  useEffect(() => {
+    setClosed({});
+  }, [q, filter]);
+
   /* Keep the category chip in step with the section passing through the viewport. */
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
@@ -142,9 +156,14 @@ export default function MenuPage() {
 
   if (loading || !catalog) return <Spinner label="Opening the menu…" />;
 
+  /* Expanding a folded section changes the page height, so the scroll waits a
+     frame for that layout to settle before measuring where the section is. */
   const scrollToCategory = (id: string) => {
     setActiveCategory(id);
-    document.getElementById(`menu-category-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    setClosed((prev) => (prev[id] ? { ...prev, [id]: false } : prev));
+    window.setTimeout(() => {
+      document.getElementById(`menu-category-${id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }, 0);
   };
 
   return (
@@ -233,7 +252,13 @@ export default function MenuPage() {
             <p className="mt-2 text-sm text-ink/55">Try a different word or clear the filters.</p>
             <Button className="mt-5" variant="outline" onClick={() => { setFilter('all'); setQ(''); }}>Show all meals</Button>
           </div>
-        ) : sections.map((section) => (
+        ) : sections.map((section) => {
+          const open = !closed[section.id];
+          const count = section.items.length;
+          const countLabel = section.archived
+            ? count === 1 ? 'dish' : 'dishes'
+            : count === 1 ? 'plate' : 'plates';
+          return (
           <section
             key={section.id}
             id={`menu-category-${section.id}`}
@@ -242,78 +267,97 @@ export default function MenuPage() {
             className="scroll-mt-40"
             aria-labelledby={`menu-heading-${section.id}`}
           >
-            <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <SectionLabel>{section.tagline}</SectionLabel>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 id={`menu-heading-${section.id}`} className="font-display text-3xl font-semibold md:text-4xl">
-                    {section.name}
-                  </h2>
-                  {section.archived && <Badge tone="ink">Coming soon · view only</Badge>}
-                </div>
-                <p className="mt-2 max-w-2xl text-sm text-ink/60">{section.blurb}</p>
-                {section.archived && (
-                  <p className="mt-1 text-[12px] text-ink/45">
-                    Not on the menu yet — nothing here can be ordered, opened or added to a basket.
-                  </p>
-                )}
-              </div>
-              <span className="font-mono text-xs uppercase tracking-wider text-ink/45">
-                {section.items.length} {section.archived ? (section.items.length === 1 ? 'dish' : 'dishes') : section.items.length === 1 ? 'plate' : 'plates'}
-              </span>
+            {/*
+              The plate count sits on the same line as the category name — on a
+              phone it used to wrap onto its own line at the right, which read
+              like a separate statistic. The whole row is the fold control, so
+              tapping the category name tucks it away.
+            */}
+            <div className="mb-5">
+              <SectionLabel>{section.tagline}</SectionLabel>
+              <h2 id={`menu-heading-${section.id}`} className="font-display text-2xl font-semibold sm:text-3xl md:text-4xl">
+                {/*
+                  Name and count sit in one inline flow, so the count belongs to
+                  the category's line and can only wrap together with the words
+                  around it. As two flex items it was pushed to the far right and
+                  on a phone dropped onto a line of its own, away from the name.
+                */}
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.id)}
+                  aria-expanded={open}
+                  aria-controls={`menu-panel-${section.id}`}
+                  className="relative flex min-h-11 w-full items-center pr-9 text-left"
+                >
+                  <span className="min-w-0">
+                    {section.name}{' '}
+                    <span className="whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-wider text-ink/45 tabular-nums">
+                      {count} {countLabel}
+                    </span>
+                  </span>
+                  <svg
+                    aria-hidden="true"
+                    focusable="false"
+                    viewBox="0 0 24 24"
+                    className={`absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 text-ink/40 transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-ink/60">{section.blurb}</p>
+              {section.archived && (
+                <p className="mt-1 text-[12px] text-ink/50">
+                  Guide prices — these are not on sale yet, so nothing here can be added to a basket.
+                </p>
+              )}
             </div>
 
-            {section.archived ? (
-              /* The inert grid is the guard rail: no links, no prices, no
-                 handlers. The explanation and the quest link below it sit
-                 outside this wrapper on purpose. */
-              <ul data-coming-soon className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {section.items.map((item) => (
-                  <li key={item.id} className="overflow-hidden rounded-2xl border-2 border-ink/10 bg-white">
-                    <div className="relative">
-                      <img
-                        /* Catalogue images already carry the site base (see
-                           store/catalog.ts); prefixing again doubles it on Pages. */
-                        src={item.image}
-                        alt=""
-                        loading="lazy"
-                        className="aspect-[4/3] w-full object-cover opacity-85 grayscale-[0.15]"
-                      />
-                      <span className="absolute left-2 top-2 rounded-full bg-ink/85 px-2 py-0.5 font-mono text-xs font-bold uppercase tracking-[0.12em] text-bone">
-                        Coming soon
-                      </span>
-                    </div>
-                    <p className="px-3 py-2.5 text-[13px] font-semibold leading-snug text-ink/85">{item.name}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {section.items.map((item, index) => (
-                  <Reveal key={item.id} delay={Math.min(index, 5) * 50}>
-                    <MealCard item={item} onOpen={() => setModal(item)} />
-                  </Reveal>
-                ))}
-              </div>
-            )}
+            <div id={`menu-panel-${section.id}`} hidden={!open}>
+              {section.archived ? (
+                /* The archive cards read like any other dish card but hold no
+                   controls at all: no link, no button, no basket. The "Coming
+                   soon" tag on the photo is the only thing that marks them, and
+                   the quest link below sits outside this wrapper. */
+                <ul data-coming-soon className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {section.items.map((item) => (
+                    <li key={item.id}>
+                      <UpcomingCard item={item} />
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {section.items.map((item, index) => (
+                    <Reveal key={item.id} delay={Math.min(index, 5) * 50}>
+                      <MealCard item={item} onOpen={() => setModal(item)} />
+                    </Reveal>
+                  ))}
+                </div>
+              )}
 
-            {/*
-              One route forward that is not a dish: the customer quest, shown
-              once after the last archive section. It sits outside the inert
-              `data-coming-soon` card grid because that must hold no links at
-              all. The paragraph explaining where the archive came from has been
-              removed — the "Coming soon · view only" heading and the tags on the
-              photos already say everything a customer needs.
-            */}
-            {section.id === lastArchived?.id && (
-              <p className="mt-6 text-[13px] text-ink/70">
-                Want one of these back on the menu?{' '}
-                <Link to="/quest" className="font-semibold text-ochre-deep underline">Send a customer quest</Link>{' '}
-                and we will come back to you on whether and when we can cook it.
-              </p>
-            )}
+              {/*
+                One route forward that is not a dish: the customer quest, shown
+                once after the last archive section. It sits outside the
+                `data-coming-soon` card grid because that must hold no links at
+                all.
+              */}
+              {section.id === lastArchived?.id && (
+                <p className="mt-6 text-[13px] text-ink/70">
+                  Want one of these back on the menu?{' '}
+                  <Link to="/quest" className="font-semibold text-ochre-deep underline">Send a customer quest</Link>{' '}
+                  and we will come back to you on whether and when we can cook it.
+                </p>
+              )}
+            </div>
           </section>
-        ))}
+          );
+        })}
       </main>
 
       {modal && <ItemModal item={modal} onClose={closeDish} />}
@@ -322,6 +366,13 @@ export default function MenuPage() {
   );
 }
 
+/**
+ * A category chip. The dashed outline is the only thing that separates an
+ * archive category from a sellable one here — the words "coming soon" belong to
+ * the dish photo, and nowhere else (owner's request: the tag on the card is
+ * enough, a "soon" in the nav and a badge beside the heading made the page
+ * shout).
+ */
 function CatChip({ active, onClick, label, count, soon }: { active: boolean; onClick: () => void; label: string; count: number; soon?: boolean }) {
   return (
     <button
@@ -331,13 +382,48 @@ function CatChip({ active, onClick, label, count, soon }: { active: boolean; onC
       className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${active ? 'bg-ink text-bone' : 'bg-white text-ink/70 hover:bg-white'} ${soon && !active ? 'border border-dashed border-ink/25' : ''}`}
     >
       {label}
-      {soon && (
-        <span className={`font-mono text-xs font-bold uppercase tracking-[0.1em] ${active ? 'text-ochre' : 'text-ochre-deep/70'}`}>
-          soon
-        </span>
-      )}
-      <span className={`font-mono text-xs ${active ? 'text-ochre' : 'text-ink/40'}`}>{count}</span>
+      <span className={`font-mono text-xs tabular-nums ${active ? 'text-ochre' : 'text-ink/40'}`}>{count}</span>
     </button>
+  );
+}
+
+/* -------------------------- Coming-soon card --------------------------- */
+
+/**
+ * A card from the kitchen archive. It carries the same information a sellable
+ * plate does — photo, name, price and a description — because the owner asked
+ * for the archive to read like the rest of the menu. What it deliberately does
+ * not have is any control: the photo is not a link, there is no dish sheet and
+ * no basket button, so the only way to order one is for the kitchen to put it
+ * back on sale.
+ */
+function UpcomingCard({ item }: { item: ComingSoonItem }) {
+  return (
+    <article className="flex h-full flex-col overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-ink/5">
+        <img
+          /* Catalogue images already carry the site base (see store/catalog.ts);
+             prefixing again doubles it on Pages. */
+          src={item.image}
+          alt={item.name}
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-transparent to-transparent" />
+        <span className="absolute left-3 top-3 rounded-full bg-ink/85 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-bone">
+          Coming soon
+        </span>
+        <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">
+          {zar(item.price)}{' '}
+          <span className="font-sans text-xs font-normal uppercase tracking-wider text-bone/70">guide price</span>
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
+        <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>
+        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-ink/40">Not on sale yet</p>
+      </div>
+    </article>
   );
 }
 

@@ -154,23 +154,41 @@ describe('catalogue + search', () => {
     assert.equal(c.contact.inboxConfigured, false, 'the endpoint is disabled in tests');
   });
 
-  test('the kitchen archive is a look, never stock: no prices and no order path', async () => {
+  test('the kitchen archive is a look, never stock: priced cards with no order path', async () => {
     const c = await fetch(`${base}/api/catalog`).then(json);
 
     assert.ok(Array.isArray(c.comingSoon), 'the archive categories are published for the view-only section');
-    assert.ok(c.comingSoon.length >= 5, 'the categories the site carried before the two-tier menu are back');
-    assert.deepEqual(
-      c.comingSoon.map((cat) => cat.id),
-      ['heritage-pots', 'modern-favourites', 'kasi-fast-food', 'morning-heritage', 'sides-relishes'],
-    );
+    assert.ok(c.comingSoon.length >= 4, 'the categories the site carried before the two-tier menu are back');
+    /*
+     * Modern Favourites is gone on purpose: every dish in it is now a
+     * Contemporary plate, and "coming soon" on food that is already on sale was
+     * the owner's complaint.
+     */
+    assert.deepEqual(c.comingSoon.map((cat) => cat.id), [
+      'heritage-pots',
+      'kasi-fast-food',
+      'morning-heritage',
+      'sides-relishes',
+    ]);
 
     const archived = c.comingSoon.flatMap((cat) => cat.items);
     assert.ok(archived.length >= 10);
 
+    /* Nothing that can already be ordered belongs in the archive. */
+    const sellableNames = c.menu.map((m) => m.name.toLowerCase());
+    for (const item of archived) {
+      const clashes = sellableNames.filter((name) => name.startsWith(item.name.toLowerCase().split(' — ')[0]));
+      assert.deepEqual(clashes, [], `${item.id} duplicates a dish that is already on sale`);
+    }
+
     for (const cat of c.comingSoon) {
       assert.ok(cat.name && cat.tagline && cat.blurb, `archive category is incomplete: ${cat.id}`);
       for (const item of cat.items) {
-        assert.equal('price' in item, false, `${item.id} must carry no price — the archive is not for sale`);
+        /* The owner asked for archive cards to read like menu cards: name,
+           guide price and a line of description. */
+        assert.equal(typeof item.price, 'number', `${item.id} needs a guide price to show`);
+        assert.ok(item.price > 0, `${item.id} has a nonsense price`);
+        assert.ok(item.description && item.description.length > 20, `${item.id} needs a description`);
         assert.equal(item.status, 'coming-soon');
         assert.ok(item.image.startsWith('/img/'), `${item.id} needs a photo to show`);
       }
