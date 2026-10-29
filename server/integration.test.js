@@ -395,7 +395,7 @@ describe('cross-origin API access', () => {
       const posted = await fetch(`${url}/api/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: origin },
-        body: JSON.stringify({ name: 'Cors Test', message: 'From the static site.' }),
+        body: JSON.stringify({ name: 'Cors Test', phone: '0821234567', message: 'From the static site.' }),
       });
       assert.equal(posted.status, 201);
       assert.equal(posted.headers.get('access-control-allow-origin'), origin, 'a listed origin must stay granted on the post');
@@ -812,6 +812,44 @@ describe('loyalty card and contact', () => {
     assert.equal(saved.ok, true);
     assert.ok(saved.id);
     assert.equal(saved.delivered, false, 'with the endpoint disabled the message is stored but not forwarded');
+
+    /*
+     * The owner's rule: a name, a message, and one way to reply — an email
+     * address or a cell number. Each column is checked on its own so a form
+     * that drops one of them cannot slip through.
+     */
+    const post = (body) =>
+      fetch(`${base}/api/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const noName = await post({ phone: '0821234567', message: 'No name here' });
+    assert.equal(noName.status, 422, 'a name is mandatory');
+    assert.match((await noName.json()).errors.join(' '), /name/i);
+
+    const noMessage = await post({ name: 'No Message', phone: '0821234567' });
+    assert.equal(noMessage.status, 422, 'a message is mandatory');
+    assert.match((await noMessage.json()).errors.join(' '), /message/i);
+
+    const noReply = await post({ name: 'No Reply', message: 'How do I reach you?' });
+    assert.equal(noReply.status, 422, 'an email or a cell number is mandatory');
+    assert.match((await noReply.json()).errors.join(' '), /email address or a cell number/i);
+
+    const junkEmail = await post({ name: 'Junk Mail', email: 'not-an-email', message: 'Reply to me' });
+    assert.equal(junkEmail.status, 422, 'an unusable email is refused');
+    assert.match((await junkEmail.json()).errors.join(' '), /email/i);
+
+    const junkPhone = await post({ name: 'Junk Phone', phone: '123', message: 'Reply to me' });
+    assert.equal(junkPhone.status, 422, 'an unusable number is refused');
+    assert.match((await junkPhone.json()).errors.join(' '), /cell number/i);
+
+    const emailOnly = await post({ name: 'Email Only', email: 'reply@example.co.za', message: 'Reply by email' });
+    assert.equal(emailOnly.status, 201, 'an email alone is enough to reply to');
+
+    const phoneOnly = await post({ name: 'Phone Only', phone: '0821234567', message: 'Reply by phone' });
+    assert.equal(phoneOnly.status, 201, 'a cell number alone is enough to reply to');
   });
 });
 
@@ -828,18 +866,26 @@ describe('customer quests', () => {
       body: JSON.stringify(body),
     });
 
-  test('a quest needs a name, a reachable number and something to cook', async () => {
+  test('a quest needs a name, a reachable contact and something to cook', async () => {
     const noName = await post({ phone: '+27820001111', dish: 'Dombolo and tshotlo' });
     assert.equal(noName.status, 422);
     assert.match((await noName.json()).errors[0], /name/i);
 
     const badPhone = await post({ name: 'Lerato', phone: '082', dish: 'Dombolo and tshotlo' });
     assert.equal(badPhone.status, 422);
-    assert.match((await badPhone.json()).errors[0], /cell number/i);
+    assert.match((await badPhone.json()).errors.join(' '), /cell number/i);
 
     const emptyDish = await post({ name: 'Lerato', phone: '+27820001111', dish: '  ' });
     assert.equal(emptyDish.status, 422);
     assert.match((await emptyDish.json()).errors[0], /cook/i);
+
+    /* No way to reply is refused; either channel on its own is enough. */
+    const noReply = await post({ name: 'Lerato', dish: 'Dombolo and tshotlo' });
+    assert.equal(noReply.status, 422);
+    assert.match((await noReply.json()).errors.join(' '), /email address or a cell number/i);
+
+    const emailOnly = await post({ name: 'Lerato', email: 'lerato@example.co.za', dish: 'Dombolo and tshotlo' });
+    assert.equal(emailOnly.status, 201, 'an email alone is enough to answer a quest');
   });
 
   test('a valid quest is stored, normalised and does not create an order', async () => {

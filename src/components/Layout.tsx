@@ -319,17 +319,78 @@ function Footer() {
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-bone/65">
             South African plates cooked with care, Thursdays and Fridays. Order online for collection or delivery in Rosebank and Sandton.
           </p>
+          {/*
+            The number and the address are the buttons: "Call us" and "Email"
+            hid the one thing a customer copies or taps. Both are links, so a
+            phone offers to dial and a mail client opens a draft.
+          */}
           <div className="mt-5 flex flex-wrap gap-2">
-            <a href={`tel:${s?.phone}`} className="inline-flex min-h-11 items-center rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
-              Call us
+            <a
+              href={`tel:${(s?.phone ?? '+27670137587').replace(/\s/g, '')}`}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
+              </svg>
+              {s?.phoneDisplay ?? '+27 67 013 7587'}
             </a>
-            <a href={wa} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
+            <a
+              href={wa}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.4 8.4 0 0 1-12.5 7.4L3 21l2.1-5.5A8.5 8.5 0 1 1 21 11.5Z" />
+              </svg>
               WhatsApp
             </a>
-            <a href={`mailto:${s?.email}`} className="inline-flex min-h-11 items-center rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre">
-              Email
+            <a
+              href={`mailto:${s?.email ?? 'heritagebitesfood@gmail.com'}`}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2.5" y="4.5" width="19" height="15" rx="2" />
+                <path d="m3 6 9 7 9-7" />
+              </svg>
+              {s?.email ?? 'heritagebitesfood@gmail.com'}
             </a>
           </div>
+          {/*
+            Social handles are placeholders until the owner supplies the real
+            profiles: href="#" on purpose, so nothing sends a customer to a page
+            that does not exist yet.
+          */}
+          <nav aria-label="Social media" className="mt-4 flex items-center gap-2">
+            {[
+              {
+                label: 'Instagram',
+                href: '#',
+                path: 'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm5 5.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9ZM17.5 6.5h.01',
+              },
+              {
+                label: 'Facebook',
+                href: '#',
+                path: 'M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z',
+              },
+              {
+                label: 'TikTok',
+                href: '#',
+                path: 'M15 3v10a4.5 4.5 0 1 1-4.5-4.5M15 3c.3 2.7 2 4.4 5 4.8',
+              },
+            ].map((social) => (
+              <a
+                key={social.label}
+                href={social.href}
+                aria-label={social.label}
+                className="grid h-11 w-11 place-items-center rounded-full border border-bone/25 text-bone/75 transition-colors hover:border-ochre hover:text-ochre"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={social.path} />
+                </svg>
+              </a>
+            ))}
+          </nav>
         </div>
 
         <div>
@@ -365,9 +426,6 @@ function Footer() {
                 : <span className="text-bone/40">Mr D Food · link coming soon</span>}
             </li>
           </ul>
-          <p className="mt-5 rounded-xl border border-bone/15 p-3 text-xs leading-relaxed text-bone/55">
-            Card payments are processed by Yoco. Card details are entered in Yoco&apos;s secure window — Heritage Bites never receives them.
-          </p>
         </div>
       </div>
       <div className="border-t border-bone/10 px-4 py-5">
@@ -510,7 +568,7 @@ function CartDrawerPanel() {
                 onClick={() => setOpen(false)}
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
               >
-                Send this basket on WhatsApp
+                Order this on WhatsApp
               </a>
             </footer>
           </>

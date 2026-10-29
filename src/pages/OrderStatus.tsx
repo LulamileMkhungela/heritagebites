@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { clockTime, timeAgo, zar } from '../lib/format';
-import { Badge, Button, LinkButton, SectionLabel, Spinner } from '../components/ui';
+import { Badge, Button, ContactText, LinkButton, SectionLabel, Spinner } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { waHref } from '../lib/whatsapp';
 import { useCatalog } from '../store/catalog';
@@ -103,7 +103,8 @@ export default function OrderStatus() {
       <section className="mx-auto max-w-lg px-4 py-24 text-center">
         <p className="text-4xl">🔍</p>
         <h1 className="mt-4 font-display text-3xl font-semibold">We could not find that order</h1>
-        <p className="mt-3 text-ink/60">{error}</p>
+        {/* The "call us" notice quotes the number — keep it tappable. */}
+        <p className="mt-3 text-ink/60"><ContactText>{error}</ContactText></p>
         <LinkButton to="/menu" className="mt-6">Back to the menu</LinkButton>
       </section>
     );

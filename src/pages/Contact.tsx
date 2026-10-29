@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
+import { isValidCellNumber, isValidEmail } from '../lib/format';
 import { Button, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { waHref, GENERAL_ENQUIRY } from '../lib/whatsapp';
@@ -39,12 +40,34 @@ export default function Contact() {
     setErrors((x) => ({ ...x, [k]: '' }));
   };
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /**
+   * Everything that has to be true before an enquiry is allowed out.
+   *
+   * The owner's rule: a name, a message, and one way to reply — an email
+   * address or a cell number. Nothing is sent (and nothing is posted to the
+   * inbox) until all three are there and the contact details look real; an
+   * enquiry the kitchen cannot answer is worse than no enquiry at all.
+   */
+  const validate = () => {
     const next: Record<string, string> = {};
     if (!form.name.trim()) next.name = 'Please tell us your name.';
     if (!form.message.trim()) next.message = 'Please add a message.';
-    if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) next.email = 'That email does not look right.';
+
+    const email = form.email.trim();
+    const phone = form.phone.trim();
+    if (!email && !phone) {
+      next.email = 'Add an email address or a cell number so we can reply.';
+      next.phone = 'Add an email address or a cell number so we can reply.';
+    } else {
+      if (email && !isValidEmail(email)) next.email = 'That email does not look right.';
+      if (phone && !isValidCellNumber(phone)) next.phone = 'Use a South African cell number, e.g. 082 123 4567.';
+    }
+    return next;
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const next = validate();
     setErrors(next);
     if (Object.keys(next).length) return;
 
@@ -181,16 +204,41 @@ export default function Contact() {
               ) : (
                 <form onSubmit={submit} className="mt-6 grid gap-4" noValidate>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Your name" error={errors.name}>
-                      <input className={inputCls} value={form.name} onChange={set('name')} placeholder="Thabo Mahlangu" autoComplete="name" />
+                    <Field label="Your name *" error={errors.name}>
+                      <input
+                        className={inputCls}
+                        value={form.name}
+                        onChange={set('name')}
+                        placeholder="Thabo Mahlangu"
+                        autoComplete="name"
+                        required
+                        aria-required="true"
+                        aria-invalid={Boolean(errors.name)}
+                      />
                     </Field>
-                    <Field label="Contact number" hint="optional">
-                      <input className={inputCls} value={form.phone} onChange={set('phone')} placeholder="+27 82 000 0000" autoComplete="tel" />
+                    <Field label="Contact number" hint="required if no email" error={errors.phone}>
+                      <input
+                        className={inputCls}
+                        value={form.phone}
+                        onChange={set('phone')}
+                        placeholder="+27 82 000 0000"
+                        autoComplete="tel"
+                        inputMode="tel"
+                        aria-invalid={Boolean(errors.phone)}
+                      />
                     </Field>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Email" hint="optional" error={errors.email}>
-                      <input className={inputCls} value={form.email} onChange={set('email')} placeholder="you@example.co.za" autoComplete="email" type="email" />
+                    <Field label="Email" hint="required if no number" error={errors.email}>
+                      <input
+                        className={inputCls}
+                        value={form.email}
+                        onChange={set('email')}
+                        placeholder="you@example.co.za"
+                        autoComplete="email"
+                        type="email"
+                        aria-invalid={Boolean(errors.email)}
+                      />
                     </Field>
                     <Field label="What is it about?">
                       <select className={inputCls} value={form.subject} onChange={set('subject')}>
@@ -200,8 +248,16 @@ export default function Contact() {
                       </select>
                     </Field>
                   </div>
-                  <Field label="Message" error={errors.message}>
-                    <textarea className={`${inputCls} min-h-36 resize-y`} value={form.message} onChange={set('message')} placeholder="Tell us what you need…" />
+                  <Field label="Message *" error={errors.message}>
+                    <textarea
+                      className={`${inputCls} min-h-36 resize-y`}
+                      value={form.message}
+                      onChange={set('message')}
+                      placeholder="Tell us what you need…"
+                      required
+                      aria-required="true"
+                      aria-invalid={Boolean(errors.message)}
+                    />
                   </Field>
                   <Button type="submit" size="lg" disabled={state === 'sending'}>
                     {state === 'sending' ? 'Sending…' : 'Send message'}

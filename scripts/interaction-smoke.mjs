@@ -485,12 +485,43 @@ await step('quantity stepper changes the line and the total', async () => {
 const s3 = boot('/contact');
 await s3.waitFor(() => /Send us a message/i.test(s3.text()), 'contact page');
 
-await step('the contact form rejects an incomplete message', async () => {
-  const submit = s3.byText('button[type="submit"]', /Send|message/i)[0];
-  if (!submit) throw new Error('no submit button on the contact form');
-  s3.click(submit);
-  await s3.waitFor(() => /required|tell us|cannot be empty/i.test(s3.text()), 'validation message', 8000);
-  return 'blocked with a message';
+await step('the contact form refuses a message with no name, body or reply channel', async () => {
+  /*
+   * The owner's rule, checked field by field in the browser: name, message, and
+   * one way to reply (email or cell number). Each attempt changes exactly one
+   * thing so a missing rule cannot hide behind another.
+   */
+  const byPh = (re) => [...s3.doc.querySelectorAll('input, textarea')].find((f) => re.test(f.placeholder ?? ''));
+  const submit = () => s3.byText('button[type="submit"]', /Send|message/i)[0];
+  const errorText = () => [...s3.doc.querySelectorAll('span')].map((el) => el.textContent ?? '').join(' ');
+
+  /* 1. Everything empty. */
+  s3.click(submit());
+  await s3.waitFor(() => /tell us your name/i.test(errorText()), 'name required', 8000);
+  if (!/add a message/i.test(errorText())) throw new Error('the message field has no required-message error');
+  if (!/email address or a cell number/i.test(errorText())) throw new Error('the reply channel is not enforced');
+
+  /* 2. Name + message, still nowhere to reply. */
+  s3.setInput(byPh(/Thabo Mahlangu/), 'Smoke Test');
+  s3.setInput(byPh(/Tell us what you need/), 'Can you cater for 40 on a Saturday?');
+  s3.click(submit());
+  await s3.waitFor(() => !/Message sent|Message received/i.test(s3.text()), 'still blocked', 4000);
+  if (!/email address or a cell number/i.test(errorText())) {
+    throw new Error('a name and a message alone were accepted with no way to reply');
+  }
+
+  /* 3. A junk number is refused rather than sent. */
+  s3.setInput(byPh(/\+27 82 000 0000/), '123');
+  s3.click(submit());
+  await s3.waitFor(() => /South African cell number/i.test(errorText()), 'invalid number refused', 8000);
+
+  /* 4. A junk email is refused too. */
+  s3.setInput(byPh(/\+27 82 000 0000/), '');
+  s3.setInput(byPh(/you@example\.co\.za/), 'not-an-email');
+  s3.click(submit());
+  await s3.waitFor(() => /email does not look right/i.test(errorText()), 'invalid email refused', 8000);
+
+  return 'name, message and one reply channel all enforced';
 });
 
 await step('a complete contact message is accepted by the site', async () => {
@@ -944,12 +975,23 @@ await step('a cash order can be placed with no card details at all', async () =>
    * and the collection choice — pre-typed into the message.
    */
   const waLink = [...s6.doc.querySelectorAll('a[href^="https://wa.me/"]')]
-    .find((a) => /Send this basket/i.test(a.textContent ?? ''));
+    .find((a) => /Order this on WhatsApp/i.test(a.textContent ?? ''));
   if (!waLink) throw new Error('checkout has no WhatsApp basket link');
   const waText = new URL(waLink.href).searchParams.get('text') ?? '';
   /* en-ZA writes the decimal as a comma: R200,00. */
   for (const wanted of [/Tshotlo Plate/, /2 ×/, /R200[,.]00/, /Total: R200[,.]00/, /Pap/, /Braised cabbage/]) {
     if (!wanted.test(waText)) throw new Error(`the WhatsApp message is missing the order data (${wanted}): ${waText.slice(0, 160)}`);
+  }
+  /*
+   * The closing line used to read "I will send it through", which read as if the
+   * customer still had a step left to take. It must now ask for a reply and
+   * nothing else.
+   */
+  if (!/Please reply here to confirm this order/.test(waText)) {
+    throw new Error(`the WhatsApp message does not close with the confirm-and-pay ask: ${waText.slice(-120)}`);
+  }
+  if (/I will send it through/.test(waText)) {
+    throw new Error('the WhatsApp message still asks the customer to send it through');
   }
 
   const submit = s6.byText('button[type="submit"]', /Place order/i)[0];
