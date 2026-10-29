@@ -5,6 +5,7 @@ import { normalisePhone } from '../lib/format';
 import { Button, Badge, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useCatalog } from '../store/catalog';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { waHref } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
 /*
@@ -33,14 +34,27 @@ export default function Quest() {
   useDocumentTitle('Customer quest');
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
-  const waLink = `https://wa.me/${s?.whatsapp ?? '27670137587'}?text=${encodeURIComponent(
-    'Hi Heritage Bites, I have a meal quest:',
-  )}`;
 
   const [form, setForm] = useState({ name: '', phone: '', email: '', dish: '', serviceDay: 'either', plates: '1', notes: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [delivered, setDelivered] = useState(false);
+
+  /*
+   * The quest page's WhatsApp link carries whatever the customer has typed so
+   * far, so a half-filled form can still reach the kitchen in one tap instead of
+   * being retyped in the chat.
+   */
+  const questMessage = [
+    'Hi Heritage Bites, I have a meal quest:',
+    form.dish.trim() ? `Dish: ${form.dish.trim()}` : '',
+    form.plates.trim() ? `Plates: ${form.plates.trim()}` : '',
+    form.serviceDay && form.serviceDay !== 'either' ? `Day: ${form.serviceDay}` : '',
+    form.notes.trim() ? `Notes: ${form.notes.trim()}` : '',
+    form.name.trim() ? `Name: ${form.name.trim()}` : '',
+    form.phone.trim() ? `Phone: ${form.phone.trim()}` : '',
+  ].filter(Boolean).join('\n');
+  const waLink = waHref(s?.whatsapp, questMessage);
 
   const set =
     (k: keyof typeof form) =>

@@ -154,9 +154,15 @@ await step('the menu sells exactly the two approved plate categories', async () 
    */
   const nav = s1.doc.querySelector('nav[aria-label="Meal categories"]');
   const navText = nav?.textContent ?? '';
-  for (const name of [/Heritage Pots/, /Modern Favourites/, /Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
+  for (const name of [/Heritage Pots/, /Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
     if (!name.test(navText)) throw new Error(`the archive category chip is missing from the menu nav: ${name}`);
   }
+  /*
+   * Modern Favourites was dropped by the owner: every dish in it — short ribs,
+   * wings — is already a Contemporary plate, and a "coming soon" tag on food
+   * that is on sale today is just confusing.
+   */
+  if (/Modern Favourites/.test(navText)) throw new Error('the duplicated Modern Favourites category is still in the nav');
   if (/Cold & Warm/.test(navText)) throw new Error('the unapproved drinks category must stay commented out');
 
   const sellableSections = s1.doc.querySelectorAll('main > section[data-sellable]');
@@ -166,10 +172,75 @@ await step('the menu sells exactly the two approved plate categories', async () 
   const archiveSections = [...arch.doc.querySelectorAll('main > section')].filter((section) =>
     section.querySelector('[data-coming-soon]'),
   );
-  if (archiveSections.length !== 5) {
-    throw new Error(`expected 5 archive sections, found ${archiveSections.length}`);
+  if (archiveSections.length !== 4) {
+    throw new Error(`expected 4 archive sections, found ${archiveSections.length}`);
   }
-  return '2 sellable sections plus 5 archive chips';
+  return '2 sellable sections plus 4 archive chips';
+});
+
+await step('a category heading carries its plate count inline and folds its section', async () => {
+  const heading = arch.doc.getElementById('menu-heading-traditional');
+  const toggle = heading?.querySelector('button');
+  if (!toggle) throw new Error('the Traditional Plates heading is not a fold control');
+  /*
+   * The owner asked for the count on the same line as the category name. It used
+   * to sit at the far right of a wrapping row, which on a phone dropped it onto
+   * its own line under the heading.
+   */
+  if (!/^Traditional Plates\s*\d+\s+plates?$/i.test((toggle.textContent ?? '').replace(/\s+/g, ' ').trim())) {
+    throw new Error(`the plate count is not inline with the category name: "${toggle.textContent}"`);
+  }
+
+  const panel = () => arch.doc.getElementById('menu-panel-traditional');
+  if (!panel() || panel().hasAttribute('hidden')) throw new Error('categories should start open');
+  arch.click(toggle);
+  await sleep(60);
+  if (toggle.getAttribute('aria-expanded') !== 'false') throw new Error('tapping the heading did not mark the section collapsed');
+  if (!panel().hasAttribute('hidden')) throw new Error('the collapsed section is still on screen');
+  arch.click(toggle);
+  await sleep(60);
+  if (panel().hasAttribute('hidden')) throw new Error('tapping the heading again did not reopen the section');
+  return 'count inline with the name; section folds and unfolds';
+});
+
+await step('every WhatsApp link opens with a written message, never an empty box', async () => {
+  /*
+   * The owner's complaint was a "send on WhatsApp" button that opened an empty
+   * chat. That bug was one link built by hand, so this walks the whole site and
+   * checks every wa.me href: a message has to be there, and a number has to be
+   * there too (except the receipt link, which deliberately has no recipient).
+   */
+  const pages = ['/', '/menu', '/specials', '/contact', '/passport', '/quest'];
+  const empty = [];
+  for (const path of pages) {
+    const session = boot(path);
+    await session.waitFor(() => session.doc.querySelectorAll('a[href^="https://wa.me/"]').length > 0, `WhatsApp links on ${path}`, 20000);
+    const links = await Promise.all(
+      [...session.doc.querySelectorAll('a[href^="https://wa.me/"]')].map((a) => {
+        const url = new URL(a.href);
+        return { href: a.href, text: url.searchParams.get('text') ?? '', label: (a.textContent ?? '').trim().slice(0, 30) };
+      }),
+    );
+    for (const link of links) {
+      if (!link.text.trim()) empty.push(`${path} → "${link.label}" (${link.href.slice(0, 60)})`);
+    }
+    session.close();
+  }
+  if (empty.length) throw new Error(`WhatsApp link(s) open an empty message: ${empty.join(' | ')}`);
+  return `${pages.length} pages, every WhatsApp link pre-filled`;
+});
+
+await step('the phone menu closes when the customer taps away from it', async () => {
+  const toggle = s1.byLabel('button', /Toggle navigation/i)[0];
+  if (!toggle) throw new Error('the hamburger button is missing');
+  const panel = () => [...s1.doc.querySelectorAll('header nav')].find((n) => /Loyalty card/.test(n.textContent ?? ''));
+  s1.click(toggle);
+  await sleep(60);
+  if (!panel()) throw new Error('the hamburger did not open the menu');
+  s1.doc.body.dispatchEvent(new s1.w.MouseEvent('pointerdown', { bubbles: true }));
+  await sleep(60);
+  if (panel()) throw new Error('tapping away from the open menu did not close it');
+  return 'the dropdown closes on an outside tap';
 });
 
 /*
@@ -286,38 +357,60 @@ await step('About Us contains vision, mission and story without separate nav lin
   return 'About Us has all three sections; top nav stays simple';
 });
 
-await step('the kitchen archive is view only: no links, no prices, no dish pages', async () => {
+await step('the kitchen archive reads like the menu but cannot be ordered', async () => {
   const blocks = [...arch.doc.querySelectorAll('[data-coming-soon]')];
   if (!blocks.length) throw new Error('the archive sections are missing');
-  if (blocks.length !== 5) throw new Error(`expected 5 archive sections, found ${blocks.length}`);
+  if (blocks.length !== 4) throw new Error(`expected 4 archive sections, found ${blocks.length}`);
   const block = blocks[0];
   const archiveSections = blocks.map((grid) => grid.closest('section'));
 
   /*
-    The owner asked for the old categories back as a look, not a shop: nothing
-    in them may be clicked, priced, or opened as a dish sheet. A structural
-    guard is the only honest check — jsdom cannot feel a cursor.
+    The owner changed the brief: archive cards now show the same things a
+    sellable dish does — photo, name, price and a description — and the only
+    thing marking them as unavailable is the "Coming soon" tag on the photo. So
+    the guard is no longer "no price", it is "no way to order": nothing inside a
+    card grid may be a control, a link or a dish sheet.
   */
-  for (const section of blocks) {
-    const interactive = section.querySelectorAll('a, button, input, select, textarea, [role="link"], [role="button"], [onclick]');
-    if (interactive.length) throw new Error(`the archive must be inert, but a section holds ${interactive.length} interactive element(s)`);
-    if (/R\s?\d/.test(section.textContent ?? '')) throw new Error('an archive section shows a price — it is not for sale');
+  for (const grid of blocks) {
+    if (!/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
+    if (!/Coming soon/i.test(grid.textContent ?? '')) throw new Error('archive cards are missing their "Coming soon" tag');
+    const interactive = grid.querySelectorAll('a, button, input, select, textarea, [role="link"], [role="button"], [onclick]');
+    if (interactive.length) throw new Error(`the archive must not be orderable, but a card grid holds ${interactive.length} control(s)`);
   }
-  if (arch.doc.querySelectorAll('[data-coming-soon] a').length) throw new Error('an archive section contains a link');
+  if (arch.doc.querySelectorAll('[data-coming-soon] a').length) throw new Error('an archive card contains a link');
 
-  /* Names and blurbs sit in the section heading, outside the inert grid. */
   const body = archiveSections.map((section) => section?.textContent ?? '').join(' ');
-  if (/R\s?\d/.test(body)) throw new Error('the archive shows a price — it is not for sale');
-  if (!/Coming soon/i.test(body)) throw new Error('archive cards are missing their "Coming soon" tag');
-  for (const name of [/Heritage Pots/, /Modern Favourites/, /Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
+  for (const name of [/Heritage Pots/, /Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
     if (!name.test(body)) throw new Error(`archive category missing: ${name}`);
   }
   if (/Cold & Warm|Mageu|Rooibos/i.test(body)) throw new Error('unapproved drinks must stay commented out');
+  /*
+   * Dishes that are already on sale have no business in a "coming soon"
+   * section — the owner's complaint. Mogodu, Tshotlo, short rib and wings are
+   * all orderable plates today.
+   */
+  for (const dupe of [/Mogodu & Samp/, /Tshotlo/, /Short Ribs/, /Flame-Grilled Wings/]) {
+    if (dupe.test(body)) throw new Error(`a dish that is already on the menu is still in the archive: ${dupe}`);
+  }
+
+  /*
+   * "Coming soon" belongs to the photo. It was also a badge beside the category
+   * heading and the word "soon" in every nav chip, which made the page shout.
+   */
+  for (const section of archiveSections) {
+    const heading = section?.querySelector('h2')?.textContent ?? '';
+    if (/coming soon/i.test(heading)) throw new Error('the category heading still carries a coming-soon badge');
+  }
+  const archiveChips = [...arch.doc.querySelectorAll('nav[aria-label="Meal categories"] button')]
+    .filter((chip) => /Heritage Pots|Kasi Fast Food|Morning Heritage|Sides & Relishes/.test(chip.textContent ?? ''));
+  for (const chip of archiveChips) {
+    if (/soon/i.test(chip.textContent ?? '')) throw new Error(`an archive chip still says "soon": ${chip.textContent}`);
+  }
 
   const placeholders = [...block.querySelectorAll('img')].filter((img) => img.getAttribute('src')?.includes('placeholder'));
   if (placeholders.length) throw new Error('archive cards are showing placeholder images instead of photos');
 
-  return '5 categories, 0 links, 0 prices';
+  return '4 categories, priced cards, 0 order controls';
 });
 
 await step('clicking an archive category chip jumps to its section', async () => {
@@ -843,6 +936,21 @@ await step('a cash order can be placed with no card details at all', async () =>
   s6.setInput(byPh(/Thabo Mahlangu/), 'Cash Customer');
   s6.setInput(byPh(/\+27 82/), '+27 82 000 6600');
   await sleep(400);
+
+  /*
+   * The WhatsApp handoff used to open an empty chat: the link carried the
+   * number and nothing else, so the customer had to retype the order. It now
+   * has to carry the basket itself — dishes, quantities, line totals, the total
+   * and the collection choice — pre-typed into the message.
+   */
+  const waLink = [...s6.doc.querySelectorAll('a[href^="https://wa.me/"]')]
+    .find((a) => /Send this basket/i.test(a.textContent ?? ''));
+  if (!waLink) throw new Error('checkout has no WhatsApp basket link');
+  const waText = new URL(waLink.href).searchParams.get('text') ?? '';
+  /* en-ZA writes the decimal as a comma: R200,00. */
+  for (const wanted of [/Tshotlo Plate/, /2 ×/, /R200[,.]00/, /Total: R200[,.]00/, /Pap/, /Braised cabbage/]) {
+    if (!wanted.test(waText)) throw new Error(`the WhatsApp message is missing the order data (${wanted}): ${waText.slice(0, 160)}`);
+  }
 
   const submit = s6.byText('button[type="submit"]', /Place order/i)[0];
   if (!submit) throw new Error('no submit button on a cash checkout');

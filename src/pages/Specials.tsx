@@ -2,6 +2,7 @@ import { useCatalog } from '../store/catalog';
 import { zar } from '../lib/format';
 import { LinkButton, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { waHref } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -23,7 +24,7 @@ export default function Specials() {
   const { settings, service, plateMenus } = catalog;
   const openDays = settings.hours.filter((h) => !h.closed);
   const areas = settings.deliveryAreas.join(' & ');
-  const waLink = `https://wa.me/${settings.whatsapp}?text=${encodeURIComponent('Hi Heritage Bites! What is on special this week?')}`;
+  const waLink = waHref(settings.whatsapp, 'Hi Heritage Bites! What is on special this week?');
 
   return (
     <>

@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
+import { useCart } from '../store/cart';
 
 import { zar } from '../lib/format';
 import { Button, HeritageBand, LinkButton, Reveal, SectionLabel } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { basketHref, waUrlWithText, CHANNEL_ENQUIRY } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
 export default function Home() {
@@ -56,9 +58,17 @@ export default function Home() {
 
 function Hero({ onOrder }: { onOrder: () => void }) {
   const catalog = useCatalog((s) => s.data);
+  const lines = useCart((s) => s.lines);
+  const fulfilment = useCart((s) => s.fulfilment);
   const s = catalog?.settings;
   const service = catalog?.service;
   const traditional = catalog?.plateMenus.find((p) => p.id === 'traditional');
+  /*
+   * Every WhatsApp link opens a written message. If a customer already has a
+   * basket, this row sends it; otherwise it opens as an order enquiry rather
+   * than a blank chat box.
+   */
+  const waHrefOrder = basketHref(s?.whatsapp, lines, { fulfilment });
 
   return (
     <section className="hb-grain relative overflow-hidden bg-ink text-bone">
@@ -114,7 +124,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             <ul className="mt-5 space-y-3">
               {[
                 { t: 'Order online', d: 'Card through Yoco, or cash on collection', to: '/checkout' },
-                { t: 'WhatsApp', d: 'Message us to place an order', href: `https://wa.me/${s?.whatsapp ?? '27670137587'}` },
+                { t: 'WhatsApp', d: 'Message us to place an order', href: waHrefOrder },
                 { t: 'Uber Eats', d: s?.channels?.ubereats?.url ? 'Order through the app' : 'Direct ordering link coming soon', href: s?.channels?.ubereats?.url },
                 { t: 'Mr D Food', d: s?.channels?.mrd?.url ? 'Order through the app' : 'Direct ordering link coming soon', href: s?.channels?.mrd?.url },
               ].map((row) => (
@@ -391,7 +401,12 @@ function Channels({ settings }: { settings: Settings | undefined }) {
       </div>
       <div className="grid gap-6 md:grid-cols-3">
         {rows.map((r, i) => {
-          const url = settings?.channels?.[r.key]?.url;
+          /* The configured WhatsApp URL is a bare wa.me link, which opens an
+             empty chat: give it the message here, and leave any non-WhatsApp
+             channel URL exactly as the owner set it. */
+          const url = r.key === 'whatsapp'
+            ? waUrlWithText(settings?.channels?.whatsapp?.url, settings?.whatsapp, CHANNEL_ENQUIRY)
+            : settings?.channels?.[r.key]?.url;
           const description = r.key === 'whatsapp'
             ? 'Message us to place an order.'
             : url

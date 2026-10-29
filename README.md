@@ -41,7 +41,15 @@ The combined handoff PDF, [`docs/heritage-bites-complete.pdf`](docs/heritage-bit
 
 ## Content policy
 
-The **kitchen archive** (`comingSoon` in `server/seed.js`) brings back the pre-signoff categories on `/menu` as category buttons beside Traditional and Contemporary Plates, each with its own section. The chips navigate and scroll like any other category; the cards inside are view only — name, photo and a "Coming soon" tag, with no price, no dish detail and no way to order. It is kept out of `menu` entirely, so it can never be priced, searched or checked out; dishes without an honest photo are commented out rather than padded with one.
+The **kitchen archive** (`comingSoon` in `server/seed.js`) brings back the pre-signoff categories on `/menu` as category buttons beside Traditional and Contemporary Plates, each with its own section. Its cards read like the rest of the menu — photo, name, a guide price and one line of description — with a "Coming soon" tag on the photo and no basket control, which is the only thing that marks them as unavailable. Nothing here is sellable, so the archive stays out of `menu` entirely and can never be priced, searched or checked out; dishes without an honest photo are commented out rather than padded with one, and **a dish that is already on sale is never listed here** (the old "Modern Favourites" category was dropped for exactly that reason — short ribs and wings are Contemporary plates today).
+
+Every WhatsApp link on the site is built in `src/lib/whatsapp.ts`, and every one of them opens with the message already written — a customer should never land in an empty chat box and have to retype what the site already knows:
+
+- **Order links** (checkout, the basket drawer, the hero's WhatsApp row, the preview strip) send the basket: each dish, its chosen options, the quantity, the line total, the order total and whether it is collect or delivery — plus name, phone, address and kitchen notes when the checkout form has them.
+- **Enquiry links** (footer, service strip, contact card, the WhatsApp channel card, the loyalty page, the customer quest) carry a sentence that names the reason for the message, so the kitchen can answer without a round trip. The quest link also carries anything the customer has typed into the form so far.
+- The order-tracking page's "Message us about HB-XXXX" link is built server-side in `server/lib/notify.js` and includes the order lines too.
+
+WhatsApp silently drops over-long `text` parameters, so the basket message lists up to 12 lines and summarises the rest. `scripts/interaction-smoke.mjs` walks six pages and fails if any `wa.me` link opens without a message.
 
 Nothing is published that the business has not signed off. Specifically: no drinks, add-ons, discount codes, testimonials or day-of-week promotions are live, because none were approved. Two dishes (Tlhakwana and Smiley) have no photograph yet, so they render a "photo coming soon" panel instead of a picture of a different dish. `SEED_VERSION` in `server/seed.js` re-seeds catalogue content on boot when it changes; orders, messages and loyalty stamps are never touched.
 

@@ -5,6 +5,7 @@ import { Button, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../co
 import { normalisePhone } from '../lib/format';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { useCatalog } from '../store/catalog';
+import { waHref, loyaltyEnquiry } from '../lib/whatsapp';
 
 const CARD_SIZE = 10;
 
@@ -69,7 +70,7 @@ export default function Passport() {
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">Preview build</p>
           <p className="mt-1.5 text-sm text-ink/70">
             Stamp lookups need the live site. In the meantime, WhatsApp us on{' '}
-            <a href={`https://wa.me/${settings?.whatsapp ?? '27670137587'}`} target="_blank" rel="noreferrer" className="font-semibold text-ochre-deep underline">
+            <a href={waHref(settings?.whatsapp, loyaltyEnquiry(phone))} target="_blank" rel="noreferrer" className="font-semibold text-ochre-deep underline">
               {settings?.phoneDisplay ?? '+27 67 013 7587'}
             </a>{' '}
             and we will check your card for you.

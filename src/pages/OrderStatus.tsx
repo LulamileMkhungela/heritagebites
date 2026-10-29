@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { clockTime, timeAgo, zar } from '../lib/format';
 import { Badge, Button, LinkButton, SectionLabel, Spinner } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { waHref } from '../lib/whatsapp';
 import { useCatalog } from '../store/catalog';
 import type { Order } from '../lib/types';
 import {
@@ -110,8 +111,10 @@ export default function OrderStatus() {
 
   if (!order) return <Spinner label="Fetching your order…" />;
 
-  const updateMessage = encodeURIComponent(`Hi Heritage Bites, please send me WhatsApp updates for order ${order.code}.`);
-  const updateRequest = `https://wa.me/${(settings?.whatsapp ?? '27670137587').replace(/\D/g, '')}?text=${updateMessage}`;
+  const updateRequest = waHref(
+    settings?.whatsapp,
+    `Hi Heritage Bites, please send me WhatsApp updates for order ${order.code}.`,
+  );
 
   /*
    * WhatsApp without the Cloud API: the customer presses a link and *their own*

@@ -149,7 +149,25 @@ await check('checkout is a preview that prices the basket without charging', asy
   if (!/Preview checkout/i.test(body)) throw new Error('checkout is not in preview mode');
   if (!/R200,00/.test(body)) throw new Error('the preview basket total is wrong');
   if (/Place order|Pay now/i.test(body)) throw new Error('a live order button is still on the preview checkout');
-  return 'R200,00 basket, no live order button';
+
+  /*
+   * The exact complaint this guards against: on the preview, "Send the basket
+   * on WhatsApp" opened an empty chat, so the customer had to retype an order
+   * the site already knew. The link must carry the basket itself.
+   */
+  const wa = await page.evaluate(() =>
+    [...document.querySelectorAll('a[href^="https://wa.me/"]')]
+      .map((a) => a.href)
+      .find((href) => /Send%20the%20basket|text=/.test(href)) ?? '',
+  );
+  if (!wa) throw new Error('the preview checkout has no WhatsApp basket link');
+  const message = new URL(wa).searchParams.get('text') ?? '';
+  if (!/Mogodu Plate/.test(message)) throw new Error('the WhatsApp message does not name the dish');
+  if (!/2 ×|2 x/.test(message)) throw new Error('the WhatsApp message does not carry the quantity');
+  if (!/R200[,.]00/.test(message)) throw new Error('the WhatsApp message does not carry the total');
+  if (!/collect/i.test(message)) throw new Error('the WhatsApp message does not carry the collection choice');
+
+  return 'R200,00 basket, no live order button, WhatsApp handoff pre-filled';
 });
 
 await check('a customer cannot submit a quest or an enquiry on the preview', async () => {
