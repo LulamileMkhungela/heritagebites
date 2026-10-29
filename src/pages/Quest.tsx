@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { normalisePhone } from '../lib/format';
 import { Button, Badge, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useCatalog } from '../store/catalog';
@@ -75,7 +75,7 @@ export default function Quest() {
 
     setState('sending');
     try {
-      const result = await api.quest({ ...form, plates: Number(form.plates) || 1 });
+      const result = await api.quest({ ...form, plates: Number(form.plates) || 1 }, s?.contactFormspreeUrl);
       setDelivered(result.delivered);
       setState('sent');
       setForm({ name: '', phone: '', email: '', dish: '', serviceDay: 'either', plates: '1', notes: '' });
@@ -186,7 +186,9 @@ export default function Quest() {
                   <p className="mt-2 text-sm text-ink/65">
                     {delivered
                       ? 'It is in our inbox and a person will come back to you on the number you gave us.'
-                      : 'Your quest is saved with us, but our email notification did not go through just now. Please call or WhatsApp us if it is for this week’s window.'}
+                      : STATIC_PREVIEW
+                        ? 'Your quest reached the site, but it could not be delivered to our inbox. Please call or WhatsApp us so it is not missed.'
+                        : 'Your quest is saved with us, but our email notification did not go through just now. Please call or WhatsApp us if it is for this week’s window.'}
                   </p>
                   <p className="mt-2 text-[13px] font-medium text-ink/70">
                     This is a request, not an order — nothing has been charged and nothing is booked yet.

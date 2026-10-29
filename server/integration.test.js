@@ -7,6 +7,7 @@
  * 12:00 and 13:30, delivery in Rosebank and Sandton with delivery included.
  */
 import { test, before, after, describe } from 'node:test';
+import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -322,6 +323,90 @@ describe('web push', () => {
     assert.equal(typeof push.ownerDevices, 'number');
     assert.equal(typeof push.customerDevices, 'number');
     assert.doesNotMatch(JSON.stringify(health), /push\.example\.test/);
+  });
+});
+
+describe('cross-origin API access', () => {
+  /*
+   * The storefront can be hosted apart from the API (the GitHub Pages build is
+   * one origin, the Express API another). That only works if the browser is
+   * allowed to make the post — and only for the origins the owner listed.
+   */
+  const FOREIGN = 'https://not-heritagebites.example';
+
+  test('a foreign origin gets no CORS grant and cannot preflight', async () => {
+    const preflight = await fetch(`${base}/api/contact`, {
+      method: 'OPTIONS',
+      headers: { Origin: FOREIGN, 'Access-Control-Request-Method': 'POST' },
+    });
+    assert.equal(preflight.status, 403, 'an unlisted origin must not be allowed to preflight');
+    assert.equal(preflight.headers.get('access-control-allow-origin'), null);
+
+    const read = await fetch(`${base}/api/catalog`, { headers: { Origin: FOREIGN } });
+    assert.equal(read.status, 200);
+    assert.equal(read.headers.get('access-control-allow-origin'), null, 'the API must not hand out a wildcard grant');
+  });
+
+  test('a listed origin is granted exactly its own origin, and can preflight', async () => {
+    /*
+     * Read at import time, so this needs a real process rather than a second
+     * import of the same module. Spawned on its own port with its own data dir.
+     */
+    const dir = mkdtempSync(join(tmpdir(), 'hb-cors-'));
+    const port = 41733;
+    const child = spawn(process.execPath, ['server/index.js'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        PORT: String(port),
+        HB_DATA_DIR: dir,
+        HB_ALLOWED_ORIGINS: 'https://lulamilemkhungela.github.io/',
+        HB_CONTACT_FORMSPREE_URL: '',
+        HB_ORDER_EMAIL_ENABLED: 'false',
+      },
+      stdio: 'ignore',
+    });
+
+    try {
+      const url = `http://127.0.0.1:${port}`;
+      const deadline = Date.now() + 15000;
+      let up = false;
+      while (Date.now() < deadline) {
+        try {
+          await fetch(`${url}/api/health`);
+          up = true;
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+      if (!up) throw new Error('the CORS test server never came up');
+
+      const origin = 'https://lulamilemkhungela.github.io';
+      const preflight = await fetch(`${url}/api/contact`, {
+        method: 'OPTIONS',
+        headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' },
+      });
+      assert.equal(preflight.status, 204);
+      assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+      assert.match(preflight.headers.get('access-control-allow-headers') ?? '', /content-type/i);
+
+      const posted = await fetch(`${url}/api/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: JSON.stringify({ name: 'Cors Test', message: 'From the static site.' }),
+      });
+      assert.equal(posted.status, 201);
+      assert.equal(posted.headers.get('access-control-allow-origin'), origin, 'a listed origin must stay granted on the post');
+
+      /* An unlisted neighbour does not inherit the grant. */
+      const other = await fetch(`${url}/api/catalog`, { headers: { Origin: 'https://evil.example' } });
+      assert.equal(other.headers.get('access-control-allow-origin'), null);
+    } finally {
+      child.kill();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

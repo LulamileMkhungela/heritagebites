@@ -75,8 +75,20 @@ export const STATIC_PREVIEW: boolean = String(env.VITE_STATIC_PREVIEW ?? '') ===
 const STATIC_CATALOG = `${BASE_URL.replace(/\/$/, '')}/api/catalog.json`;
 
 export const PREVIEW_NOTICE =
-  'This is a preview of the Heritage Bites site, so ordering and messages are switched off for now. ' +
+  'This is a preview of the Heritage Bites site, so ordering and payments are switched off. ' +
   'Please call or WhatsApp us on +27 67 013 7587 and we will take it from there.';
+
+/**
+ * What an enquiry says when there is nowhere to send it.
+ *
+ * An enquiry is different from an order: it does not need the Heritage Bites
+ * server, only an inbox. So on the static build the contact form and the
+ * customer quest post straight to the business's Formspree endpoint — the same
+ * one the server forwards to — and a submission is really delivered instead of
+ * being refused. This is the message for the case where even that is missing.
+ */
+export const NO_INBOX_NOTICE =
+  'We could not send that message from this preview. Please call or WhatsApp us on +27 67 013 7587 and we will take it from there.';
 
 /** Public paths stay relative; `/api` calls can be pointed at another origin. */
 const resolve = (path: string) => (path.startsWith('/api') ? `${API_ORIGIN}${path}` : path);
@@ -138,6 +150,43 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+/* --------------------------- Direct enquiries ------------------------- */
+
+/**
+ * Post an enquiry straight to the monitored inbox from the browser.
+ *
+ * Used only by the static build, where there is no server to forward through.
+ * Formspree is designed for exactly this: a public form endpoint that accepts a
+ * cross-origin JSON post and emails the result. `Accept: application/json` asks
+ * for a JSON reply instead of a redirect to a thank-you page.
+ *
+ * The payload is shaped like the server's own forwardContact/forwardQuest, so
+ * an enquiry reads the same in the inbox whichever build the customer used.
+ */
+async function postToInbox(
+  endpoint: string | undefined,
+  payload: Record<string, unknown>,
+): Promise<{ ok: boolean; id: string; delivered: boolean }> {
+  const url = String(endpoint ?? '').trim();
+  if (!url) throw new ApiError(503, NO_INBOX_NOTICE, [NO_INBOX_NOTICE], { preview: true });
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new ApiError(0, NO_INBOX_NOTICE, [NO_INBOX_NOTICE], { preview: true });
+  }
+
+  if (!res.ok) {
+    throw new ApiError(res.status, NO_INBOX_NOTICE, [NO_INBOX_NOTICE], { preview: true });
+  }
+  return { ok: true, id: `enquiry_${Date.now().toString(36)}`, delivered: true };
+}
+
 /* ------------------------------ Public -------------------------------- */
 
 export const api = {
@@ -178,12 +227,60 @@ export const api = {
       body: JSON.stringify({ phone }),
     }),
 
-  contact: (payload: unknown) =>
-    request<{ ok: boolean; id: string; delivered: boolean }>('/api/contact', { method: 'POST', body: JSON.stringify(payload) }),
+  /**
+   * A contact enquiry. On the static build this goes straight to the monitored
+   * inbox (`endpoint` comes from settings.contactFormspreeUrl) so the form
+   * really submits instead of being refused for want of a server.
+   */
+  contact: (payload: unknown, endpoint?: string) => {
+    const entry = (payload ?? {}) as Record<string, string>;
+    if (STATIC_PREVIEW) {
+      return postToInbox(endpoint, {
+        name: entry.name ?? '',
+        phone: entry.phone ?? '',
+        email: entry.email ?? '',
+        subject: entry.subject ?? 'General enquiry',
+        message: entry.message ?? '',
+        _subject: `Heritage Bites website enquiry — ${entry.subject ?? 'General enquiry'}`,
+        source: 'heritagebites.co.za/contact',
+      });
+    }
+    return request<{ ok: boolean; id: string; delivered: boolean }>('/api/contact', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 
   /** A customer quest: a request for a dish, not an order. */
-  quest: (payload: unknown) =>
-    request<{ ok: boolean; id: string; delivered: boolean }>('/api/quests', { method: 'POST', body: JSON.stringify(payload) }),
+  quest: (payload: unknown, endpoint?: string) => {
+    const entry = (payload ?? {}) as Record<string, string | number>;
+    if (STATIC_PREVIEW) {
+      const day = entry.serviceDay === 'either' || !entry.serviceDay ? 'Thursday or Friday' : String(entry.serviceDay);
+      const summary = [
+        `Meal requested: ${entry.dish ?? ''}`,
+        `Service day asked for: ${day}`,
+        `Plates: ${entry.plates ?? 1}`,
+        entry.notes ? `Notes: ${entry.notes}` : '',
+        `Reply to: ${entry.name ?? ''} · ${entry.phone ?? ''}${entry.email ? ` · ${entry.email}` : ''}`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      return postToInbox(endpoint, {
+        name: entry.name ?? '',
+        phone: entry.phone ?? '',
+        email: entry.email ?? '',
+        subject: `Meal quest — ${entry.dish ?? ''}`.slice(0, 120),
+        message: summary,
+        _subject: `Heritage Bites meal quest — ${entry.name ?? ''}`.slice(0, 120),
+        source: 'heritagebites.co.za/quest',
+      });
+    }
+    return request<{ ok: boolean; id: string; delivered: boolean }>('/api/quests', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 
   health: () => request<{ ok: boolean; paymentDriver: string; orders: number }>('/api/health'),
 

@@ -127,6 +127,38 @@ app.use((req, res, next) => {
   next();
 });
 
+/*
+ * CORS for the split deployment described in .env.example: the storefront on
+ * one origin (the GitHub Pages build, say) and this API on another. Without it
+ * the browser blocks the enquiry and order posts and the customer sees a
+ * network error, so the documented arrangement could never have worked.
+ *
+ * It is off unless an origin is listed in HB_ALLOWED_ORIGINS — no wildcard, so
+ * an unrelated site cannot post here and have its enquiries look like ours.
+ * Same-origin deployments (Express serving the built site itself) need nothing.
+ */
+const ALLOWED_ORIGINS = String(process.env.HB_ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = String(req.get('origin') ?? '').replace(/\/$/, '');
+  const allowed = Boolean(origin) && ALLOWED_ORIGINS.includes(origin);
+  if (allowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    res.setHeader('Access-Control-Max-Age', '600');
+  }
+  /* Preflight only exists for /api; every other path is served as-is. */
+  if (req.method === 'OPTIONS' && req.path.startsWith('/api')) {
+    return res.status(allowed ? 204 : 403).end();
+  }
+  return next();
+});
+
 app.use(express.json({ limit: '256kb' }));
 
 /* ---------------------------- Rate limits ------------------------------ */
