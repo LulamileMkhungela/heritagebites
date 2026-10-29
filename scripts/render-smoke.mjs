@@ -130,6 +130,37 @@ await check('basket control renders', async () => {
   if (!/Basket/.test(text())) throw new Error('basket button missing');
 });
 
+/*
+ * The footer is the page every route ends on, so its contact details have to be
+ * links rather than text: a customer reading the number on a phone expects to be
+ * able to tap it. The payment placeholder that used to sit here is gone, and the
+ * socials are placeholders until the real profiles exist.
+ */
+await check('footer contact details are tappable and the socials are placeholders', async () => {
+  const doc = window.document;
+  /* The basket drawer has its own <footer>, so find the page footer by content. */
+  const footer = [...doc.querySelectorAll('footer')].find((f) => f.querySelector('a[href^="tel:"]'));
+  if (!footer) throw new Error('the page footer has no tel: link');
+  const tel = footer.querySelector('a[href^="tel:"]');
+  const mailto = footer.querySelector('a[href^="mailto:"]');
+  if (tel.getAttribute('href') !== 'tel:+27670137587') {
+    throw new Error(`unexpected tel target: ${tel.getAttribute('href')}`);
+  }
+  if (!/\+27 67 013 7587/.test(tel.textContent ?? '')) throw new Error('the footer phone number text changed');
+  if (!mailto) throw new Error('the footer email is not a mailto: link');
+  if (mailto.getAttribute('href') !== 'mailto:heritagebitesfood@gmail.com') {
+    throw new Error(`unexpected mailto target: ${mailto.getAttribute('href')}`);
+  }
+  for (const label of ['Instagram', 'Facebook', 'TikTok']) {
+    const link = footer.querySelector(`a[aria-label="${label}"]`);
+    if (!link) throw new Error(`footer has no ${label} link`);
+    if (link.getAttribute('href') !== '#') throw new Error(`${label} should still be href="#"`);
+  }
+  if (/Card payments are processed by Yoco|never receives them/.test(text())) {
+    throw new Error('the removed payment placeholder is still on the page');
+  }
+});
+
 /* 4. Route sweep — mount each route fresh and assert it paints real content.
       A page that throws during render still returns HTTP 200, so this is the
       only thing that catches it. Create a throwaway unpaid order so the secure

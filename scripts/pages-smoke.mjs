@@ -151,14 +151,14 @@ await check('checkout is a preview that prices the basket without charging', asy
   if (/Place order|Pay now/i.test(body)) throw new Error('a live order button is still on the preview checkout');
 
   /*
-   * The exact complaint this guards against: on the preview, "Send the basket
-   * on WhatsApp" opened an empty chat, so the customer had to retype an order
+   * The exact complaint this guards against: on the preview, "Order this on
+   * WhatsApp" opened an empty chat, so the customer had to retype an order
    * the site already knew. The link must carry the basket itself.
    */
   const wa = await page.evaluate(() =>
     [...document.querySelectorAll('a[href^="https://wa.me/"]')]
       .map((a) => a.href)
-      .find((href) => /Send%20the%20basket|text=/.test(href)) ?? '',
+      .find((href) => /text=/.test(href)) ?? '',
   );
   if (!wa) throw new Error('the preview checkout has no WhatsApp basket link');
   const message = new URL(wa).searchParams.get('text') ?? '';

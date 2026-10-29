@@ -215,13 +215,65 @@ export function Field({
         {hint && !error && <span className="text-xs text-ink/45">{hint}</span>}
       </span>
       {children}
-      {error && <span className="mt-1 block text-[12px] font-medium text-chili">{error}</span>}
+      {/* Errors can quote the business's number (the "no inbox" notice), so the
+          text goes through ContactText and stays tappable in the message. */}
+      {error && (
+        <span className="mt-1 block text-[12px] font-medium text-chili">
+          <ContactText>{error}</ContactText>
+        </span>
+      )}
     </label>
   );
 }
 
 export const inputCls =
   'w-full rounded-xl border-2 border-ink/12 bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-ink/35 focus:border-ochre';
+
+/* --------------------------- Contact links ---------------------------- */
+
+/**
+ * The business's own number and address, as they appear inside a sentence.
+ *
+ * Kept deliberately narrow: this links the kitchen's real number and inbox and
+ * nothing else, because the same pages carry placeholder numbers ("e.g.
+ * 082 123 4567") that must stay plain text — a tap-to-dial link on an example
+ * number is a call to a stranger.
+ */
+const HB_PHONE = /(?:\+27|0)\s?67\s?013\s?7587/;
+const HB_EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]{2,}/;
+
+/**
+ * Render a sentence with the kitchen's phone number and email address as links.
+ *
+ * Used for copy this file does not hand-write — API error notices, policy notes,
+ * the service strip — so "+27 67 013 7587" is tappable wherever it appears. On a
+ * phone, a number a customer cannot tap is a dead end.
+ */
+export function ContactText({ children, className = '' }: { children: string; className?: string }) {
+  const parts = String(children ?? '').split(new RegExp(`(${HB_PHONE.source}|${HB_EMAIL.source})`, 'g'));
+
+  return (
+    <span className={className}>
+      {parts.map((part, index) => {
+        if (HB_PHONE.test(part)) {
+          return (
+            <a key={index} href={`tel:${part.replace(/[^\d+]/g, '')}`} className="font-semibold underline underline-offset-2">
+              {part}
+            </a>
+          );
+        }
+        if (HB_EMAIL.test(part)) {
+          return (
+            <a key={index} href={`mailto:${part}`} className="font-semibold underline underline-offset-2">
+              {part}
+            </a>
+          );
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </span>
+  );
+}
 
 /* --------------------------- Quantity stepper ------------------------- */
 

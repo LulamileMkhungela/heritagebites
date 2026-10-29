@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
-import { SectionLabel, Spinner } from '../components/ui';
+import { ContactText, SectionLabel, Spinner } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { asset } from '../lib/assets';
 
@@ -20,6 +20,7 @@ export default function Policies() {
   const [active, setActive] = useState('');
 
   const policies = catalog?.policies ?? [];
+  const settings = catalog?.settings;
 
   useEffect(() => {
     if (hash) setActive(hash.replace(/^#/, ''));
@@ -44,7 +45,13 @@ export default function Policies() {
 
       <div className="mx-auto max-w-7xl px-4 py-12">
         <div className="grid gap-8 lg:grid-cols-[16rem_1fr]">
-          <nav aria-label="Policies" className="lg:sticky lg:top-28 lg:self-start">
+          {/*
+            The sidebar holds two different things: the list of links (a <nav>)
+            and a help note that is not navigation, so the note sits outside the
+            nav — a <nav> is a landmark for links, not a coloured column.
+          */}
+          <div className="lg:sticky lg:top-28 lg:self-start">
+          <nav aria-label="Policies">
             <p className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">On this page</p>
             <ul className="space-y-1">
               {policies.map((p) => (
@@ -59,10 +66,15 @@ export default function Policies() {
                 </li>
               ))}
             </ul>
-            <p className="mt-4 rounded-xl border border-ink/10 bg-white p-3 text-xs leading-relaxed text-ink/50">
-              Questions about any of this? Call or WhatsApp +27 67 013 7587, or email heritagebitesfood@gmail.com.
-            </p>
           </nav>
+          {/* The number and the address are links here too: this note is the one
+              place a reader is most likely to act on them. */}
+          <p className="mt-4 rounded-xl border border-ink/10 bg-white p-3 text-xs leading-relaxed text-ink/50">
+            <ContactText>
+              {`Questions about any of this? Call or WhatsApp ${settings?.phoneDisplay ?? '+27 67 013 7587'}, or email ${settings?.email ?? 'heritagebitesfood@gmail.com'}.`}
+            </ContactText>
+          </p>
+          </div>
 
           <div className="space-y-8">
             {policies.map((policy) => (

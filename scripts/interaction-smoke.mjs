@@ -975,12 +975,23 @@ await step('a cash order can be placed with no card details at all', async () =>
    * and the collection choice — pre-typed into the message.
    */
   const waLink = [...s6.doc.querySelectorAll('a[href^="https://wa.me/"]')]
-    .find((a) => /Send this basket/i.test(a.textContent ?? ''));
+    .find((a) => /Order this on WhatsApp/i.test(a.textContent ?? ''));
   if (!waLink) throw new Error('checkout has no WhatsApp basket link');
   const waText = new URL(waLink.href).searchParams.get('text') ?? '';
   /* en-ZA writes the decimal as a comma: R200,00. */
   for (const wanted of [/Tshotlo Plate/, /2 ×/, /R200[,.]00/, /Total: R200[,.]00/, /Pap/, /Braised cabbage/]) {
     if (!wanted.test(waText)) throw new Error(`the WhatsApp message is missing the order data (${wanted}): ${waText.slice(0, 160)}`);
+  }
+  /*
+   * The closing line used to read "I will send it through", which read as if the
+   * customer still had a step left to take. It must now ask for a reply and
+   * nothing else.
+   */
+  if (!/Please reply here to confirm this order/.test(waText)) {
+    throw new Error(`the WhatsApp message does not close with the confirm-and-pay ask: ${waText.slice(-120)}`);
+  }
+  if (/I will send it through/.test(waText)) {
+    throw new Error('the WhatsApp message still asks the customer to send it through');
   }
 
   const submit = s6.byText('button[type="submit"]', /Place order/i)[0];

@@ -1,7 +1,7 @@
 /**
  * One place that turns a basket into a WhatsApp message.
  *
- * Why this exists: the checkout shipped a "Send the basket on WhatsApp" button
+ * Why this exists: the checkout shipped a "Send this basket on WhatsApp" button
  * whose link was just `https://wa.me/<number>` with no `text` parameter. WhatsApp
  * opened with an empty message box, so the customer had to retype the whole order
  * — and on the static preview build there is no checkout at all, which is exactly
@@ -73,8 +73,15 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
   if (fulfilment === 'delivery' && opts.customer?.address?.trim()) parts.push(`Address: ${opts.customer.address.trim()}`);
   if (opts.customer?.notes?.trim()) parts.push(`Notes: ${opts.customer.notes.trim()}`);
 
+  /*
+   * The message itself is the order, so it ends by asking for the two things
+   * the customer cannot do inside WhatsApp: have it confirmed, and know where
+   * to pay. It used to read "I will send it through", which sounded like the
+   * customer still owed the kitchen another form or a payment link — the one
+   * sentence in the message that raised a question instead of answering one.
+   */
   parts.push('');
-  parts.push('Please confirm this order and I will send it through.');
+  parts.push('Please reply here to confirm this order and let me know how to pay.');
 
   return parts.join('\n');
 }

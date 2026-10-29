@@ -4,7 +4,7 @@ import { useCart, toApiItems, cartSubtotal } from '../store/cart';
 import { useCatalog } from '../store/catalog';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { detectCardBrand, formatCardNumber, formatExpiry, luhnValid, normalisePhone, zar } from '../lib/format';
-import { Button, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
+import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { basketHref, waChatHref } from '../lib/whatsapp';
 
@@ -540,7 +540,7 @@ function LiveCheckout() {
 
                 {fatal && (
                   <p className="mt-3 rounded-xl border-2 border-chili bg-chili/10 p-3 text-[12px] font-medium text-chili" role="alert">
-                    {fatal}
+                    <ContactText>{fatal}</ContactText>
                   </p>
                 )}
                 {needsAction && (
@@ -586,7 +586,7 @@ function LiveCheckout() {
                 rel="noreferrer"
                 className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full bg-ochre px-4 py-2 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"
               >
-                Send this basket on WhatsApp
+                Order this on WhatsApp
               </a>
             </div>
           </Reveal>
@@ -658,7 +658,7 @@ function PreviewCheckout() {
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <LinkButton href={wa} variant="primary">
-            {lines.length ? 'Send the basket on WhatsApp' : 'Chat to us on WhatsApp'}
+            {lines.length ? 'Order this on WhatsApp' : 'Chat to us on WhatsApp'}
           </LinkButton>
           <LinkButton to="/menu" variant="outline">Back to the menu</LinkButton>
         </div>

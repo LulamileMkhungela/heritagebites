@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, STATIC_PREVIEW } from '../lib/api';
 import { zar } from '../lib/format';
-import { Button, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
+import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { normalisePhone } from '../lib/format';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { useCatalog } from '../store/catalog';
@@ -89,7 +89,11 @@ export default function Passport() {
         </Button>
       </form>
 
-      {error && <p className="mt-4 rounded-xl border-2 border-chili bg-chili/10 p-3 text-sm text-chili">{error}</p>}
+      {error && (
+        <p className="mt-4 rounded-xl border-2 border-chili bg-chili/10 p-3 text-sm text-chili">
+          <ContactText>{error}</ContactText>
+        </p>
+      )}
 
       {result && (
         <Reveal>
