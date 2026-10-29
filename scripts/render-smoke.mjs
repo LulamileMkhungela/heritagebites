@@ -146,7 +146,9 @@ await check('footer contact details are tappable and the socials are placeholder
   if (tel.getAttribute('href') !== 'tel:+27670137587') {
     throw new Error(`unexpected tel target: ${tel.getAttribute('href')}`);
   }
-  if (!/\+27 67 013 7587/.test(tel.textContent ?? '')) throw new Error('the footer phone number text changed');
+  /* The visible label is two words; the number lives in the target and the aria-label. */
+  if ((tel.textContent ?? '').trim() !== 'Call us') throw new Error(`the phone pill should read just "Call us", saw "${(tel.textContent ?? '').trim()}"`);
+  if (!/\+27 67 013 7587/.test(tel.getAttribute('aria-label') ?? '')) throw new Error('the phone pill has no readable number for screen readers');
   if (!mailto) throw new Error('the footer email is not a mailto: link');
   if (mailto.getAttribute('href') !== 'mailto:heritagebitesfood@gmail.com') {
     throw new Error(`unexpected mailto target: ${mailto.getAttribute('href')}`);
@@ -176,9 +178,14 @@ await check('footer contact details are tappable and the socials are placeholder
   }
 
   /* The contact pills say what the tap will do. */
-  if (!/Call us/.test(tel.textContent ?? '')) throw new Error('the phone pill does not say "Call us"');
-  if (!/Email us/.test(mailto.textContent ?? '')) throw new Error('the email pill does not say "Email us"');
-  if (!/\+27 67 013 7587/.test(tel.textContent ?? '')) throw new Error('the phone number is no longer shown');
+  /*
+   * The owner's wording: the pills are exactly "Call us" and "Email us" — the
+   * number and the address must not be printed beside them, only dialled or
+   * drafted. The aria-labels still name them for a screen reader.
+   */
+  if ((mailto.textContent ?? '').trim() !== 'Email us') throw new Error(`the email pill should read just "Email us", saw "${(mailto.textContent ?? '').trim()}"`);
+  if (!/heritagebitesfood@gmail\.com/.test(mailto.getAttribute('aria-label') ?? '')) throw new Error('the email pill has no readable address for screen readers');
+  if (/heritagebitesfood@gmail\.com/.test(footer.textContent ?? '')) throw new Error('the email address is still printed in the footer');
 
   /* "© 2026 Heritage Bites. All Rights Reserved. · Est. 2025" */
   if (!/© \d{4} Heritage Bites\. All Rights Reserved\. · Est\. 2025/.test(text())) {

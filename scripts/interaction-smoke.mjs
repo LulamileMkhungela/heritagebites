@@ -433,12 +433,12 @@ await step('scrolling to a meal category highlights its sticky category chip', a
   return 'Contemporary Plates is selected when its section is in view';
 });
 
-await step('the menu can be sorted by price and filtered', async () => {
+await step('the menu can be sorted by price, with no filter chips', async () => {
   /*
-   * Price order is the first thing people look for on a food menu, and the
-   * filters answer the other real questions: is it hot, can I eat for R100, and
-   * what can I order today. Read the rendered prices back off the cards, so this
-   * checks what a customer sees rather than the state behind it.
+   * Price order is the first thing people look for on a food menu. The prices
+   * are read back off the rendered cards, so this checks what a customer sees
+   * rather than the state behind it — including that the category sections are
+   * reordered, not just the plates inside them.
    */
   const sorter = [...arch.doc.querySelectorAll('select')].find((el) => /sort/i.test(el.getAttribute('aria-label') ?? ''));
   if (!sorter) throw new Error('the menu has no sort control');
@@ -461,23 +461,16 @@ await step('the menu can be sorted by price and filtered', async () => {
   const low = cardPrices();
   if (low[0] > low[low.length - 1]) throw new Error(`price: low to high is not ascending: ${low.slice(0, 4)}`);
 
-  /* "R100 or less" must not leave the R130 plates on the page. */
-  const budget = arch.byText('button', /R100 or less/i)[0];
-  if (!budget) throw new Error('no R100 or less filter');
-  arch.click(budget);
-  await sleep(350);
-  const afterFilter = cardPrices();
-  if (afterFilter.some((price) => price > 100)) throw new Error(`the R100 filter left a dearer plate in: ${afterFilter}`);
-  if (arch.doc.querySelector('[data-sellable]') && !afterFilter.length) throw new Error('the filter emptied every section');
+  /*
+   * The filter chips the owner asked for and then asked to drop ("Spicy",
+   * "R100 or less", "Available today") must not creep back: this menu is small
+   * enough that hiding plates costs more than it saves.
+   */
+  for (const label of [/R100 or less/i, /^Spicy$/i, /Available today/i, /Clear filters/i]) {
+    if (arch.byText('button', label)[0]) throw new Error(`a removed filter chip is back: ${label}`);
+  }
 
-  /* And clearing it puts the whole menu back. */
-  const clear = arch.byText('button', /clear filters/i)[0];
-  if (!clear) throw new Error('no way to clear the filters');
-  arch.click(clear);
-  await sleep(300);
-  if (cardPrices().length <= afterFilter.length) throw new Error('clearing the filter did not restore the menu');
-
-  return `${high.length} plates sorted both ways and filtered`;
+  return `${high.length} plates sorted both ways, no filter chips`;
 });
 
 await step('clicking a dish opens its detail sheet with the heritage story', async () => {

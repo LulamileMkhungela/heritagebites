@@ -10,22 +10,14 @@ import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { asset } from '../lib/assets';
 
 /*
- * Menu filters and sorts.
+ * Menu sorting.
  *
- * The two plate tiers sit close together in price (R100 and R130), so price is
- * not a great way to narrow the menu — but it is the first thing people look
- * for on a food site, and "cheapest first" is a fair question to ask of a menu.
- * The filters answer the other questions customers actually ask: is it hot, can
- * I eat for R100, and what can I order today rather than pre-order.
- *
- * Filters combine (spicy + R100 or less is allowed); the sort only reorders.
+ * The chips that used to sit here ("Spicy", "R100 or less", "Available today")
+ * are gone — the owner did not want the menu filtered down, and with two plate
+ * tiers and eight plates a filter hides more than it helps. Price order stays,
+ * because "what can I get for the least" is a fair question to ask of a menu,
+ * and the ordered sections make the answer the actual first plate on the page.
  */
-const FILTERS = [
-  { id: 'spicy', label: 'Spicy', test: (item: MenuItem) => item.spice >= 2 },
-  { id: 'budget', label: 'R100 or less', test: (item: MenuItem) => item.price <= 100 },
-  { id: 'available', label: 'Available today', test: (item: MenuItem) => item.available !== false },
-] as const;
-
 const SORTS = [
   { id: 'recommended', label: 'Recommended' },
   { id: 'price-asc', label: 'Price: low to high' },
@@ -57,7 +49,6 @@ export default function MenuPage() {
   const [params, setParams] = useSearchParams();
   const [modal, setModal] = useState<MenuItem | null>(null);
   const [activeCategory, setActiveCategory] = useState('');
-  const [filters, setFilters] = useState<ReadonlySet<string>>(new Set());
   const [sort, setSort] = useState<SortId>('recommended');
   const [q, setQ] = useState('');
   const [builder, setBuilder] = useState<PlateMenu | null>(null);
@@ -132,10 +123,6 @@ export default function MenuPage() {
     const live: Section[] = catalog.categories
       .map((category) => {
         let items = catalog.menu.filter((item) => item.category === category.id);
-        for (const id of filters) {
-          const rule = FILTERS.find((f) => f.id === id);
-          if (rule) items = items.filter(rule.test);
-        }
         if (term) {
           items = items.filter((item) =>
             `${item.name} ${item.localName} ${item.language} ${item.description}`.toLowerCase().includes(term),
@@ -167,23 +154,19 @@ export default function MenuPage() {
     }
 
     /*
-     * Spicy is a property of a sellable dish, so it hides the archive rather
-     * than leaving sections that silently ignore the filter. A search term does
-     * reach the archive — someone typing "kota" should find the card that says
-     * it is coming, not an empty page.
+     * A search term reaches the archive too — someone typing "kota" should find
+     * the card that says it is coming, not an empty page.
      */
-    const archive: Section[] = filters.size > 0
-      ? []
-      : (catalog.comingSoon ?? [])
-          .map((category) => {
-            let items = category.items;
-            if (term) items = items.filter((item) => item.name.toLowerCase().includes(term));
-            return { id: category.id, name: category.name, tagline: category.tagline, blurb: category.blurb, archived: true as const, items };
-          })
-          .filter((section) => section.items.length > 0);
+    const archive: Section[] = (catalog.comingSoon ?? [])
+      .map((category) => {
+        let items = category.items;
+        if (term) items = items.filter((item) => item.name.toLowerCase().includes(term));
+        return { id: category.id, name: category.name, tagline: category.tagline, blurb: category.blurb, archived: true as const, items };
+      })
+      .filter((section) => section.items.length > 0);
 
     return [...live, ...archive];
-  }, [catalog, filters, sort, q]);
+  }, [catalog, sort, q]);
 
   const lastArchived = [...sections].reverse().find((section) => section.archived);
 
@@ -193,10 +176,10 @@ export default function MenuPage() {
     }
   }, [sections, activeCategory]);
 
-  /* A search or a filter must never land inside a folded section. */
+  /* A search must never land inside a folded section. */
   useEffect(() => {
     setClosed({});
-  }, [q, filters]);
+  }, [q]);
 
   /* Keep the category chip in step with the section passing through the viewport. */
   useEffect(() => {
@@ -312,40 +295,9 @@ export default function MenuPage() {
             ))}
           </nav>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {FILTERS.map((item) => {
-              const active = filters.has(item.id);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() =>
-                    setFilters((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(item.id)) next.delete(item.id);
-                      else next.add(item.id);
-                      return next;
-                    })
-                  }
-                  aria-pressed={active}
-                  className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${active ? 'bg-ink text-bone' : 'border border-ink/15 text-ink/60 hover:border-ink/40'}`}
-                >
-                  {item.label}
-                  {active && <span aria-hidden="true" className="text-ochre">×</span>}
-                </button>
-              );
-            })}
-            {filters.size > 0 && (
-              <button
-                type="button"
-                onClick={() => setFilters(new Set())}
-                className="inline-flex min-h-11 items-center px-2 py-1.5 text-xs font-semibold text-ochre-deep underline"
-              >
-                Clear filters
-              </button>
-            )}
-            {/* Sort is a menu, not a chip row: four options with long labels do
-                not fit beside the filters on a phone. */}
-            <label className="ml-auto flex min-h-11 items-center gap-2 text-xs text-ink/55">
+            {/* Sort sits on this line beside the search box: it is the only
+                control left here now that the filter chips are gone. */}
+            <label className="flex min-h-11 items-center gap-2 text-xs text-ink/55">
               <span className="sr-only">Sort meals</span>
               <span aria-hidden="true" className="hidden uppercase tracking-wide sm:inline">Sort</span>
               <select
@@ -374,8 +326,8 @@ export default function MenuPage() {
         {sections.length === 0 ? (
           <div className="rounded-3xl border-2 border-dashed border-ink/20 p-12 text-center">
             <p className="font-display text-2xl">No meals match that search</p>
-            <p className="mt-2 text-sm text-ink/55">Try a different word or clear the filters.</p>
-            <Button className="mt-5" variant="outline" onClick={() => { setFilters(new Set()); setQ(''); }}>Show all meals</Button>
+            <p className="mt-2 text-sm text-ink/55">Try a different word.</p>
+            <Button className="mt-5" variant="outline" onClick={() => setQ('')}>Show all meals</Button>
           </div>
         ) : sections.map((section) => {
           const open = !closed[section.id];

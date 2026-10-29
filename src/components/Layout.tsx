@@ -341,9 +341,13 @@ function Footer() {
             South African plates cooked with care, Thursdays and Fridays. Order online for collection or delivery in Rosebank and Sandton.
           </p>
           {/*
-            The number and the address are the buttons: "Call us" and "Email"
-            hid the one thing a customer copies or taps. Both are links, so a
-            phone offers to dial and a mail client opens a draft.
+            Two words each, on purpose: "Call us" and "Email us" are the whole
+            label, and the number and address live in the link target rather
+            than in the pill. A customer reading the footer sees two obvious
+            actions instead of a line of digits to copy by hand.
+
+            The screen-reader label still names the number and the address, so
+            nothing is lost for someone who cannot see that "Call us" dials.
           */}
           <div className="mt-5 flex flex-wrap gap-2">
             <a
@@ -354,8 +358,7 @@ function Footer() {
               <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
               </svg>
-              <span>Call us</span>
-              <span className="font-mono text-xs font-normal text-bone/60">{s?.phoneDisplay ?? '+27 67 013 7587'}</span>
+              Call us
             </a>
             <a
               href={wa}
@@ -377,8 +380,7 @@ function Footer() {
                 <rect x="2.5" y="4.5" width="19" height="15" rx="2" />
                 <path d="m3 6 9 7 9-7" />
               </svg>
-              <span>Email us</span>
-              <span className="hidden font-mono text-xs font-normal text-bone/60 sm:inline">{s?.email ?? 'heritagebitesfood@gmail.com'}</span>
+              Email us
             </a>
           </div>
           {/*
