@@ -104,7 +104,7 @@ export async function checkPush(): Promise<PushState> {
   /* Deliberately not "when your order is ready": no status workflow advances an
      order in this build, so that promise could not be kept. What can be promised is
      a confirmation now and an alert if the order is cancelled. */
-  return { status: 'idle', message: 'Confirm this order on this device, and get an alert here if it changes.' };
+  return { status: 'idle', message: 'Turn alerts on for this order on this device — you will get one here if the kitchen cancels it.' };
 }
 
 /**
@@ -146,7 +146,7 @@ export async function subscribeToOrder(code: string, token: string): Promise<Pus
     return { status: 'blocked', message: 'We could not reach the kitchen to turn alerts on. Try again in a moment.' };
   }
 
-  return { status: 'subscribed', message: 'Alerts are on for this device. We will tell you when this order changes.' };
+  return { status: 'subscribed', message: 'Alerts are on for this device. You will get one here if the kitchen cancels this order.' };
 }
 
 /** Enrol this device as an owner device, using the key the host holds. */

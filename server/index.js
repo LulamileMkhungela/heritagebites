@@ -13,11 +13,11 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { store, has } from './lib/store.js';
-import { chargeCard, paymentDriver, paymentConfig, verifyYocoCheckout } from './lib/payments.js';
+import { paymentConfig, paymentDriver, paymentWarnings, readYocoEvent, startYocoPayment, verifyYocoWebhook, yocoMode } from './lib/payments.js';
 import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents, orderCode, loyaltyPointsFor } from './lib/pricing.js';
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
-import { enqueueOrderAlert, notifyStatus, startOrderNotificationWorker } from './lib/order-notifications.js';
+import { customerEmailConfig, emailConfig, enqueueOrderAlert, notifyStatus, publicBaseUrl, startOrderNotificationWorker } from './lib/order-notifications.js';
 import {
   confirmOrderSubscription,
   notifyOrderDevices,
@@ -28,7 +28,7 @@ import {
   removeSubscription,
   saveSubscription,
 } from './lib/web-push.js';
-import { deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
+import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
 import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
 
@@ -159,7 +159,18 @@ app.use((req, res, next) => {
   return next();
 });
 
-app.use(express.json({ limit: '256kb' }));
+/*
+ * The raw body is kept for webhook signature checks. Yoco signs the exact bytes
+ * it sent, so re-serialising the parsed JSON would never match.
+ */
+app.use(
+  express.json({
+    limit: '256kb',
+    verify: (req, _res, buf) => {
+      if (req.path.startsWith('/api/payments/')) req.rawBody = buf.toString('utf8');
+    },
+  }),
+);
 
 /* ---------------------------- Rate limits ------------------------------ */
 /*
@@ -389,7 +400,17 @@ function publicOrder(order) {
     receiptState: receipt.state,
     items: order.items,
     totals: order.totals,
-    payment: { method: order.payment.method, status: order.payment.status, reference: order.payment.reference, last4: order.payment.last4, brand: order.payment.brand },
+    payment: {
+      method: order.payment.method,
+      status: order.payment.status,
+      reference: order.payment.reference,
+      last4: order.payment.last4,
+      brand: order.payment.brand,
+      /** 'yoco' for online orders; null when nothing was processed online. */
+      driver: order.payment.driver ?? null,
+      /* Kept so an order left mid-payment can be resumed from its own page. */
+      redirectUrl: order.payment.redirectUrl ?? null,
+    },
     discountCode: order.discountCode ?? null,
     timeline: buildTimeline(order),
     whatsapp: order.whatsapp,
@@ -568,6 +589,19 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
     service: serviceStatus(settings),
     payments: paymentConfig(),
     contact: { inboxConfigured: contactEndpoint() !== null },
+    /*
+     * Which automatic channels are actually live, as booleans.
+     *
+     * The checkout used to promise "we email your receipt as soon as the order
+     * is placed" unconditionally. That is only true when SMTP is configured —
+     * without it no receipt is sent and the customer waits for an email that
+     * never arrives. The page needs to know, so it can say what will really
+     * happen instead of what the copy hopes will happen.
+     */
+    notifications: {
+      customerEmail: Boolean(customerEmailConfig()),
+      ownerEmail: Boolean(emailConfig()),
+    },
     today: todayDay(),
   });
 });
@@ -609,13 +643,24 @@ app.post('/api/quote', LIMITS.quote, (req, res) => {
 /*
  * Cash on collection is the only cash option the business confirmed: it is a
  * shadow kitchen, so there is no counter to pay at and no cash-on-delivery
- * arrangement. Card is the only online method.
+ * arrangement. Everything else is paid online through Yoco.
+ *
+ * `card` is kept as the stored method name so existing orders still read
+ * correctly, but nothing about a card is collected here any more — the customer
+ * is sent to Yoco's hosted page, and a verified webhook is what marks the order
+ * paid.
  */
 const PAYMENT_METHODS = ['card', 'cash-on-collection'];
 
-/** Card details are only ever posted to this API by the offline sandbox form. */
+/**
+ * Card details must never arrive on this API.
+ *
+ * The checkout has no card fields any more, so anything carrying a number, an
+ * expiry or a `token` is either a stale client or an attempt to move this site
+ * into PCI scope. Refused loudly rather than silently ignored.
+ */
 function cardFieldsSent(payment) {
-  return Boolean(payment?.card || payment?.token);
+  return Boolean(payment?.card?.number || payment?.card?.cvc || payment?.token);
 }
 
 app.post('/api/orders', LIMITS.order, async (req, res) => {
@@ -641,8 +686,26 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
      * The delivery boundary is enforced, not just described. A Rosebank/Sandton
      * kitchen cannot promise a delivery to Pretoria, so the order is refused
      * with a route to collection rather than accepted and cancelled later.
+     *
+     * The typed address is checked against the area the customer *selected*,
+     * not merged with it. Matching the whole string used to answer "which area
+     * is this" by first match, so an address that said Rosebank was silently
+     * relabelled to Rosebank while the customer believed they had chosen
+     * Sandton — a delivery outside the boundary they thought they were inside.
      */
-    const area = deliveryAreaFor(`${customer.suburb ?? ''} ${customer.address}`, get('settings'));
+    const chosen = String(customer.suburb ?? '').trim();
+    const named = areasNamedIn(customer.address, get('settings'));
+    if (chosen && named.length && !named.some((area) => area.toLowerCase() === chosen.toLowerCase())) {
+      return res.status(422).json({
+        errors: [
+          `That address is in ${named.join(' and ')}, but you chose ${chosen}. Change the delivery area, or give us a ${chosen} address.`,
+        ],
+        deliveryAreas: get('settings')?.deliveryAreas ?? [],
+      });
+    }
+    /* The address itself decides where the food goes; the select only breaks a tie
+       when the address carries no suburb at all (plenty of real ones do not). */
+    const area = deliveryAreaFor(customer.address, get('settings')) ?? deliveryAreaFor(chosen, get('settings'));
     if (!area) {
       return res.status(422).json({
         errors: [`We deliver in ${deliveryAreasLabel(get('settings'))} only. Choose collection, or contact us on WhatsApp to arrange something else.`],
@@ -681,50 +744,26 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
     });
   }
 
-  let chargeResult = null;
-
+  /*
+   * Online payment: nothing is charged here.
+   *
+   * The customer leaves for Yoco's hosted page, so the only thing this route can
+   * do is refuse when no payment destination is configured (better than sending
+   * someone to a dead link) and refuse card details posted to the API.
+   */
   if (payment.method === 'card') {
-    /*
-     * Live Yoco: the card is entered in Yoco's hosted window and the browser
-     * posts back a checkout id. We verify that checkout with Yoco, including
-     * the amount, before the order is created — a client-supplied "paid" flag
-     * is never trusted.
-     *
-     * Sandbox: no YOCO_SECRET_KEY means no real money is involved, so the
-     * offline test-card form is used instead.
-     */
-    if (paymentConfig().hostedCheckout) {
-      if (cardFieldsSent(payment)) {
-        return res.status(422).json({
-          errors: ['Please enter card details in the secure Yoco payment window. This site never receives card numbers.'],
-          code: 'hosted_checkout_required',
-        });
-      }
-      chargeResult = await verifyYocoCheckout({
-        checkoutId: payment.checkoutId,
-        amountCents: totals.totalCents,
-        currency: totals.currency,
-      });
-    } else {
-      chargeResult = await chargeCard({
-        amount: totals.total,
-        currency: totals.currency,
-        description: `Heritage Bites order (${lines.length} items)`,
-        card: payment.card,
+    if (cardFieldsSent(payment)) {
+      return res.status(422).json({
+        errors: ['Please pay on Yoco\'s secure page. This site never receives card numbers.'],
+        code: 'card_details_refused',
       });
     }
-
-    if (chargeResult.status !== 'approved') {
-      const status = chargeResult.status === 'invalid' ? 422 : chargeResult.status === 'requires_action' ? 409 : 402;
-      const requiresAction = chargeResult.status === 'requires_action';
-      return res.status(status).json({
-        errors: [chargeResult.message || 'Payment could not be completed.'],
-        code: chargeResult.code,
-        requiresAction,
-        // A card needing 3-D Secure is not a decline — the customer can still
-        // finish. Yoco hands back the issuer's challenge URL; without it the
-        // customer hits a dead end and the order can never be paid for.
-        ...(requiresAction && chargeResult.redirectUrl ? { redirectUrl: chargeResult.redirectUrl } : {}),
+    if (!yocoMode()) {
+      return res.status(503).json({
+        errors: [
+          'Online payment is not switched on for this site yet. Please order on WhatsApp, or choose collection and pay cash.',
+        ],
+        code: 'payment_not_configured',
       });
     }
   }
@@ -753,12 +792,20 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
     totals,
     payment: {
       method: payment.method,
-      status: chargeResult ? 'approved' : 'pending',
-      reference: chargeResult?.id ?? 'CASH',
-      last4: chargeResult?.last4 ?? null,
-      brand: chargeResult?.brand ?? null,
-      riskScore: chargeResult?.riskScore ?? null,
-      driver: chargeResult?.driver ?? null,
+      /*
+       * `awaiting_payment` is the honest state for an online order: the customer
+       * is on Yoco's page and the money has not arrived yet. Only a verified
+       * webhook moves this to `approved` — a return URL is something a customer
+       * can type, so it cannot be evidence of payment.
+       */
+      status: payment.method === 'card' ? 'awaiting_payment' : 'pending',
+      reference: payment.method === 'card' ? null : 'CASH',
+      last4: null,
+      brand: null,
+      riskScore: null,
+      driver: payment.method === 'card' ? 'yoco' : null,
+      /** Where to send the customer to pay. Also kept so the order page can retry. */
+      redirectUrl: null,
     },
     discountCode: discount.ok ? discount.applied.code : null,
     /*
@@ -771,7 +818,37 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
     timeline: [],
   };
 
-  appendTimeline(order, 'pending', chargeResult ? `Card approved (**** ${chargeResult.last4})` : `Payment method: ${payment.method}`);
+  /*
+   * Hand the customer to Yoco before the order is saved.
+   *
+   * If Yoco will not start a payment there is no point keeping a half-order the
+   * kitchen would cook and the customer could not pay for, so the request fails
+   * and nothing is stored. The sequence number is consumed, which costs nothing.
+   */
+  if (payment.method === 'card') {
+    const started = await startYocoPayment({
+      amountCents: totals.totalCents,
+      currency: totals.currency,
+      orderCode: order.code,
+      trackingToken,
+      baseUrl: publicBaseUrl(),
+      description: `Heritage Bites order ${order.code}`,
+    });
+    if (!started.ok) {
+      return res.status(502).json({
+        errors: [started.message],
+        code: started.code,
+        /* The customer can still be paid-up another way; say so. */
+        fallback: { whatsapp: true, cashOnCollection: fulfilment === 'collection' },
+      });
+    }
+    order.payment.redirectUrl = started.redirectUrl;
+    order.payment.reference = started.reference;
+    order.payment.mode = started.mode;
+    appendTimeline(order, 'pending', `Payment started on Yoco (${order.code})`);
+  } else {
+    appendTimeline(order, 'pending', 'Payment method: cash on collection');
+  }
 
   const settings = get('settings');
   order.whatsapp = whatsappLink(
@@ -825,7 +902,84 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   set('stamps', stamps);
 
   res.set('Cache-Control', 'private, no-store');
-  res.status(201).json({ order: publicOrder(order), loyalty: next, trackingToken });
+  res.status(201).json({
+    order: publicOrder(order),
+    loyalty: next,
+    trackingToken,
+    /* Present for online orders: the browser sends the customer here. */
+    ...(order.payment.redirectUrl ? { payment: { provider: 'yoco', redirectUrl: order.payment.redirectUrl } } : {}),
+  });
+});
+
+/* --------------------------- Payment webhooks -------------------------- */
+
+/*
+ * Yoco tells this site when money arrived. This endpoint is the only path that
+ * can mark an order paid, and only for a request Yoco signed.
+ *
+ * Why not the browser: a return URL is just a URL. Anyone can open
+ * /order/HB-1042?paid=1, and a site that believed it would hand out free food.
+ */
+app.post('/api/payments/yoco/webhook', (req, res) => {
+  const verified = verifyYocoWebhook({ rawBody: req.rawBody, headers: req.headers });
+  if (!verified.ok) {
+    /* Logged loudly: a 401 here means someone is posting fake payments, and a
+       503 means the business forgot the webhook secret and no order can ever be
+       marked paid automatically. */
+    console.error(`[payments] rejected Yoco webhook (${verified.code}): ${verified.message}`);
+    return res.status(verified.status).json({ ok: false, code: verified.code, error: verified.message });
+  }
+
+  const event = readYocoEvent(verified.event);
+  if (!event.paid) return res.json({ ok: true, ignored: event.type || 'not-a-payment' });
+
+  if (!event.orderCode) {
+    console.error('[payments] Yoco payment succeeded with no orderCode in metadata — nothing to match it to.');
+    return res.status(202).json({ ok: true, matched: false });
+  }
+
+  const orders = get('orders');
+  const index = orders.findIndex((o) => o.code.toLowerCase() === event.orderCode.toLowerCase());
+  if (index === -1) {
+    /* Not an error as far as Yoco is concerned: retrying will not create it. */
+    console.error(`[payments] Yoco paid for ${event.orderCode}, which is not an order on this site.`);
+    return res.status(202).json({ ok: true, matched: false });
+  }
+
+  const order = orders[index];
+  /* Webhooks are delivered at least once; a second one must not double-notify. */
+  if (order.payment?.status === 'approved') return res.json({ ok: true, matched: true, duplicate: true });
+
+  order.payment = {
+    ...order.payment,
+    status: 'approved',
+    reference: event.reference ?? order.payment?.reference ?? null,
+    last4: event.last4 ?? null,
+    brand: event.brand ?? null,
+    paidAt: new Date().toISOString(),
+  };
+  order.updatedAt = new Date().toISOString();
+  appendTimeline(order, order.status, `Payment received (Yoco${event.last4 ? ` **** ${event.last4}` : ''})`);
+
+  const next = [...orders];
+  next[index] = order;
+  set('orders', next);
+
+  /* The kitchen already has the ticket; this is the “and it is paid” follow-up. */
+  void notifyOwnerDevices(order).catch(() => {});
+  try {
+    enqueueOrderAlert(order, {});
+  } catch (error) {
+    console.error(`[payments] paid order ${order.code} could not be emailed: ${String(error?.message ?? error).slice(0, 200)}`);
+  }
+
+  res.json({ ok: true, matched: true });
+});
+
+/* What the checkout and /api/health need to know about payments. */
+app.get('/api/payments/config', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ...paymentConfig(), webhook: Boolean(process.env.HB_YOCO_WEBHOOK_SECRET) });
 });
 
 app.get('/api/orders/:code', LIMITS.orderRead, (req, res) => {
@@ -1110,5 +1264,11 @@ if (process.env.NODE_ENV !== 'test') {
   // Bound to 0.0.0.0 so the sandbox preview host can reach this process.
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[heritagebites api] listening on http://0.0.0.0:${PORT} (payments: ${paymentDriver()})`);
+    /*
+     * Say the payment problems out loud at boot. A missing webhook secret or a
+     * payment link that does not exist is invisible until the first customer
+     * meets it, and by then the order has already been handed over.
+     */
+    for (const warning of paymentWarnings()) console.warn(`[payments] ${warning}`);
   });
 }

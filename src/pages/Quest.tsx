@@ -231,7 +231,7 @@ export default function Quest() {
                   </p>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Your name *" error={errors.name}>
+                    <Field label="Your name" required error={errors.name}>
                       <input
                         className={inputCls}
                         value={form.name}

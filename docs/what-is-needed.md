@@ -13,7 +13,7 @@ What is not yet live is operational, not cosmetic. In order:
 ## Before taking live orders
 
 1. **Order email alert.** Set the Gmail App Password and related values from `.env.example` in the host's secret settings. Until then orders are saved and their alerts queue as `waiting_config`.
-2. **Live card payments.** Set `YOCO_SECRET_KEY` and `YOCO_PUBLIC_KEY` from the live Yoco merchant account. Step-by-step in [`production-payments-yoco.md`](production-payments-yoco.md). Until then checkout is in sandbox test-card mode.
+2. **Live card payments.** There is no card form any more: the customer pays on Yoco's own page and a signed webhook marks the order paid. Send either a Yoco **payment link** (`HB_YOCO_PAYMENT_URL`) or the **secret key** (`HB_YOCO_SECRET_KEY`), plus the **webhook signing secret** (`HB_YOCO_WEBHOOK_SECRET`). Step-by-step in [`production-payments-yoco.md`](production-payments-yoco.md). Until then the checkout says online payment is not switched on and offers WhatsApp or cash on collection.
 3. **Contact inbox.** The Formspree endpoint is wired and each submission is saved locally as well. Confirm which address it delivers to and who replies.
 4. **Staff order workflow.** There is no staff console. The email alert is a summary, not a queue: nobody can accept, update, complete or cancel a ticket from the site. Someone must watch the inbox during the service window and confirm timing with the customer. Either accept that manual process formally, or commission a small protected order queue.
 5. **Collection point.** The exact Standard Bank Rosebank/Sandton point is still to be confirmed. The site currently says so honestly instead of publishing a guessed address.

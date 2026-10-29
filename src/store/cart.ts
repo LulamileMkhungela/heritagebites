@@ -32,16 +32,25 @@ export const useCart = create<CartState>()(
       fulfilment: 'collection',
       open: false,
 
+      /*
+       * Adding never opens the drawer.
+       *
+       * It used to: every "Add to basket" slid a panel over the menu, so a
+       * customer ordering three plates was interrupted three times and had to
+       * close the basket to get back to the food. The basket bar at the bottom
+       * of the screen now carries the running total instead, and the drawer is
+       * opened deliberately — from that bar, or the header.
+       */
       add: (line) =>
         set((s) => {
           const existing = s.lines.find((l) => l.key === line.key);
           const lines = existing
             ? s.lines.map((l) => (l.key === line.key ? { ...l, qty: Math.min(99, l.qty + line.qty) } : l))
             : [...s.lines, line];
-          return { lines, open: true };
+          return { lines };
         }),
 
-      addPlate: (line) => set((s) => ({ lines: [...s.lines, line], open: true })),
+      addPlate: (line) => set((s) => ({ lines: [...s.lines, line] })),
 
       setQty: (key, qty) =>
         set((s) => ({

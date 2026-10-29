@@ -1,104 +1,16 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { luhnValid, detectBrand, expiryValid, chargeCard, SANDBOX_CARDS, paymentDriver, paymentConfig } from './payments.js';
 import { orderCode, loyaltyPointsFor, applyDiscountCode, deliveryFeeCents, computeTotals, toCents, fromCents } from './pricing.js';
 import { canTransition, customerCanCancel, nextStatuses, buildTimeline, ORDER_FLOW } from './orders.js';
 import { buildWhatsAppMessage, whatsappLink } from './notify.js';
 
-/* ----------------------------- Payments ------------------------------- */
-
-describe('card validation', () => {
-  test('accepts valid Luhn numbers', () => {
-    assert.equal(luhnValid('4242 4242 4242 4242'), true);
-    assert.equal(luhnValid('5555555555554444'), true);
-    assert.equal(luhnValid('378282246310005'), true);
-  });
-
-  test('rejects numbers that fail the checksum or are too short', () => {
-    assert.equal(luhnValid('4242424242424241'), false);
-    assert.equal(luhnValid('1234567812345678'), false);
-    assert.equal(luhnValid('424242'), false);
-    assert.equal(luhnValid(''), false);
-    assert.equal(luhnValid(null), false);
-  });
-
-  test('detects brands', () => {
-    assert.equal(detectBrand('4242424242424242'), 'visa');
-    assert.equal(detectBrand('5555555555554444'), 'mastercard');
-    assert.equal(detectBrand('2223000010181375'), 'mastercard');
-    assert.equal(detectBrand('378282246310005'), 'amex');
-    assert.equal(detectBrand('9999999999999999'), 'unknown');
-  });
-
-  test('expiry must be a real month in the future', () => {
-    const now = new Date('2026-10-16T00:00:00Z');
-    assert.equal(expiryValid('12/30', now), true);
-    assert.equal(expiryValid('10/26', now), true); // current month is still valid
-    assert.equal(expiryValid('09/26', now), false);
-    assert.equal(expiryValid('13/30', now), false);
-    assert.equal(expiryValid('1230', now), false);
-  });
-});
-
-describe('chargeCard', () => {
-  const card = (number) => ({ number, expiry: '12/32', cvc: '123', holder: 'Test User' });
-
-  test('approves a valid sandbox card and returns masked details only', async () => {
-    const r = await chargeCard({ amount: 140, card: card(SANDBOX_CARDS.approvedVisa) });
-    assert.equal(r.status, 'approved');
-    assert.equal(r.last4, '4242');
-    assert.equal(r.brand, 'visa');
-    assert.ok(r.authCode);
-    assert.equal(r.amount, 140);
-    assert.equal(r.number, undefined, 'full PAN must never be echoed back');
-  });
-
-  test('declines the declined test card', async () => {
-    const r = await chargeCard({ amount: 140, card: card(SANDBOX_CARDS.declined) });
-    assert.equal(r.status, 'declined');
-    assert.equal(r.code, 'card_declined');
-  });
-
-  test('flags 3-D Secure', async () => {
-    const r = await chargeCard({ amount: 140, card: card(SANDBOX_CARDS.requires3ds) });
-    assert.equal(r.status, 'requires_action');
-  });
-
-  test('rejects bad input before talking to a gateway', async () => {
-    assert.equal((await chargeCard({ amount: 0, card: card(SANDBOX_CARDS.approvedVisa) })).status, 'invalid');
-    assert.equal((await chargeCard({ amount: 10, card: card('4242424242424241') })).code, 'invalid_number');
-    assert.equal((await chargeCard({ amount: 10, card: { number: SANDBOX_CARDS.approvedVisa, expiry: '01/20', cvc: '123' } })).code, 'invalid_expiry');
-    assert.equal((await chargeCard({ amount: 10, card: { number: SANDBOX_CARDS.approvedVisa, expiry: '12/32', cvc: '1' } })).code, 'invalid_cvc');
-  });
-
-  test('defaults to the sandbox driver without YOCO_SECRET_KEY', () => {
-    assert.equal(paymentDriver(), 'sandbox');
-    assert.equal(paymentConfig().hostedCheckout, false);
-    assert.equal(paymentConfig().cashOnCollection, true);
-    assert.equal(paymentConfig().cashOnDelivery, false);
-  });
-
-  test('with live keys the server refuses raw card data and reports hosted checkout', async () => {
-    const before = process.env.YOCO_SECRET_KEY;
-    process.env.YOCO_SECRET_KEY = 'sk_test_dummy';
-    process.env.YOCO_PUBLIC_KEY = 'pk_test_dummy';
-    try {
-      assert.equal(paymentDriver(), 'yoco');
-      assert.equal(paymentConfig().hostedCheckout, true);
-      assert.equal(paymentConfig().publicKey, 'pk_test_dummy', 'the publishable key may reach the browser');
-      assert.equal(JSON.stringify(paymentConfig()).includes('sk_test_dummy'), false, 'the secret key must never be exposed');
-
-      const result = await chargeCard({ amount: 130, card: card(SANDBOX_CARDS.approvedVisa) });
-      assert.equal(result.status, 'invalid');
-      assert.equal(result.code, 'hosted_checkout_required');
-    } finally {
-      if (before === undefined) delete process.env.YOCO_SECRET_KEY;
-      else process.env.YOCO_SECRET_KEY = before;
-      delete process.env.YOCO_PUBLIC_KEY;
-    }
-  });
-});
+/*
+ * Payments are no longer tested here: the card form, its Luhn validation and the
+ * offline sandbox charge are gone, replaced by the Yoco hand-off. Everything
+ * about taking money now lives in server/lib/payments.test.js and the webhook
+ * flow in server/integration.test.js.
+ */
 
 /* ------------------------------ Pricing ------------------------------- */
 

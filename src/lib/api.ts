@@ -207,7 +207,18 @@ export const api = {
       totals: { subtotal: number; delivery: number; discount: number; total: number; currency: string };
     }>('/api/quote', { method: 'POST', body: JSON.stringify(payload) }),
 
-  placeOrder: (payload: unknown) => request<{ order: Order; loyalty: unknown; trackingToken: string }>('/api/orders', { method: 'POST', body: JSON.stringify(payload) }),
+  /**
+   * Create the order. For an online order the response also carries the Yoco
+   * payment page to send the customer to — the server only includes it when a
+   * payment destination is actually configured.
+   */
+  placeOrder: (payload: unknown) =>
+    request<{
+      order: Order;
+      loyalty: unknown;
+      trackingToken: string;
+      payment?: { provider: string; redirectUrl: string };
+    }>('/api/orders', { method: 'POST', body: JSON.stringify(payload) }),
 
   trackOrder: (code: string, token: string) => request<{ order: Order }>(`/api/orders/${encodeURIComponent(code)}?token=${encodeURIComponent(token)}`),
 

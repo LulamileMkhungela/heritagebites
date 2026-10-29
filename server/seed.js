@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 6;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -79,7 +79,7 @@ export const plateMenus = [
     name: 'Traditional Plate',
     price: 100,
     blurb:
-      'One protein, one starch and one vegetable side — R100 a plate, delivery included. Choose from the traditional kitchen.',
+      'One protein, one starch and one vegetable side, from the traditional kitchen. Delivery is included in the plate price.',
     image: img('plate-mogodu'),
     groups: [
       {
@@ -101,7 +101,7 @@ export const plateMenus = [
     name: 'Contemporary Plate',
     price: 130,
     blurb:
-      'One protein, one starch and one vegetable side — R130 a plate, delivery included. The contemporary kitchen.',
+      'One protein, one starch and one vegetable side, from the contemporary kitchen. Delivery is included in the plate price.',
     image: img('plate-short-rib'),
     groups: [
       {
@@ -126,14 +126,19 @@ export const categories = [
   {
     id: 'traditional',
     name: 'Traditional Plates',
-    tagline: 'R100 a plate · delivery included',
+    /*
+     * No price in the tagline. It claimed "R100 a plate" for the whole category,
+     * which stopped being true as soon as anything in the menu was priced
+     * differently — and the price belongs on the plate, where it is calculated.
+     */
+    tagline: 'Slow-cooked, the traditional way',
     blurb: 'Starch, protein and a vegetable side. Pap, mabele, samp or dumpling with the pots that carry memory.',
     accent: 'chili',
   },
   {
     id: 'contemporary',
     name: 'Contemporary Plates',
-    tagline: 'R130 a plate · delivery included',
+    tagline: 'The contemporary kitchen',
     blurb: 'Mash, savoury rice, baby potatoes, cous cous or garlic bread with wings, short rib or lamb stew.',
     accent: 'clay',
   },
@@ -585,6 +590,16 @@ export const policies = [
       {
         heading: 'Sharing',
         body: 'We do not sell your personal information to third parties. Your information may be shared only with trusted service providers involved in processing payments, delivering orders, or providing website services.',
+      },
+      {
+        /*
+         * The checkout sends what you type in the address box to OpenStreetMap's
+         * Photon geocoder to suggest addresses. That is a third party receiving
+         * personal information (a home address, typed character by character),
+         * so POPIA requires it to be named here rather than buried in code.
+         */
+        heading: 'Address suggestions',
+        body: 'When you type a delivery address at checkout, the text you have typed so far is sent to the OpenStreetMap address service (photon.komoot.io) to suggest matching addresses. Only that address text is sent — never your name, phone number, email address or payment details — and we do not store the suggestions. You can ignore the suggestions and type your address in full; nothing else changes.',
       },
       {
         heading: 'Your rights',

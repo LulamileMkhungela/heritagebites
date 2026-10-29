@@ -9,6 +9,7 @@
 import { test, before, after, describe } from 'node:test';
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,6 +33,18 @@ process.env.HB_PUSH_DRY_RUN = 'true';
 // Keep the contact endpoint offline: the Formspree call is exercised by its own
 // unit test with a stub, never against the real inbox from a test run.
 process.env.HB_CONTACT_FORMSPREE_URL = '';
+/*
+ * Online payments: the suite uses a Yoco *payment link* (no secret key, no
+ * network) plus a webhook secret, which is exactly the setup the business can
+ * hand over fastest. Nothing here calls Yoco — a payment link is a redirect, and
+ * the webhook is verified locally, so the whole money path is exercised offline.
+ */
+const YOCO_LINK = 'https://pay.yoco.com/heritagebites';
+const WEBHOOK_SECRET_RAW = 'integration-webhook-secret-0123456789';
+const WEBHOOK_SECRET = `whsec_${Buffer.from(WEBHOOK_SECRET_RAW).toString('base64')}`;
+process.env.HB_YOCO_PAYMENT_URL = YOCO_LINK;
+process.env.HB_YOCO_WEBHOOK_SECRET = WEBHOOK_SECRET;
+process.env.HB_PUBLIC_URL = 'https://heritagebites.test';
 /*
  * The suite is one client on one address and places more orders in a minute than
  * any real customer would, so every rate limit is multiplied rather than turned
@@ -67,11 +80,52 @@ after(() => {
   rmSync(TMP, { recursive: true, force: true });
 });
 
-const GOOD_CARD = { number: '4242424242424242', expiry: '12/32', cvc: '123', holder: 'Test User' };
-const BAD_CARD = { number: '4000000000000002', expiry: '12/32', cvc: '123', holder: 'Test User' };
+/** A card number, to prove this API refuses them outright now. */
+const CARD_FIELDS = { number: '4242424242424242', expiry: '12/32', cvc: '123', holder: 'Test User' };
 
 const WINGS = { itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } };
 const MOGODU = { itemId: 'mogodu-plate', qty: 1, options: { starch: 'pap', veg: 'braised-cabbage' } };
+
+/**
+ * Sign a webhook body the way Yoco does (Standard Webhooks): HMAC-SHA256 over
+ * `${id}.${timestamp}.${body}`, base64, with the secret after its `whsec_`
+ * prefix decoded. Used to post payments the way the real gateway would.
+ */
+function signedWebhook(event, { secret = WEBHOOK_SECRET, id = 'msg_test_1', timestamp = Math.floor(Date.now() / 1000), tamper = false } = {}) {
+  const body = JSON.stringify(event);
+  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+  const signature = createHmac('sha256', key).update(`${id}.${timestamp}.${body}`).digest('base64');
+  return {
+    body,
+    headers: {
+      'Content-Type': 'application/json',
+      'webhook-id': id,
+      'webhook-timestamp': String(timestamp),
+      'webhook-signature': `v1,${tamper ? signature.slice(0, -4) + 'AAAA' : signature}`,
+    },
+  };
+}
+
+/** A `payment.succeeded` webhook for an order code. */
+function paidEvent(orderCode, extra = {}) {
+  return {
+    type: 'payment.succeeded',
+    payload: {
+      id: 'pay_test_123',
+      amount: 13000,
+      currency: 'ZAR',
+      status: 'succeeded',
+      metadata: { orderCode },
+      card: { brand: 'visa', last4: '4242' },
+      ...extra,
+    },
+  };
+}
+
+async function postWebhook(signed) {
+  const res = await fetch(`${base}/api/payments/yoco/webhook`, { method: 'POST', headers: signed.headers, body: signed.body });
+  return { res, body: await res.json().catch(() => ({})) };
+}
 
 async function placeOrder(overrides = {}) {
   const body = {
@@ -79,7 +133,7 @@ async function placeOrder(overrides = {}) {
     fulfilment: 'collection',
     customer: { name: 'Integration Test', phone: '+27 82 000 9999', email: 'i@e.co.za' },
     items: [WINGS],
-    payment: { method: 'card', card: GOOD_CARD },
+    payment: { method: 'card' },
     ...overrides,
   };
   const res = await fetch(`${base}/api/orders`, {
@@ -149,7 +203,12 @@ describe('catalogue + search', () => {
     // Service status and payment configuration are exposed for the UI.
     assert.equal(typeof c.service.open, 'boolean');
     assert.equal(c.service.windowLabel, '12:00–13:30');
-    assert.equal(c.payments.driver, 'sandbox');
+    /* Payments are exposed as capabilities, not as keys: the browser needs to
+       know whether "pay online" leads anywhere, and nothing more. */
+    assert.equal(c.payments.provider, 'yoco');
+    assert.equal(c.payments.online, true, 'the test host has a Yoco payment link');
+    assert.equal(c.payments.mode, 'link');
+    assert.equal(c.payments.exactAmount, false, 'a payment link cannot fix the amount');
     assert.equal(c.payments.cashOnCollection, true);
     assert.equal(c.payments.cashOnDelivery, false);
     assert.equal(c.contact.inboxConfigured, false, 'the endpoint is disabled in tests');
@@ -411,13 +470,21 @@ describe('cross-origin API access', () => {
 });
 
 describe('checkout', () => {
-  test('an approved card creates a paid order with a trackable code', async () => {
+  test('an online order is created and handed to Yoco, not charged here', async () => {
     const { res, body } = await placeOrder();
     assert.equal(res.status, 201);
     assert.match(body.order.code, /^HB-\d{4}[A-Z]$/);
     assert.equal(body.order.status, 'pending');
-    assert.equal(body.order.payment.status, 'approved');
-    assert.equal(body.order.payment.last4, '4242');
+    /*
+     * The old flow charged a card inside this API and returned "approved". It
+     * cannot any more: the customer is sent to Yoco, so the honest state is
+     * "waiting for money", and only a signed webhook may change it.
+     */
+    assert.equal(body.order.payment.status, 'awaiting_payment');
+    assert.equal(body.order.payment.driver, 'yoco');
+    assert.ok(body.payment.redirectUrl.startsWith(YOCO_LINK), 'the customer is sent to the configured Yoco page');
+    assert.match(body.payment.redirectUrl, new RegExp(`reference=${body.order.code}`), 'the payment carries the order code');
+    assert.equal(body.payment.provider, 'yoco');
     assert.equal(body.order.totals.total, 130, 'a contemporary plate is R130, delivery included');
     assert.ok(body.order.whatsapp.includes('wa.me/27670137587'));
     assert.equal(typeof body.order.serviceWindow.isPreOrder, 'boolean', 'every order carries a service window');
@@ -484,16 +551,93 @@ describe('checkout', () => {
     }
   });
 
-  test('a declined card returns 402 and creates nothing', async () => {
+  test('card details posted to this API are refused, and no order is created', async () => {
+    /*
+     * The checkout has no card fields, so a request carrying a PAN is either a
+     * stale client or an attempt to push this server into PCI scope. Either way
+     * it must never reach a store.
+     */
     const before = (await fetch(`${base}/api/health`).then(json)).orders;
-    const queuedBefore = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8')).length;
-    const { res, body } = await placeOrder({ payment: { method: 'card', card: BAD_CARD } });
-    assert.equal(res.status, 402);
-    assert.equal(body.code, 'card_declined');
-    const afterCount = (await fetch(`${base}/api/health`).then(json)).orders;
-    const queuedAfter = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8')).length;
-    assert.equal(afterCount, before, 'a failed payment must not create an order');
-    assert.equal(queuedAfter, queuedBefore, 'a failed payment must not send an order alert');
+    const { res, body } = await placeOrder({ payment: { method: 'card', card: CARD_FIELDS } });
+    assert.equal(res.status, 422);
+    assert.equal(body.code, 'card_details_refused');
+    assert.equal((await fetch(`${base}/api/health`).then(json)).orders, before, 'no order is kept');
+  });
+
+  test('an unpaid order is only marked paid by a correctly signed Yoco webhook', async () => {
+    const { body } = await placeOrder();
+    const code = body.order.code;
+
+    /* Nothing paid yet. */
+    let tracked = await fetch(`${base}/api/orders/${code}?token=${encodeURIComponent(body.trackingToken)}`).then(json);
+    assert.equal(tracked.order.payment.status, 'awaiting_payment');
+
+    /* An unsigned "payment succeeded" must not move it. */
+    const unsigned = await fetch(`${base}/api/payments/yoco/webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(paidEvent(code)),
+    });
+    assert.equal(unsigned.status, 400, 'an unsigned webhook is rejected');
+
+    /* A wrong signature must not move it either. */
+    const tampered = await postWebhook(signedWebhook(paidEvent(code), { tamper: true }));
+    assert.equal(tampered.res.status, 401);
+
+    /* The real thing does. */
+    const good = await postWebhook(signedWebhook(paidEvent(code)));
+    assert.equal(good.res.status, 200);
+    assert.equal(good.body.matched, true);
+
+    tracked = await fetch(`${base}/api/orders/${code}?token=${encodeURIComponent(body.trackingToken)}`).then(json);
+    assert.equal(tracked.order.payment.status, 'approved');
+    assert.equal(tracked.order.payment.last4, '4242');
+    assert.equal(tracked.order.payment.brand, 'visa');
+    assert.equal(tracked.order.payment.reference, 'pay_test_123', 'the Yoco payment id is kept on the order');
+
+    /* Yoco retries; a second delivery must be a no-op, not a second receipt. */
+    const again = await postWebhook(signedWebhook(paidEvent(code), { id: 'msg_test_2' }));
+    assert.equal(again.res.status, 200);
+    assert.equal(again.body.duplicate, true);
+  });
+
+  test('with Yoco not connected, an online order is refused instead of sent nowhere', async () => {
+    /*
+     * The state a fresh deployment is in. The customer must be told before they
+     * fill in the form, and the API must refuse rather than create an order that
+     * can never be paid for.
+     */
+    const link = process.env.HB_YOCO_PAYMENT_URL;
+    delete process.env.HB_YOCO_PAYMENT_URL;
+    try {
+      const catalog = await fetch(`${base}/api/catalog`).then(json);
+      assert.equal(catalog.payments.online, false);
+      assert.equal(catalog.payments.mode, 'off');
+
+      const before = (await fetch(`${base}/api/health`).then(json)).orders;
+      const { res, body } = await placeOrder();
+      assert.equal(res.status, 503);
+      assert.equal(body.code, 'payment_not_configured');
+      assert.match(body.errors[0], /WhatsApp/i);
+      assert.equal((await fetch(`${base}/api/health`).then(json)).orders, before, 'nothing is stored');
+    } finally {
+      process.env.HB_YOCO_PAYMENT_URL = link;
+    }
+  });
+
+  test('a webhook for an unknown order is accepted but changes nothing', async () => {
+    const signed = signedWebhook(paidEvent('HB-0000Z'));
+    const { res, body } = await postWebhook(signed);
+    assert.equal(res.status, 202, 'Yoco should not keep retrying something we cannot match');
+    assert.equal(body.matched, false);
+  });
+
+  test('a replayed webhook is refused once it is old', async () => {
+    const stale = Math.floor(Date.now() / 1000) - 60 * 60;
+    const signed = signedWebhook(paidEvent('HB-0000Z'), { timestamp: stale });
+    const { res, body } = await postWebhook(signed);
+    assert.equal(res.status, 400);
+    assert.equal(body.code, 'stale_webhook');
   });
 
   test('the server ignores a client-supplied price', async () => {
@@ -513,7 +657,7 @@ describe('checkout', () => {
         customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999' },
         // 'veg' is required on this plate and is deliberately omitted here.
         items: [{ itemId: 'mogodu-plate', qty: 1, options: { starch: 'pap' } }],
-        payment: { method: 'card', card: GOOD_CARD },
+        payment: { method: 'card' },
       }),
     });
     assert.equal(noSide.status, 422);
@@ -612,6 +756,33 @@ describe('checkout', () => {
     assert.match(body.errors[0], /Rosebank and Sandton/i);
   });
 
+  test('a typed address that contradicts the selected area is refused, and says both', async () => {
+    /*
+     * The exact bug the owner hit: choose Sandton, type a Rosebank street. The
+     * old rule matched the suburb and the address together and took the first
+     * hit, so the order was silently relabelled Rosebank. It must be refused,
+     * with a message naming the contradiction so the customer can fix either
+     * half — not a generic "we do not deliver there".
+     */
+    const { res, body } = await placeOrder({
+      fulfilment: 'delivery',
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '15 Oxford Road, Rosebank', suburb: 'Sandton' },
+    });
+    assert.equal(res.status, 422);
+    assert.match(body.errors[0], /Rosebank/);
+    assert.match(body.errors[0], /Sandton/);
+    assert.match(body.errors[0], /Change the delivery area/i);
+  });
+
+  test('an address that names the area is trusted even when the select was skipped', async () => {
+    const { res, body } = await placeOrder({
+      fulfilment: 'delivery',
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '15 Oxford Road, Rosebank', suburb: '' },
+    });
+    assert.equal(res.status, 201);
+    assert.equal(body.order.deliveryArea, 'Rosebank', 'the typed address decides where the food goes');
+  });
+
   test('cash on collection cannot be used for a delivery order', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
@@ -706,8 +877,16 @@ describe('order tracking + cancellation', () => {
     assert.equal(refetched.order.status, 'cancelled', 'the cancellation must be persisted');
   });
 
-  test('a paid card order cannot be cancelled without a refund workflow', async () => {
+  test('an order that has been paid cannot be cancelled without a refund workflow', async () => {
     const placed = await placeOrder();
+    /* Paid means a verified webhook said so — not a query string, not a return URL. */
+    await postWebhook(signedWebhook(paidEvent(placed.body.order.code)));
+
+    /*
+     * An order that is *not* paid is different: it is exactly what a customer
+     * should be able to abandon, and the previous order in this file proves a
+     * pending one cancels cleanly. Paying for it must change that.
+     */
     const res = await fetch(`${base}/api/orders/${placed.body.order.code}/cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

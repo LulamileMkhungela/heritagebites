@@ -3,14 +3,14 @@
     {
       "id": "traditional",
       "name": "Traditional Plates",
-      "tagline": "R100 a plate · delivery included",
+      "tagline": "Slow-cooked, the traditional way",
       "blurb": "Starch, protein and a vegetable side. Pap, mabele, samp or dumpling with the pots that carry memory.",
       "accent": "chili"
     },
     {
       "id": "contemporary",
       "name": "Contemporary Plates",
-      "tagline": "R130 a plate · delivery included",
+      "tagline": "The contemporary kitchen",
       "blurb": "Mash, savoury rice, baby potatoes, cous cous or garlic bread with wings, short rib or lamb stew.",
       "accent": "clay"
     }
@@ -839,7 +839,7 @@
       "id": "traditional",
       "name": "Traditional Plate",
       "price": 100,
-      "blurb": "One protein, one starch and one vegetable side — R100 a plate, delivery included. Choose from the traditional kitchen.",
+      "blurb": "One protein, one starch and one vegetable side, from the traditional kitchen. Delivery is included in the plate price.",
       "image": "/img/plate-mogodu.jpg",
       "groups": [
         {
@@ -937,7 +937,7 @@
       "id": "contemporary",
       "name": "Contemporary Plate",
       "price": 130,
-      "blurb": "One protein, one starch and one vegetable side — R130 a plate, delivery included. The contemporary kitchen.",
+      "blurb": "One protein, one starch and one vegetable side, from the contemporary kitchen. Delivery is included in the plate price.",
       "image": "/img/plate-short-rib.jpg",
       "groups": [
         {
@@ -1055,6 +1055,10 @@
         {
           "heading": "Sharing",
           "body": "We do not sell your personal information to third parties. Your information may be shared only with trusted service providers involved in processing payments, delivering orders, or providing website services."
+        },
+        {
+          "heading": "Address suggestions",
+          "body": "When you type a delivery address at checkout, the text you have typed so far is sent to the OpenStreetMap address service (photon.komoot.io) to suggest matching addresses. Only that address text is sent — never your name, phone number, email address or payment details — and we do not store the suggestions. You can ignore the suggestions and type your address in full; nothing else changes."
         },
         {
           "heading": "Your rights",
@@ -1251,28 +1255,32 @@
     "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Thursday",
-    "timeLabel": "10:33",
+    "timeLabel": "22:03",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Thursday 12:00–13:30",
-    "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Not cooking yet",
-    "message": "The pots go on at 12:00. Place your order now and it goes in first — today's window is 12:00–13:30.",
-    "shortMessage": "Pots go on at 12:00 today — order now and you are first in the queue.",
+    "nextWindowLabel": "Friday 12:00–13:30",
+    "headline": "Today's window has closed",
+    "message": "Today's 12:00–13:30 window has closed, but the next one is Friday 12:00–13:30. Place your order now and it will be cooked then.",
+    "shortMessage": "Today's window has closed — next up Friday.",
     "serviceDays": [
       "Thursday",
       "Friday"
     ]
   },
   "payments": {
-    "driver": "sandbox",
-    "publicKey": "",
-    "hostedCheckout": false,
-    "card": true,
+    "provider": "yoco",
+    "online": false,
+    "mode": "off",
+    "exactAmount": false,
     "cashOnCollection": true,
     "cashOnDelivery": false
   },
   "contact": {
     "inboxConfigured": false
+  },
+  "notifications": {
+    "customerEmail": false,
+    "ownerEmail": false
   },
   "today": 4
 }

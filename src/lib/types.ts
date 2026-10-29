@@ -138,11 +138,20 @@ export interface ServiceStatus {
   serviceDays: string[];
 }
 
+/**
+ * What the server says about taking money.
+ *
+ * `online` is the only field the checkout should trust to decide whether to show
+ * a "pay online" option: it is false until the business has supplied a Yoco
+ * payment link or keys, and offering the option before then would cost the
+ * customer the whole form.
+ */
 export interface PaymentConfig {
-  driver: 'sandbox' | 'yoco';
-  publicKey: string;
-  hostedCheckout: boolean;
-  card: boolean;
+  provider: 'yoco';
+  online: boolean;
+  mode: 'api' | 'link' | 'off';
+  /** True when the server creates the checkout, so the amount cannot be edited. */
+  exactAmount: boolean;
   cashOnCollection: boolean;
   cashOnDelivery: boolean;
 }
@@ -171,6 +180,11 @@ export interface Catalog {
   service: ServiceStatus;
   payments: PaymentConfig;
   contact: { inboxConfigured: boolean };
+  /**
+   * Which automatic channels are live. `customerEmail` false means no receipt
+   * will be sent, so the checkout must not promise one.
+   */
+  notifications?: { customerEmail: boolean; ownerEmail: boolean };
   today: number;
 }
 
@@ -256,7 +270,16 @@ export interface Order {
   receiptState: 'none' | 'queued' | 'sent' | 'failed';
   items: { itemId: string; name: string; unitPrice: number; qty: number; options: { label: string }[]; lineTotal: number }[];
   totals: Totals;
-  payment: { method: string; status: string; reference: string; last4: string | null; brand: string | null };
+  payment: {
+    method: string;
+    /** 'pending' | 'awaiting_payment' | 'approved' | … — only a webhook approves. */
+    status: string;
+    reference: string | null;
+    last4: string | null;
+    brand: string | null;
+    /** Yoco's payment page, kept so an unpaid order can be resumed. */
+    redirectUrl?: string | null;
+  };
   timeline: TimelineStep[];
   whatsapp: string;
   phone: string;

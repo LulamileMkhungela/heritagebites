@@ -189,6 +189,102 @@ export function deliveryAreaFor(address, settings) {
   return null;
 }
 
+/**
+ * Which delivery area the checkout should start on.
+ *
+ * The business asked for Rosebank to be preselected: most orders go there, and a
+ * select that opens on "Choose an area" is a required choice the customer has to
+ * make before they can even see whether the plate can reach them. Rosebank is
+ * preferred by name rather than by position so that reordering the area list in
+ * the catalogue does not silently change which one is the default.
+ *
+ * @param {{ deliveryAreas?: string[] } | null} [settings]
+ * @returns {string} the area to preselect, or '' if none is configured
+ */
+export function defaultDeliveryArea(settings) {
+  const areas = settings?.deliveryAreas ?? [];
+  return areas.find((area) => String(area).toLowerCase() === 'rosebank') ?? areas[0] ?? '';
+}
+
+/**
+ * Every approved area named in a piece of text.
+ *
+ * `deliveryAreaFor` answers "which area does this belong to", which is the wrong
+ * question when the customer has already chosen an area: it returns the first
+ * match, so "12 Oxford Road, Illovo, Sandton" with Rosebank selected silently
+ * became a Rosebank order. The checkout needs to know *all* the areas a typed
+ * address mentions, so it can tell the customer when the two disagree.
+ */
+export function areasNamedIn(text, settings) {
+  const haystack = String(text ?? '').toLowerCase();
+  if (!haystack.trim()) return [];
+  const found = [];
+  for (const area of settings?.deliveryAreas ?? []) {
+    const needle = String(area).toLowerCase().trim();
+    if (!needle) continue;
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(^|[^a-z])${escaped}([^a-z]|$)`).test(haystack)) found.push(area);
+  }
+  return found;
+}
+
+/**
+ * Does the typed address belong to the area the customer picked?
+ *
+ * Returns `null` when it is fine, or `{ level, message }`:
+ *
+ *   level 'error'  the address names a different delivery area. The order must
+ *                  not go through, because the kitchen would deliver outside the
+ *                  boundary the customer believes they ordered inside.
+ *   level 'warn'   the address names no area at all. A street address such as
+ *                  "12 Oxford Road" is normal and often carries no suburb, so
+ *                  this must never block an order — it asks the customer to
+ *                  confirm instead.
+ *
+ * `hintArea` is what a geocoder said the picked address belongs to (the
+ * address typeahead knows the suburb from OpenStreetMap). It outranks the text
+ * match: a suggestion whose suburb is a known area but not the selected one is
+ * an error even when the street line never repeats the suburb.
+ *
+ * @param {string} address          what the customer typed
+ * @param {string} area             the delivery area they selected
+ * @param {{ deliveryAreas?: string[] } | null} [settings]
+ * @param {string | null} [hintArea] area the chosen suggestion belongs to
+ * @returns {{ level: 'error' | 'warn', message: string } | null}
+ */
+export function deliveryAddressProblem(address, area, settings, hintArea = null) {
+  const chosen = String(area ?? '').trim();
+  const typed = String(address ?? '').trim();
+  if (!chosen) return null;
+
+  const known = settings?.deliveryAreas ?? [];
+  const hinted = String(hintArea ?? '').trim();
+  const hintIsKnown = Boolean(hinted) && known.some((a) => a.toLowerCase() === hinted.toLowerCase());
+
+  if (hintIsKnown && hinted.toLowerCase() !== chosen.toLowerCase()) {
+    return {
+      level: 'error',
+      message: `That address is in ${hinted}, but you chose ${chosen}. Change the delivery area to ${hinted}, or enter a ${chosen} address.`,
+    };
+  }
+
+  const named = areasNamedIn(typed, settings);
+  if (!named.length) {
+    if (hintIsKnown) return null;
+    if (!typed) return null;
+    return {
+      level: 'warn',
+      message: `Check the suburb — we deliver in ${deliveryAreasLabel(settings)} only. Add "${chosen}" to the address, or choose collection.`,
+    };
+  }
+  if (named.some((a) => a.toLowerCase() === chosen.toLowerCase())) return null;
+
+  return {
+    level: 'error',
+    message: `That address is in ${named.join(' and ')}, but you chose ${chosen}. Change the delivery area, or enter a ${chosen} address.`,
+  };
+}
+
 export function deliveryAreasLabel(settings) {
   const areas = settings?.deliveryAreas ?? [];
   if (areas.length <= 1) return areas[0] ?? '';

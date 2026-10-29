@@ -8,7 +8,8 @@ import { api } from '../lib/api';
 import { zar } from '../lib/format';
 import { useOverlay } from '../lib/useOverlay';
 import { HeritageBand } from './ui';
-import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY } from '../lib/whatsapp';
+import { BasketBar } from './BasketBar';
+import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -206,6 +207,7 @@ export default function Layout() {
       </main>
 
       <Footer />
+      <BasketBar />
       <CartDrawer />
       {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onNavigate={() => setSearchOpen(false)} />}
     </div>
@@ -306,6 +308,25 @@ function Footer() {
   const s = catalog?.settings;
   const wa = waHref(s?.whatsapp, CHANNEL_ENQUIRY);
 
+  /*
+   * The hours block used to end with a fixed "Closed the rest of the week",
+   * which read as "we have shut for the rest of this week" — on a Thursday
+   * afternoon, right under a Thursday row, that is the opposite of the truth.
+   * The kitchen cooks Thursdays and Fridays; what changes minute to minute is
+   * whether the window is open right now and when the next one starts, and the
+   * shared service rules already know both (the API and the static build use
+   * the same function, so this line cannot drift from what the site promises
+   * elsewhere).
+   */
+  const service = catalog?.service;
+  const statusLine = !service
+    ? null
+    : service.open
+      ? `Serving now · ${service.windowLabel}`
+      : service.nextWindowLabel
+        ? `Closed now · next service ${service.nextWindowLabel}`
+        : 'Closed now · message us to arrange a day';
+
   return (
     <footer className="mt-24 bg-ink text-bone">
       <HeritageBand className="h-2 w-full" />
@@ -320,19 +341,24 @@ function Footer() {
             South African plates cooked with care, Thursdays and Fridays. Order online for collection or delivery in Rosebank and Sandton.
           </p>
           {/*
-            The number and the address are the buttons: "Call us" and "Email"
-            hid the one thing a customer copies or taps. Both are links, so a
-            phone offers to dial and a mail client opens a draft.
+            Two words each, on purpose: "Call us" and "Email us" are the whole
+            label, and the number and address live in the link target rather
+            than in the pill. A customer reading the footer sees two obvious
+            actions instead of a line of digits to copy by hand.
+
+            The screen-reader label still names the number and the address, so
+            nothing is lost for someone who cannot see that "Call us" dials.
           */}
           <div className="mt-5 flex flex-wrap gap-2">
             <a
               href={`tel:${(s?.phone ?? '+27670137587').replace(/\s/g, '')}`}
+              aria-label={`Call us on ${s?.phoneDisplay ?? '+27 67 013 7587'}`}
               className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre"
             >
               <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
               </svg>
-              {s?.phoneDisplay ?? '+27 67 013 7587'}
+              Call us
             </a>
             <a
               href={wa}
@@ -347,13 +373,14 @@ function Footer() {
             </a>
             <a
               href={`mailto:${s?.email ?? 'heritagebitesfood@gmail.com'}`}
+              aria-label={`Email us at ${s?.email ?? 'heritagebitesfood@gmail.com'}`}
               className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre"
             >
               <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2.5" y="4.5" width="19" height="15" rx="2" />
                 <path d="m3 6 9 7 9-7" />
               </svg>
-              {s?.email ?? 'heritagebitesfood@gmail.com'}
+              Email us
             </a>
           </div>
           {/*
@@ -396,13 +423,20 @@ function Footer() {
         <div>
           <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre">Kitchen hours</h2>
           <ul className="space-y-1 text-sm text-bone/70">
-            {(s?.hours ?? []).filter((h) => !h.closed).map((h) => (
-              <li key={h.day} className="flex justify-between gap-4">
-                <span>{h.label.slice(0, 3)}</span>
-                <span className="font-mono text-xs">{h.open}–{h.close}</span>
-              </li>
-            ))}
-            <li className="pt-1 text-xs text-bone/45">Closed the rest of the week</li>
+            {(s?.hours ?? []).filter((h) => !h.closed).map((h) => {
+              /* Today is marked, so "12:00–13:30" on a Thursday reads as today's window. */
+              const today = service?.dayLabel === h.label;
+              return (
+                <li key={h.day} className={`flex justify-between gap-4 ${today ? 'text-bone' : ''}`}>
+                  <span>
+                    {h.label.slice(0, 3)}
+                    {today && <span className="ml-1.5 text-[11px] uppercase tracking-wide text-ochre">today</span>}
+                  </span>
+                  <span className="font-mono text-xs">{h.open}–{h.close}</span>
+                </li>
+              );
+            })}
+            {statusLine && <li className="pt-1 text-xs leading-relaxed text-bone/45">{statusLine}</li>}
           </ul>
         </div>
 
@@ -414,7 +448,6 @@ function Footer() {
             <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
             <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
             <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer quest</Link></li>
-            <li><Link to="/policies" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Policies &amp; terms</Link></li>
             <li>
               {s?.channels?.ubereats?.url
                 ? <a href={s.channels.ubereats.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Uber Eats</a>
@@ -428,9 +461,18 @@ function Footer() {
           </ul>
         </div>
       </div>
-      <div className="border-t border-bone/10 px-4 py-5">
-        <div className="mx-auto max-w-7xl text-xs text-bone/45">
-          <span>© {new Date().getFullYear()} Heritage Bites · Est. {s?.established ?? 2025}</span>
+      {/*
+        The policies link closes the footer, level with the copyright and pushed
+        to the far right: it is a legal footnote, not something to order, so it
+        belongs on the bottom line rather than in the Order column. The 44px
+        min-height keeps it a thumb-sized target on a phone.
+      */}
+      <div className="border-t border-bone/10 px-4 py-3">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 text-xs text-bone/45">
+          <span>© {new Date().getFullYear()} Heritage Bites. All Rights Reserved. · Est. {s?.established ?? 2025}</span>
+          <Link to="/policies" className="inline-flex min-h-11 items-center hover:text-ochre">
+            Policies &amp; terms
+          </Link>
         </div>
       </div>
     </footer>
@@ -455,6 +497,22 @@ function CartDrawerPanel() {
   const lines = useCart((s) => s.lines);
   const setQty = useCart((s) => s.setQty);
   const remove = useCart((s) => s.remove);
+  const clear = useCart((s) => s.clear);
+  /*
+   * Two taps, not one: emptying a basket somebody spent time filling should not
+   * happen because a thumb landed on the wrong line of the footer. The first tap
+   * asks; the second, within a few seconds, does it.
+   */
+  const [confirmClear, setConfirmClear] = useState(false);
+  useEffect(() => {
+    if (!confirmClear) return;
+    const timer = setTimeout(() => setConfirmClear(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmClear]);
+  /* An empty basket has nothing left to confirm. */
+  useEffect(() => {
+    if (!lines.length) setConfirmClear(false);
+  }, [lines.length]);
   const fulfilment = useCart((s) => s.fulfilment);
   const setFulfilment = useCart((s) => s.setFulfilment);
   const catalog = useCatalog((s) => s.data);
@@ -503,6 +561,22 @@ function CartDrawerPanel() {
                 </button>
               ))}
             </div>
+            {/*
+              Collection has no street address to show — it is a shadow kitchen —
+              so the drawer carries the redirect that answers the question: one
+              tap opens the WhatsApp thread where the point is confirmed.
+            */}
+            {fulfilment === 'collection' && (
+              <a
+                href={waHref(settings?.whatsapp, COLLECTION_POINT_ENQUIRY)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-h-11 items-center justify-between gap-3 border-b border-ink/10 px-5 py-2 text-xs font-semibold text-ochre-deep hover:bg-ochre/10"
+              >
+                <span>Collection point · confirmed on WhatsApp</span>
+                <span aria-hidden="true">→</span>
+              </a>
+            )}
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {lines.map((l) => (
@@ -544,9 +618,11 @@ function CartDrawerPanel() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-ink/45">
-                {belowMinimum
-                  ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
-                  : 'Final totals are confirmed at checkout.'}
+                {fulfilment === 'delivery'
+                  ? belowMinimum
+                    ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
+                    : 'Delivery is included — nothing is added at checkout.'
+                  : 'Collection — nothing is added at checkout.'}
               </p>
               <Link
                 to="/checkout"
@@ -570,6 +646,20 @@ function CartDrawerPanel() {
               >
                 Order this on WhatsApp
               </a>
+              {/*
+                The way out. A basket that can only be emptied one line at a time
+                is a trap once someone has tried several plates, and the drawer is
+                the last place the whole basket is on screen.
+              */}
+              <button
+                type="button"
+                onClick={() => (confirmClear ? (clear(), setConfirmClear(false)) : setConfirmClear(true))}
+                className={`mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                  confirmClear ? 'bg-chili text-bone hover:bg-chili/90' : 'text-ink/50 underline hover:text-chili'
+                }`}
+              >
+                {confirmClear ? `Tap again to clear ${lines.reduce((n, l) => n + l.qty, 0)} plates` : 'Clear basket'}
+              </button>
             </footer>
           </>
         )}
