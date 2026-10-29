@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart, toApiItems, cartSubtotal } from '../store/cart';
 import { useCatalog } from '../store/catalog';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
-import { detectCardBrand, formatCardNumber, formatExpiry, luhnValid, normalisePhone, zar } from '../lib/format';
+import { normalisePhone, zar } from '../lib/format';
 import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { basketHref, waChatHref, waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
@@ -13,38 +13,21 @@ import type { AddressSuggestion } from '../lib/address';
 
 type PayMethod = 'card' | 'cash-on-collection';
 
-const TEST_CARDS = [
-  { label: 'Approved (Visa)', number: '4242 4242 4242 4242' },
-  { label: 'Approved (Mastercard)', number: '5555 5555 5555 4444' },
-  { label: 'Declined', number: '4000 0000 0000 0002' },
-  { label: 'Needs 3-D Secure', number: '4000 0000 0000 3220' },
-];
-
-const YOCO_SDK_SRC = 'https://js.yoco.com/sdk/v1/yoco-sdk-web.js';
-
-/** Load Yoco's hosted-checkout SDK once, in the browser, only when it is needed. */
-function loadYocoSdk(): Promise<void> {
-  if (typeof window === 'undefined') return Promise.reject(new Error('No browser'));
-  if ((window as unknown as { YocoSDK?: unknown }).YocoSDK) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${YOCO_SDK_SRC}"]`);
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Yoco SDK failed to load')));
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = YOCO_SDK_SRC;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Yoco SDK failed to load'));
-    document.head.appendChild(script);
-  });
-}
-
-interface YocoPayment {
-  id: string;
-  amountCents: number;
+/**
+ * Where the tracking token for an order is parked before the customer leaves for
+ * Yoco.
+ *
+ * The return URL Yoco sends them back to has no token of its own, and asking a
+ * customer to copy a credential out of an email before they can see their own
+ * order is a step they will not take. Kept per order code, and only ever read
+ * back on that order's page.
+ */
+function rememberTracking(code: string, token: string) {
+  try {
+    window.localStorage.setItem(`hb.track.${code}`, token);
+  } catch {
+    /* Private mode can refuse storage; the link in the panel still works. */
+  }
 }
 
 function LiveCheckout() {
@@ -60,13 +43,17 @@ function LiveCheckout() {
   const settings = catalog?.settings;
   const payments = catalog?.payments;
   const service = catalog?.service;
-  const liveCards = Boolean(payments?.hostedCheckout && payments.publicKey);
+  /**
+   * Whether the customer can actually reach a Yoco payment page right now.
+   * Driven by the server, which knows if the business has supplied a link or
+   * keys — never assumed by the page.
+   */
+  const online = Boolean(payments?.online);
   /* Whether a receipt email can actually be sent from this deployment. */
   const receiptsByEmail = Boolean(catalog?.notifications?.customerEmail);
 
   const [method, setMethodRaw] = useState<PayMethod>('card');
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
-  const [card, setCardRaw] = useState({ number: '', expiry: '', cvc: '', holder: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   /*
    * Which delivery area the *picked* address belongs to, according to the map
@@ -78,12 +65,13 @@ function LiveCheckout() {
   const [quote, setQuote] = useState<{ subtotal: number; delivery: number; total: number } | null>(null);
   const [state, setState] = useState<'idle' | 'quoting' | 'paying'>('idle');
   const [fatal, setFatal] = useState<string | null>(null);
-  // A card that needs 3-D Secure is not a decline. It gets its own state so the
-  // customer is told what to do rather than shown a red error and a dead end.
-  const [needsAction, setNeedsAction] = useState<string | null>(null);
-  const [yoco, setYoco] = useState<YocoPayment | null>(null);
-  const [yocoError, setYocoError] = useState<string | null>(null);
-  const [openingYoco, setOpeningYoco] = useState(false);
+  /*
+   * Set once the order exists and Yoco has handed back a payment page. The
+   * customer is redirected, but the panel stays on screen with a link: a phone
+   * browser with a pop-up blocker, or a Yoco redirect that never fires, would
+   * otherwise leave a paid-for cart looking like nothing happened.
+   */
+  const [redirect, setRedirect] = useState<{ orderCode: string; url: string } | null>(null);
 
   /*
    * Cash is only accepted on collection (the business confirmed cash on
@@ -95,8 +83,6 @@ function LiveCheckout() {
   const setMethod = (next: PayMethod) => {
     setMethodRaw(next);
     setFatal(null);
-    setNeedsAction(null);
-    setYocoError(null);
   };
 
   /*
@@ -107,17 +93,8 @@ function LiveCheckout() {
   const setCustomer = (next: typeof customer) => {
     setCustomerRaw(next);
     setFatal(null);
-    setNeedsAction(null);
     setErrors((e) => ({ ...e, form: '' }));
   };
-  const setCard = (next: typeof card) => {
-    setCardRaw(next);
-    setFatal(null);
-    setNeedsAction(null);
-    setErrors((e) => ({ ...e, form: '' }));
-  };
-
-  const needsCard = method2 === 'card' && !liveCards;
 
   /* Live, server-authoritative totals. The server re-prices every line from its
      own catalogue, so what is displayed is what will actually be charged. */
@@ -144,54 +121,11 @@ function LiveCheckout() {
   const localSubtotal = useMemo(() => lines.reduce((n, l) => n + l.unitPrice * l.qty, 0), [lines]);
   const shown = quote ?? { subtotal: localSubtotal, delivery: 0, total: localSubtotal };
 
-  const brand = detectCardBrand(card.number);
-  const cardNumberOk = luhnValid(card.number);
-
   /*
-   * A Yoco payment is tied to the amount it was taken for. If the basket or
-   * fulfilment changes afterwards the authorisation no longer matches, so it is
-   * cleared and the customer is asked to pay again rather than posting a
-   * checkout id for a different total.
+   * An order that is already waiting on Yoco keeps its payment page on screen
+   * even if the customer edits the basket: the order is fixed, and quietly
+   * changing the total would make the page disagree with what Yoco charged.
    */
-  useEffect(() => {
-    if (!yoco) return;
-    if (yoco.amountCents !== Math.round(shown.total * 100)) {
-      setYoco(null);
-      setYocoError('Your total changed, so the card payment needs to be taken again.');
-    }
-  }, [shown.total, yoco]);
-
-  const openYoco = async () => {
-    setYocoError(null);
-    setFatal(null);
-    setOpeningYoco(true);
-    const amountCents = Math.round(shown.total * 100);
-    try {
-      await loadYocoSdk();
-      const Sdk = (window as unknown as { YocoSDK: new (o: { publicKey: string }) => { showPopup: (o: Record<string, unknown>) => void } }).YocoSDK;
-      const sdk = new Sdk({ publicKey: payments?.publicKey ?? '' });
-      sdk.showPopup({
-        amountInCents: amountCents,
-        currency: 'ZAR',
-        name: 'Heritage Bites',
-        description: `${lines.reduce((n, l) => n + l.qty, 0)} plate(s) · ${fulfilment}`,
-        callback: (result: { error?: { message?: string }; id?: string }) => {
-          setOpeningYoco(false);
-          if (result?.error) {
-            setYocoError(result.error.message ?? 'That card payment was not completed.');
-            return;
-          }
-          if (result?.id) setYoco({ id: result.id, amountCents });
-        },
-      });
-    } catch {
-      setOpeningYoco(false);
-      setYocoError(
-        'We could not open the secure card window. Try again, or choose cash on collection and pay when you collect.',
-      );
-    }
-  };
-
   const validate = () => {
     const e: Record<string, string> = {};
     if (!customer.name.trim()) e.name = 'We need a name for the order.';
@@ -214,14 +148,9 @@ function LiveCheckout() {
         if (problem?.level === 'error') e.address = problem.message;
       }
     }
-    if (needsCard) {
-      if (!cardNumberOk) e.number = 'That card number is not valid.';
-      if (!/^\d{2}\/\d{2}$/.test(card.expiry)) e.expiry = 'Use MM/YY.';
-      if (!/^\d{3,4}$/.test(card.cvc)) e.cvc = '3 or 4 digits.';
-      if (!card.holder.trim()) e.holder = 'Name as printed on the card.';
-    }
-    if (method2 === 'card' && liveCards && !yoco) {
-      e.form = 'Please complete the card payment in the secure Yoco window first.';
+    /* Nothing to check about a card: it is entered on Yoco's page, not here. */
+    if (method2 === 'card' && !online) {
+      e.form = 'Online payment is not switched on yet — order on WhatsApp instead.';
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -232,36 +161,83 @@ function LiveCheckout() {
     if (!validate()) return;
     setState('paying');
     setFatal(null);
-    setNeedsAction(null);
     try {
-      const payment =
-        method2 === 'card'
-          ? liveCards
-            ? { method: 'card', checkoutId: yoco?.id }
-            : { method: 'card', card }
-          : { method: method2 };
-
-      const { order, trackingToken } = await api.placeOrder({
+      const { order, trackingToken, payment } = await api.placeOrder({
         channel: method2 === 'card' ? 'card' : 'cash',
         fulfilment,
         customer,
         items: toApiItems(lines),
-        payment,
+        payment: { method: method2 },
       });
+
+      /* The basket is only emptied once the order exists on the server. */
       clear();
+      rememberTracking(order.code, trackingToken);
+
+      if (payment?.redirectUrl) {
+        setRedirect({ orderCode: order.code, url: payment.redirectUrl });
+        setState('idle');
+        /*
+         * The customer is usually two screens down the form when this happens.
+         * Leaving them there would show the footer of a page whose content has
+         * been replaced, and the payment link would be above the fold, unseen.
+         */
+        window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+        /*
+         * Leave for Yoco in the same task as the click, so mobile browsers treat
+         * it as part of the gesture. The panel below is the fallback when that
+         * redirect is blocked.
+         */
+        window.location.assign(payment.redirectUrl);
+        return;
+      }
+
       nav(`/order/${order.code}?token=${encodeURIComponent(trackingToken)}`);
     } catch (err) {
       setState('idle');
       if (err instanceof ApiError) {
-        if (err.requiresAction) {
-          setNeedsAction(err.errors.join(' '));
-        } else if (err.code) setFatal(err.errors.join(' '));
+        if (err.code) setFatal(err.errors.join(' '));
         else setErrors({ form: err.errors[0] });
       } else {
         setFatal('Something went wrong. Please try again.');
       }
     }
   };
+
+  /*
+   * The hand-off screen, shown after the order exists and before the customer
+   * pays. It has to come *before* the empty-basket screen: placing an online
+   * order clears the basket, and the empty state would otherwise replace this
+   * page and take the payment link with it — exactly when a blocked redirect
+   * leaves the customer needing that link.
+   */
+  if (redirect) {
+    return (
+      <section className="mx-auto max-w-lg px-4 py-20 text-center">
+        <p className="text-4xl">🧾</p>
+        <h1 className="mt-4 font-display text-3xl font-semibold">Order {redirect.orderCode} is saved</h1>
+        <p className="mt-3 text-ink/65">
+          The last step is the payment, on Yoco&apos;s secure page. Nothing is cooked until it is paid, and the order
+          stays reserved while you pay.
+        </p>
+        <a
+          href={redirect.url}
+          className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
+        >
+          Continue to Yoco payment
+        </a>
+        <Link
+          to={`/order/${redirect.orderCode}`}
+          className="mt-3 inline-flex min-h-11 items-center justify-center text-sm font-semibold text-ochre-deep underline"
+        >
+          I have paid — show my order
+        </Link>
+        <p className="mt-4 text-xs leading-relaxed text-ink/50">
+          Yoco confirms the payment to us directly, so this page will show it as paid even if you close the tab now.
+        </p>
+      </section>
+    );
+  }
 
   if (!lines.length) {
     return (
@@ -452,8 +428,14 @@ function LiveCheckout() {
               {([
                 {
                   id: 'card' as PayMethod,
-                  label: 'Card',
-                  blurb: liveCards ? 'Visa & Mastercard, secured by Yoco' : 'Visa & Mastercard (test mode)',
+                  label: 'Pay online',
+                  /*
+                   * Named for what the customer does, not for the rails under it.
+                   * Yoco takes card and instant EFT on its own page, so promising
+                   * "Visa & Mastercard" here would understate it — and claiming
+                   * it at all when nothing is configured would be a lie.
+                   */
+                  blurb: online ? "Card or instant EFT on Yoco's secure page" : 'Not switched on yet',
                   show: true,
                 },
                 {
@@ -480,97 +462,51 @@ function LiveCheckout() {
                 </button>
               ))}
             </div>
-            {fulfilment === 'delivery' && (
-              <p className="mt-2 text-xs text-ink/50">Delivery orders are paid by card. Cash is accepted on collection only.</p>
-            )}
 
-            {method2 === 'card' && liveCards && (
+            {/*
+              Online payment is only offered when the business has actually
+              connected Yoco. An option that fails at the last step is worse than
+              no option: it costs the customer the whole form.
+            */}
+            {method2 === 'card' && (
               <div className="animate-rise mt-5 rounded-2xl border-2 border-ink/10 bg-bone/70 p-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="font-mono text-xs uppercase tracking-wider text-ink/50">Secure card payment</span>
-                  <span className="flex items-center gap-2 text-xs text-ink/50">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
-                    Secured by Yoco
-                  </span>
-                </div>
-                {yoco ? (
-                  <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-morogo bg-morogo/10 p-3">
-                    <p className="text-[13px] font-semibold text-ink">Card authorised · {zar(yoco.amountCents / 100)}</p>
-                    <button type="button" onClick={() => setYoco(null)} className="text-xs font-semibold uppercase tracking-wide text-ink/60 underline">
-                      Change
-                    </button>
-                  </div>
+                {online ? (
+                  <>
+                    <p className="text-[13px] font-semibold text-ink">You will be sent to Yoco to pay.</p>
+                    <p className="mt-2 text-xs leading-relaxed text-ink/60">
+                      Yoco takes the card or instant EFT on its own secure page, then brings you back to your order.
+                      Heritage Bites never sees or stores your card number.
+                    </p>
+                    <p className="mt-2 text-xs leading-relaxed text-ink/60">
+                      Your order is only marked paid once Yoco confirms the payment to us — not when the page reloads.
+                    </p>
+                  </>
                 ) : (
-                  <Button type="button" onClick={openYoco} disabled={openingYoco} block>
-                    {openingYoco ? 'Opening Yoco…' : `Pay ${zar(shown.total)} by card`}
-                  </Button>
+                  <>
+                    <p className="text-[13px] font-semibold text-ink">Online payment is not switched on yet.</p>
+                    <p className="mt-2 text-xs leading-relaxed text-ink/60">
+                      Yoco has not been connected to this site, so there is nothing to charge. Send the same basket to us
+                      on WhatsApp and we will arrange payment, or switch to collection and pay cash.
+                    </p>
+                    <a
+                      href={basketHref(settings?.whatsapp, lines, { fulfilment })}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-bone hover:bg-ink-3"
+                    >
+                      Send this basket on WhatsApp
+                    </a>
+                  </>
                 )}
-                {yocoError && <p className="mt-2 text-[12px] font-medium text-chili">{yocoError}</p>}
-                <p className="mt-3 text-xs leading-relaxed text-ink/55">
-                  Card details are entered in Yoco&apos;s secure window. Heritage Bites never sees or stores your card number.
-                  Place your order after the card is authorised.
-                </p>
               </div>
             )}
 
-            {needsCard && (
-              <div className="animate-rise mt-5 rounded-2xl border-2 border-ink/10 bg-bone/70 p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="font-mono text-xs uppercase tracking-wider text-ink/50">Card details</span>
-                  <span className="flex items-center gap-2 text-xs text-ink/50">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
-                    Test mode
-                  </span>
-                </div>
-
-                <div className="grid gap-4">
-                  <Field label="Card number" error={errors.number} hint={brand ? brand.toUpperCase() : ''}>
-                    <div className="relative">
-                      <input
-                        className={`${inputCls} pr-16 font-mono tracking-wider`}
-                        value={card.number}
-                        onChange={(e) => setCard({ ...card, number: formatCardNumber(e.target.value) })}
-                        inputMode="numeric"
-                        autoComplete="cc-number"
-                        placeholder="4242 4242 4242 4242"
-                      />
-                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs font-bold uppercase text-ink/40">{brand || '····'}</span>
-                    </div>
-                  </Field>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Expiry" error={errors.expiry}>
-                      <input className={`${inputCls} font-mono`} value={card.expiry} onChange={(e) => setCard({ ...card, expiry: formatExpiry(e.target.value) })} inputMode="numeric" autoComplete="cc-exp" placeholder="MM/YY" />
-                    </Field>
-                    <Field label="CVC" error={errors.cvc}>
-                      <input className={`${inputCls} font-mono`} value={card.cvc} onChange={(e) => setCard({ ...card, cvc: e.target.value.replace(/\D/g, '').slice(0, 4) })} inputMode="numeric" autoComplete="cc-csc" placeholder="123" />
-                    </Field>
-                  </div>
-                  <Field label="Name on card" error={errors.holder}>
-                    <input className={inputCls} value={card.holder} onChange={(e) => setCard({ ...card, holder: e.target.value })} autoComplete="cc-name" placeholder="T MAHLANGU" />
-                  </Field>
-                </div>
-
-                <div className="mt-4 rounded-xl border border-ink/10 bg-ochre/10 p-3">
-                  <p className="font-mono text-xs uppercase tracking-wider text-ochre-deep">Sandbox mode — test cards</p>
-                  {/* Two columns on a phone: a chip that shrinks into a 26px sliver is unhittable. */}
-                  <div className="mt-2 grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
-                    {TEST_CARDS.map((t) => (
-                      <button
-                        key={t.number}
-                        type="button"
-                        onClick={() => setCard({ ...card, number: formatCardNumber(t.number), expiry: '12/32', cvc: '123', holder: card.holder || 'Test User' })}
-                        className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-full border border-ink/15 bg-bone px-3 py-1 text-xs font-medium hover:border-ochre sm:shrink-0"
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs leading-relaxed text-ink/55">
-                    Live card payments are off on this build, so no real charge is made. Once Yoco live keys are set on the
-                    host, this form is replaced by Yoco&apos;s secure payment window.
-                  </p>
-                </div>
-              </div>
+            {fulfilment === 'delivery' && (
+              <p className="mt-2 text-xs text-ink/50">
+                {online
+                  ? 'Delivery orders are paid online before we cook. Cash is accepted on collection only.'
+                  : 'Delivery orders need online payment, which is not connected yet — order on WhatsApp for now.'}
+              </p>
             )}
           </fieldset>
         </div>
@@ -626,14 +562,6 @@ function LiveCheckout() {
                     <ContactText>{fatal}</ContactText>
                   </p>
                 )}
-                {needsAction && (
-                  <div className="mt-3 rounded-xl border-2 border-ochre-deep bg-ochre/15 p-3" role="alert">
-                    <p className="text-[12px] font-bold text-ink">{needsAction}</p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-ink/70">
-                      Your bank needs you to approve this payment. Try another card, or choose cash on collection instead.
-                    </p>
-                  </div>
-                )}
                 {errors.form && <p className="mt-3 text-[12px] font-medium text-chili">{errors.form}</p>}
 
               {/*
@@ -642,8 +570,18 @@ function LiveCheckout() {
                 a dead button — retrying must stay possible, and the server
                 re-validates and re-charges on every attempt anyway.
               */}
-              <Button type="submit" size="lg" block className="mt-4" disabled={state === 'paying'}>
-                {state === 'paying' ? 'Processing payment…' : `Place order · ${zar(shown.total)}`}
+              <Button
+                type="submit"
+                size="lg"
+                block
+                className="mt-4"
+                disabled={state === 'paying' || (method2 === 'card' && !online)}
+              >
+                {state === 'paying'
+                  ? 'Saving your order…'
+                  : method2 === 'card' && !online
+                    ? 'Online payment unavailable'
+                    : `Place order · ${zar(shown.total)}`}
               </Button>
 
               <p className="mt-3 text-xs leading-relaxed text-ink/60">

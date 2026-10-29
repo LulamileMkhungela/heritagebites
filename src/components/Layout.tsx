@@ -497,6 +497,22 @@ function CartDrawerPanel() {
   const lines = useCart((s) => s.lines);
   const setQty = useCart((s) => s.setQty);
   const remove = useCart((s) => s.remove);
+  const clear = useCart((s) => s.clear);
+  /*
+   * Two taps, not one: emptying a basket somebody spent time filling should not
+   * happen because a thumb landed on the wrong line of the footer. The first tap
+   * asks; the second, within a few seconds, does it.
+   */
+  const [confirmClear, setConfirmClear] = useState(false);
+  useEffect(() => {
+    if (!confirmClear) return;
+    const timer = setTimeout(() => setConfirmClear(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmClear]);
+  /* An empty basket has nothing left to confirm. */
+  useEffect(() => {
+    if (!lines.length) setConfirmClear(false);
+  }, [lines.length]);
   const fulfilment = useCart((s) => s.fulfilment);
   const setFulfilment = useCart((s) => s.setFulfilment);
   const catalog = useCatalog((s) => s.data);
@@ -602,9 +618,11 @@ function CartDrawerPanel() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-ink/45">
-                {belowMinimum
-                  ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
-                  : 'Delivery is included — nothing is added at checkout.'}
+                {fulfilment === 'delivery'
+                  ? belowMinimum
+                    ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
+                    : 'Delivery is included — nothing is added at checkout.'
+                  : 'Collection — nothing is added at checkout.'}
               </p>
               <Link
                 to="/checkout"
@@ -628,6 +646,20 @@ function CartDrawerPanel() {
               >
                 Order this on WhatsApp
               </a>
+              {/*
+                The way out. A basket that can only be emptied one line at a time
+                is a trap once someone has tried several plates, and the drawer is
+                the last place the whole basket is on screen.
+              */}
+              <button
+                type="button"
+                onClick={() => (confirmClear ? (clear(), setConfirmClear(false)) : setConfirmClear(true))}
+                className={`mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                  confirmClear ? 'bg-chili text-bone hover:bg-chili/90' : 'text-ink/50 underline hover:text-chili'
+                }`}
+              >
+                {confirmClear ? `Tap again to clear ${lines.reduce((n, l) => n + l.qty, 0)} plates` : 'Clear basket'}
+              </button>
             </footer>
           </>
         )}

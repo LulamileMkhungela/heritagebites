@@ -18,7 +18,21 @@ import {
 export default function OrderStatus() {
   const { code = '' } = useParams();
   const [searchParams] = useSearchParams();
-  const trackingToken = searchParams.get('token') ?? '';
+  /*
+   * The token normally arrives in the link, but a customer who returns from
+   * Yoco's payment page comes back without one — Yoco only knows the order code.
+   * The checkout therefore parks the token here before sending them away, so
+   * their own order stays readable and a stranger with the URL still cannot.
+   */
+  const tokenFromUrl = searchParams.get('token') ?? '';
+  const [savedToken] = useState(() => {
+    try {
+      return window.localStorage.getItem(`hb.track.${code}`) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const trackingToken = tokenFromUrl || savedToken;
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -178,10 +192,40 @@ export default function OrderStatus() {
           <Badge tone={order.status === 'cancelled' ? 'chili' : order.status === 'completed' ? 'ink' : 'ochre'}>{order.statusMeta.label}</Badge>
           <p className="mt-2 font-display text-3xl font-bold">{zar(order.totals.total)}</p>
           <p className="text-xs text-ink/50">
-            {order.payment.status === 'approved' ? `Paid · ${order.payment.brand?.toUpperCase()} ****${order.payment.last4}` : 'Payment on collection/delivery'}
+            {order.payment.status === 'approved'
+              ? order.payment.last4
+                ? `Paid · ${order.payment.brand?.toUpperCase() ?? 'CARD'} ****${order.payment.last4}`
+                : 'Paid'
+              : order.payment.status === 'awaiting_payment'
+                ? 'Awaiting payment'
+                : 'Payment on collection'}
           </p>
         </div>
       </div>
+
+      {/*
+        An order whose payment never completed. It is saved and the kitchen can
+        see it, but nothing is cooked until it is paid — so the page says that
+        plainly and offers the payment page again, rather than showing a happy
+        confirmation for food nobody paid for.
+      */}
+      {order.payment.status !== 'approved' && order.payment.redirectUrl && (
+        <div className="mt-6 rounded-3xl border-2 border-ochre bg-ochre/10 p-5">
+          <p className="font-mono text-xs uppercase tracking-[0.18em] text-ochre-deep">Payment not completed</p>
+          <p className="mt-1 text-sm font-semibold text-ink">
+            This order is saved, but we have not received the payment yet.
+          </p>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink/65">
+            Nothing is cooked until it is paid. You can pick it up where you left off — the order stays reserved.
+          </p>
+          <a
+            href={order.payment.redirectUrl}
+            className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-bone hover:bg-ink-3"
+          >
+            Pay now on Yoco
+          </a>
+        </div>
+      )}
 
       {/* Order journey: the status is not advanced automatically in this build. */}
       <div className="mt-8 rounded-3xl border-2 border-ink/10 bg-white p-6">

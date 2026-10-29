@@ -1255,7 +1255,7 @@
     "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Thursday",
-    "timeLabel": "21:14",
+    "timeLabel": "21:39",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Thursday 12:00–13:30",
     "nextWindowLabel": "Friday 12:00–13:30",
@@ -1268,10 +1268,10 @@
     ]
   },
   "payments": {
-    "driver": "sandbox",
-    "publicKey": "",
-    "hostedCheckout": false,
-    "card": true,
+    "provider": "yoco",
+    "online": false,
+    "mode": "off",
+    "exactAmount": false,
     "cashOnCollection": true,
     "cashOnDelivery": false
   },

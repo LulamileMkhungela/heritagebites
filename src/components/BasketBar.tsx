@@ -78,10 +78,18 @@ export function BasketBar() {
             </span>
             <span className="flex flex-wrap items-baseline gap-x-2">
               <span className="font-display text-xl font-bold leading-tight text-ochre-deep tabular-nums">{zar(subtotal)}</span>
+              {/*
+                The second line follows the basket, not the business. It used to
+                say "Delivery included" whatever the customer had chosen, which
+                reads as nonsense on a collection order — the delivery is not
+                included in anything they are collecting.
+              */}
               <span className="text-xs text-ink/55">
-                {belowMinimum
-                  ? `Add ${zar((settings?.minDeliveryOrder ?? 100) - subtotal)} for delivery`
-                  : 'Delivery included'}
+                {fulfilment === 'delivery'
+                  ? belowMinimum
+                    ? `Add ${zar((settings?.minDeliveryOrder ?? 100) - subtotal)} for delivery`
+                    : 'Delivery included'
+                  : 'Collection — nothing extra'}
               </span>
             </span>
           </button>

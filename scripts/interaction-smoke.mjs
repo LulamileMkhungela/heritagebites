@@ -48,10 +48,25 @@ const step = (label, fn) =>
 function boot(path, { seedCart } = {}) {
   const errors = [];
   const vc = new VirtualConsole();
-  vc.on('jsdomError', (e) => errors.push(`jsdomError: ${e.message}`));
+  /*
+   * jsdom cannot leave the document. The checkout navigates twice by design — to
+   * Yoco's payment page and to the order page — so those two notices are
+   * expected, and anything else still counts as a runtime error.
+   */
+  vc.on('jsdomError', (e) => {
+    if (/Not implemented: navigation/i.test(e.message)) return;
+    errors.push(`jsdomError: ${e.message}`);
+  });
   vc.on('error', (...a) => {
     const msg = a.join(' ');
-    if (!/Not implemented: HTMLCanvasElement|Could not parse CSS/i.test(msg)) errors.push(`console.error: ${msg}`);
+    /*
+     * jsdom cannot navigate, and the checkout legitimately navigates twice: to
+     * Yoco's payment page (a browser redirect) and to the tracking page. Both
+     * are reported as "Not implemented: navigation" and are expected here.
+     */
+    if (!/Not implemented: HTMLCanvasElement|Could not parse CSS|Not implemented: navigation/i.test(msg)) {
+      errors.push(`console.error: ${msg}`);
+    }
   });
 
   const dom = new JSDOM(`<!doctype html><html><body><div id="root"></div></body></html>`, {
@@ -1081,7 +1096,8 @@ await step('the loyalty card looks up stamps by cell number', async () => {
       fulfilment: 'collection',
       customer: { name: 'Passport Test', phone: loyal, email: 'passport@example.co.za' },
       items: [{ itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } }],
-      payment: { method: 'card', card: { number: '4242424242424242', expiry: '12/32', cvc: '123', holder: 'P TEST' } },
+      /* No card fields: this site never takes a card number, it hands off to Yoco. */
+      payment: { method: 'card' },
     }),
   }).then((r) => r.json());
   if (!placed.order?.code) throw new Error('could not seed an order for the passport check');
@@ -1180,121 +1196,126 @@ await step('validation blocks an empty order', async () => {
   return 'blocked with a message';
 });
 
-await step('a card order without an email is blocked, because the receipt has nowhere to go', async () => {
+await step('an online order without an email is blocked, because the receipt has nowhere to go', async () => {
   const ordersBefore = await orderCount();
 
   const byPlaceholder = (re) => [...s1.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s1.setInput(byPlaceholder(/Thabo Mahlangu/), 'Interaction Test');
   s1.setInput(byPlaceholder(/\+27 82/), '+27 82 000 7777');
-  s1.setInput(byPlaceholder(/4242 4242/), '4242 4242 4242 4242');
-  s1.setInput(byPlaceholder(/MM\/YY/), '12/32');
-  s1.setInput(byPlaceholder(/^123$/), '123');
-  s1.setInput(byPlaceholder(/T MAHLANGU/), 'I TEST');
+
+  /*
+   * There is no card field to fill in any more: the whole card form is gone, and
+   * money is taken on Yoco's own page. If a placeholder like "4242" is still on
+   * screen, the old form has crept back.
+   */
+  const cardFields = [...s1.doc.querySelectorAll('input')].filter((f) => /4242 4242|MM\/YY|^123$|T MAHLANGU/.test(f.placeholder ?? ''));
+  if (cardFields.length) throw new Error(`card fields are still on the checkout: ${cardFields.map((f) => f.placeholder).join(', ')}`);
 
   s1.click(s1.byText('button[type="submit"]', /Place order/i)[0]);
   await s1.waitFor(() => /need an email/i.test(s1.text()), 'email requirement', 10000);
 
   const ordersAfter = await orderCount();
   if (ordersAfter !== ordersBefore) throw new Error(`an order was created without an email: ${ordersBefore} -> ${ordersAfter}`);
-  return 'blocked with an email requirement';
+  return 'blocked with an email requirement, and no card fields exist';
 });
 
-await step('a declined card is refused and does not create an order', async () => {
+await step('placing an online order saves it and hands the customer to Yoco', async () => {
+  /*
+   * The money path, end to end, without a card: the order is created as
+   * awaiting-payment, and the page sends the customer to the Yoco payment page
+   * the business configured. Nothing here can charge anyone — that is the point
+   * of the change — so what is asserted is the hand-off, not an approval.
+   */
+  const payments = await fetch(`${BASE}/api/catalog`).then((r) => r.json()).then((c) => c.payments);
+  if (!payments.online) throw new Error('this server has no Yoco configuration, so the paid path cannot be exercised');
+
   const ordersBefore = await orderCount();
-
-  const fields = s1.doc.querySelectorAll('input');
-  const byPlaceholder = (re) => [...fields].find((f) => re.test(f.placeholder ?? ''));
-  s1.setInput(byPlaceholder(/Thabo Mahlangu/), 'Interaction Test');
-  s1.setInput(byPlaceholder(/\+27 82/), '+27 82 000 7777');
-  s1.setInput(byPlaceholder(/you@example/), 'interaction@example.co.za');
-  s1.setInput(byPlaceholder(/4242 4242/), '4000 0000 0000 0002'); // declined
-  s1.setInput(byPlaceholder(/MM\/YY/), '12/32');
-  s1.setInput(byPlaceholder(/^123$/), '123');
-  s1.setInput(byPlaceholder(/T MAHLANGU/), 'I TEST');
-
-  const declineSubmit = s1.byText('button[type="submit"]', /Place order/i)[0];
-  s1.click(declineSubmit);
-  // Match the issuer's actual sentence, not the word "declined" — the checkout
-  // also renders a static "Declined" test-card button, which matches /declined/i
-  // instantly and would let the test race ahead of the real request.
-  await s1.waitFor(() => /declined by the issuer/i.test(s1.text()), 'issuer decline message', 25000);
-  await s1.waitFor(
-    () => s1.byText('button[type="submit"]', /Place order/i)[0] && !s1.byText('button[type="submit"]', /Place order/i)[0].disabled,
-    'submit to return to an idle state',
-    25000,
-  );
-
-  const ordersAfter = await orderCount();
-    if (ordersAfter !== ordersBefore) throw new Error(`order count changed ${ordersBefore} -> ${ordersAfter}`);
-  return `declined, orders still ${ordersAfter}`;
-});
-
-await step('a card needing 3-D Secure is explained as a next step, not a dead end', async () => {
-  const ordersBefore = await orderCount();
-
   const byPlaceholder = (re) => [...s1.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
-  s1.setInput(byPlaceholder(/4242 4242/), '4000 0000 0000 3220'); // needs 3-D Secure
+  s1.setInput(byPlaceholder(/you@example/), 'interaction@example.co.za');
   await sleep(300);
 
   s1.click(s1.byText('button[type="submit"]', /Place order/i)[0]);
-  // The issuer's own sentence, scoped to the amber panel — /3-D Secure/ alone
-  // would also match the static sandbox-card chip that is always on the page.
-  await s1.waitFor(
-    () => /needs you to approve this payment/i.test(s1.text()),
-    'the 3-D Secure next-step panel',
-    25000,
-  );
 
-  // It must read as a next step, not a refusal, and must not lock the form.
-  const panel = s1.byText('div[role="alert"]', /needs you to approve this payment/i)[0];
-  if (!panel) throw new Error('3-D Secure guidance is not in a role="alert" region');
-  if (/declined by the issuer/i.test(panel.textContent || '')) {
-    throw new Error('3-D Secure was presented as a decline');
+  /* The panel stays on screen even though the redirect is attempted. */
+  await s1.waitFor(() => /is saved/i.test(s1.text()) && /Continue to Yoco payment/i.test(s1.text()), 'the Yoco hand-off page', 25000);
+
+  const payLink = [...s1.doc.querySelectorAll('a')].find((a) => /Continue to Yoco payment/i.test(a.textContent ?? ''));
+  if (!payLink) throw new Error('no link to continue to Yoco');
+  const url = new URL(payLink.href);
+  const expected = new URL(payments.mode === 'api' ? 'https://pay.yoco.com/' : 'https://pay.yoco.com/heritagebites');
+  if (url.host !== expected.host) throw new Error(`the payment page is not Yoco: ${url.host}`);
+
+  /*
+   * The hand-off replaces the whole page (the basket is gone by then), so the
+   * order code is read from the heading rather than from a small panel.
+   */
+  const code = (s1.text().match(/HB-\d{4}[A-Z]/) ?? [])[0];
+  if (!code) throw new Error('the hand-off does not name the order it belongs to');
+  /* In link mode the order code travels with the payment so a person can match them. */
+  if (payments.mode === 'link' && url.searchParams.get('reference') !== code) {
+    throw new Error(`the payment link does not carry the order code: ${url.href}`);
   }
-  await s1.waitFor(
-    () => s1.byText('button[type="submit"]', /Place order/i)[0] && !s1.byText('button[type="submit"]', /Place order/i)[0].disabled,
-    'submit to stay usable after a 3-D Secure challenge',
-    25000,
-  );
 
   const ordersAfter = await orderCount();
-  if (ordersAfter !== ordersBefore) throw new Error(`an unapproved 3DS charge created an order: ${ordersBefore} -> ${ordersAfter}`);
-  return `next step shown, orders still ${ordersAfter}`;
-});
+  if (ordersAfter !== ordersBefore + 1) throw new Error(`expected one new order, ${ordersBefore} -> ${ordersAfter}`);
 
-await step('an approved card places the order and lands on the tracking page', async () => {
-  const byPlaceholder = (re) => [...s1.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
-  s1.setInput(byPlaceholder(/4242 4242/), '4242 4242 4242 4242');
-  await sleep(400);
-
-  const submit = s1.byText('button[type="submit"]', /Place order/i)[0];
-  if (!submit) {
-    const seen = [...s1.doc.querySelectorAll('button')].map((b) => `${JSON.stringify(b.textContent)}${b.disabled ? '(disabled)' : ''}`);
-    throw new Error(`submit button not found. buttons present: ${seen.join(' | ')}`);
-  }
-  if (submit.disabled) throw new Error('submit button is still disabled after swapping to a good card');
-  s1.click(submit);
-  await s1.waitFor(() => /Order tracking/i.test(s1.text()), 'tracking page', 25000);
-
-  const code = s1.w.location.pathname.split('/').pop();
-  const trackingToken = new URLSearchParams(s1.w.location.search).get('token');
-  if (!/^HB-\d{4}[A-Z]$/.test(code)) throw new Error(`unexpected order code: ${code}`);
-  if (!trackingToken) throw new Error('checkout did not provide a secure tracking token');
-  if (!/Order received|recorded your order/i.test(s1.text())) throw new Error('order receipt status is not shown');
-  if (!/Visa/i.test(s1.text()) || !/4242/.test(s1.text())) throw new Error('masked card not shown');
   s1.__code = code;
-  s1.__trackingToken = trackingToken;
-  return code;
+  /* The checkout parks the token, because Yoco returns without it. */
+  s1.__trackingToken = s1.w.localStorage.getItem(`hb.track.${code}`) ?? '';
+  if (!s1.__trackingToken) throw new Error('the checkout did not keep the tracking token for the return trip');
+  return `${code} awaiting payment at ${url.host}`;
 });
+
+await step('the order page says the payment has not arrived, and offers to finish it', async () => {
+  /*
+   * The state a customer is in if they close the Yoco tab. The page must not
+   * look like a completed order: nothing is cooked until the money lands, and
+   * the only thing that marks it paid is the signed webhook.
+   */
+  const code = s1.__code;
+  const view = boot(`/order/${code}?token=${encodeURIComponent(s1.__trackingToken)}`);
+  await view.waitFor(() => /Order tracking/i.test(view.text()), 'the tracking page', 20000);
+
+  if (!/Awaiting payment/i.test(view.text())) throw new Error('an unpaid order does not say it is unpaid');
+  if (!/Payment not completed/i.test(view.text())) throw new Error('the resume-payment panel is missing');
+  const again = [...view.doc.querySelectorAll('a')].find((a) => /Pay now on Yoco/i.test(a.textContent ?? ''));
+  if (!again) throw new Error('no way to finish the payment');
+  if (!/heritagebites|yoco/i.test(new URL(again.href).host)) throw new Error(`resume link is not the payment page: ${again.href}`);
+
+  /* It is genuinely unpaid on the server, not just in the page's head. */
+  const tracked = await fetch(`${BASE}/api/orders/${code}?token=${encodeURIComponent(s1.__trackingToken)}`).then((r) => r.json());
+  if (tracked.order.payment.status !== 'awaiting_payment') {
+    throw new Error(`the server thinks the order is ${tracked.order.payment.status}`);
+  }
+  view.close();
+  return 'unpaid state shown, with a way back to Yoco';
+});
+
+/*
+ * The receipt/ticket checks below all read the tracking page for the order above.
+ * Booted lazily, inside the steps, so a failure in the checkout step is reported
+ * as that failure rather than as a mysterious crash here.
+ */
+let s1Order = null;
+async function orderPage() {
+  if (s1Order) return s1Order;
+  if (!s1.__code || !s1.__trackingToken) throw new Error('no order came out of the checkout steps');
+  s1Order = boot(`/order/${s1.__code}?token=${encodeURIComponent(s1.__trackingToken)}`);
+  await s1Order.waitFor(() => /Order tracking/i.test(s1Order.text()), 'the order page for the receipt checks', 20000);
+  s1Order.__code = s1.__code;
+  s1Order.__trackingToken = s1.__trackingToken;
+  return s1Order;
+}
 
 await step('the receipt destination is shown masked, or not claimed at all', async () => {
+  await orderPage();
   /*
    * Whether a receipt was queued depends on the server having SMTP configured, so
    * this checks the two honest outcomes rather than assuming one: either the page
    * names a masked address, or it says nothing about a receipt. What it must never
    * do is claim a receipt and print the full address.
    */
-  const text = s1.text();
+  const text = s1Order.text();
   if (/interaction@example\.co\.za/.test(text)) throw new Error('the full email address is exposed on the page');
 
   if (/Receipt (emailed to|on its way to)|could not email your receipt/i.test(text)) {
@@ -1308,7 +1329,8 @@ await step('the receipt destination is shown masked, or not claimed at all', asy
 });
 
 await step('the tracking page offers manual WhatsApp updates, an order ticket and a shareable receipt', async () => {
-  const links = [...s1.doc.querySelectorAll('a[href^="https://wa.me/"]')];
+  await orderPage();
+  const links = [...s1Order.doc.querySelectorAll('a[href^="https://wa.me/"]')];
   if (links.length < 3) throw new Error('expected update-request, order-message and keep-receipt links');
 
   /*
@@ -1325,22 +1347,68 @@ await step('the tracking page offers manual WhatsApp updates, an order ticket an
   }
 
   const body = (a) => new URL(a.href).searchParams.get('text') ?? '';
-  if (!body(share[0]).includes(s1.__code)) throw new Error('shareable receipt is missing the order code');
+  if (!body(share[0]).includes(s1Order.__code)) throw new Error('shareable receipt is missing the order code');
 
   const updates = business.find((a) => body(a).includes('please send me WhatsApp updates'));
-  if (!updates || !body(updates).includes(s1.__code)) throw new Error('manual update request is missing the order code');
+  if (!updates || !body(updates).includes(s1Order.__code)) throw new Error('manual update request is missing the order code');
 
   const ticket = business.find((a) => body(a).includes('Heritage Bites order'));
-  if (!ticket || !body(ticket).includes(s1.__code)) throw new Error('order ticket body missing');
-  if (!/not automatic|a person, not a bot/i.test(s1.text())) throw new Error('page does not clarify that WhatsApp updates are manual');
+  if (!ticket || !body(ticket).includes(s1Order.__code)) throw new Error('order ticket body missing');
+  if (!/not automatic|a person, not a bot/i.test(s1Order.text())) throw new Error('page does not clarify that WhatsApp updates are manual');
   return 'manual update request + pre-filled order ticket';
 });
 
-await step('paid orders explain that cancellation and refunds need a person', async () => {
+await step('a verified Yoco payment marks the order paid, and then it cannot self-cancel', async () => {
+  await orderPage();
   const code = s1.__code;
-  if (!code) throw new Error('no order code from the earlier checkout step');
-  if (s1.byText('button', /Cancel this order/i)[0]) throw new Error('paid order incorrectly offers self-cancellation');
-  if (!/refunds are not processed automatically/i.test(s1.text())) throw new Error('paid-order refund limitation is not explained');
+
+  /*
+   * This is the whole safety property of the new payment path: a return URL
+   * cannot mark an order paid, and a webhook cannot either unless it is signed
+   * with the business's webhook secret. The secret is supplied to this script by
+   * the same environment that starts the server, so the signature here is the
+   * real one Yoco would send.
+   */
+  const secret = process.env.HB_YOCO_WEBHOOK_SECRET ?? '';
+  if (!secret) {
+    /* Without the secret this cannot be exercised honestly, so say so loudly. */
+    throw new Error('start the server with HB_YOCO_WEBHOOK_SECRET and export it here to test the paid path');
+  }
+
+  const body = JSON.stringify({
+    type: 'payment.succeeded',
+    payload: {
+      id: 'pay_interaction_1',
+      amount: 13000,
+      currency: 'ZAR',
+      status: 'succeeded',
+      metadata: { orderCode: code },
+      card: { brand: 'visa', last4: '4242' },
+    },
+  });
+  const { createHmac } = await import('node:crypto');
+  const msgId = 'msg_interaction_1';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+  const signature = createHmac('sha256', key).update(`${msgId}.${timestamp}.${body}`).digest('base64');
+
+  const posted = await fetch(`${BASE}/api/payments/yoco/webhook`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'webhook-id': msgId,
+      'webhook-timestamp': String(timestamp),
+      'webhook-signature': `v1,${signature}`,
+    },
+    body,
+  });
+  if (posted.status !== 200) throw new Error(`signed webhook rejected with ${posted.status}: ${await posted.text()}`);
+
+  const tracked = await fetch(`${BASE}/api/orders/${code}?token=${encodeURIComponent(s1.__trackingToken)}`).then((r) => r.json());
+  if (tracked.order.payment.status !== 'approved') throw new Error('a signed webhook did not mark the order paid');
+  if (tracked.order.payment.last4 !== '4242') throw new Error('the card details from Yoco were not kept');
+  /* Paid money is not something a customer can unilaterally reverse. */
+  if (tracked.order.canCancel) throw new Error('a paid order still offers self-cancellation');
 
   const response = await fetch(`${BASE}/api/orders/${code}/cancel`, {
     method: 'POST',
@@ -1350,7 +1418,7 @@ await step('paid orders explain that cancellation and refunds need a person', as
   if (response.status !== 409) throw new Error(`paid order cancellation returned ${response.status}, expected 409`);
   const result = await response.json();
   if (!/contact us.*refund/i.test(result.error)) throw new Error('server response does not explain the refund limitation');
-  return `${code} remains unchanged; refund request requires direct contact`;
+  return `${code} marked paid by a signed webhook, then refused self-cancellation`;
 });
 
 /* --- session 6: paying without a card ------------------------------------
@@ -1382,16 +1450,22 @@ const s6 = boot('/checkout', {
 await step('a cash order can be placed with no card details at all', async () => {
   await s6.waitFor(() => /Checkout/i.test(s6.text()), 'checkout to mount with the seeded basket', 20000);
   if (!/Tshotlo/i.test(s6.text())) throw new Error('seeded basket did not reach checkout');
-  if (/\bEFT\b/i.test(s6.text())) throw new Error('EFT is still shown as a checkout option');
+  /*
+   * Yoco itself takes instant EFT, so the word may appear inside the payment
+   * blurb — what must not come back is EFT as a *separate* checkout option.
+   */
+  const methodButtons = [...s6.doc.querySelectorAll('button[aria-pressed]')].map((b) => b.textContent ?? '');
+  if (methodButtons.some((t) => /^EFT\b/i.test(t.trim()))) throw new Error('EFT is still a separate checkout option');
 
-  // Choose cash. The card fields must then disappear — asking for a CVC on a
-  // cash ticket would be a dead end for anyone without a card.
+  /*
+   * Choose cash. There is no card form to hide any more — the online option
+   * sends the customer to Yoco instead — so what this checks is that choosing
+   * cash leaves no card-like field on the page at all.
+   */
   s6.click(s6.byText('button', /Cash on collection/i)[0]);
-  await s6.waitFor(
-    () => ![...s6.doc.querySelectorAll('input')].some((f) => /4242 4242/.test(f.placeholder ?? '')),
-    'card fields to be removed when cash is selected',
-    15000,
-  );
+  await sleep(200);
+  const suspicious = [...s6.doc.querySelectorAll('input')].filter((f) => /4242 4242|MM\/YY|^123$|T MAHLANGU/.test(f.placeholder ?? ''));
+  if (suspicious.length) throw new Error(`card fields are still present: ${suspicious.map((f) => f.placeholder).join(', ')}`);
 
   const byPh = (re) => [...s6.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s6.setInput(byPh(/Thabo Mahlangu/), 'Cash Customer');
@@ -1452,12 +1526,115 @@ await step('a cash order can be placed with no card details at all', async () =>
 });
 
 /* ------------------------------------------------------------------ */
+/* Flow 3: the basket bar and clearing the basket                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A basket with two plates in it, on the menu page: the bar is pinned to the
+ * bottom of every page except checkout, and the drawer is where the whole basket
+ * is visible — including the only control that empties it.
+ */
+const s8 = boot('/menu', {
+  seedCart: {
+    state: {
+      lines: [
+        {
+          key: 'mogodu-plate::starch=pap|veg=braised-cabbage',
+          itemId: 'mogodu-plate',
+          name: 'Mogodu Plate',
+          image: '/img/plate-mogodu.jpg',
+          unitPrice: 100,
+          qty: 2,
+          picks: [{ optionId: 'starch', choiceId: 'pap', label: 'Pap', priceDelta: 0 }],
+          kind: 'menu',
+        },
+        {
+          key: 'short-rib-plate::starch=garlic-bread|veg=corn-ribs',
+          itemId: 'short-rib-plate',
+          name: 'BBQ Short Rib Plate',
+          image: '/img/plate-short-rib.jpg',
+          unitPrice: 130,
+          qty: 1,
+          picks: [{ optionId: 'starch', choiceId: 'garlic-bread', label: 'Garlic bread', priceDelta: 0 }],
+          kind: 'menu',
+        },
+      ],
+      /* Delivery is the default choice for a fresh basket. */
+      fulfilment: 'delivery',
+    },
+    version: 2,
+  },
+});
+
+await s8.waitFor(() => /3 plates/.test(s8.text()), 'the pinned basket bar', 20000);
+
+await step('the basket bar describes the fulfilment that is actually chosen', async () => {
+  if (!/3 plates · delivery/.test(s8.text())) throw new Error('the bar does not show the plate count and delivery');
+  if (!/Delivery included/.test(s8.text())) throw new Error('a delivery basket should say delivery is included');
+
+  /*
+   * Switching to collection must change the second line too. It used to keep
+   * saying "Delivery included", which is nonsense on a collection order — the
+   * owner spotted exactly that on a three-plate basket.
+   */
+  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  s8.click(open);
+  await s8.waitFor(() => /Your basket/i.test(s8.text()), 'the basket drawer', 15000);
+
+  const collection = [...s8.doc.querySelectorAll('button')].find((b) => /^collection$/i.test((b.textContent ?? '').trim()));
+  if (!collection) throw new Error('no collection switch in the basket');
+  s8.click(collection);
+  await sleep(300);
+  if (/Delivery included/.test(s8.text())) throw new Error('the drawer still claims delivery is included on a collection basket');
+  if (!/Collection — nothing is added at checkout/.test(s8.text())) {
+    throw new Error('the drawer does not say what a collection basket is charged');
+  }
+
+  /* Close the drawer: the bar must agree with it. */
+  const close = [...s8.doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Close');
+  s8.click(close);
+  await sleep(300);
+  if (/Delivery included/.test(s8.text())) throw new Error('a collection basket still claims delivery is included');
+  if (!/Collection — nothing extra/.test(s8.text())) throw new Error('a collection basket does not say what applies');
+  if (!/3 plates · collection/.test(s8.text())) throw new Error('the bar does not show the collection choice');
+  return 'delivery and collection each described correctly';
+});
+
+await step('the basket can be cleared from the bottom of the drawer', async () => {
+  /* Open the drawer from the bar. */
+  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  if (!open) throw new Error('no basket bar to open');
+  s8.click(open);
+  await s8.waitFor(() => /Your basket/i.test(s8.text()), 'the basket drawer', 15000);
+
+  const clearButton = () => [...s8.doc.querySelectorAll('button')].find((b) => /Clear basket|Tap again to clear/i.test(b.textContent ?? ''));
+  if (!clearButton()) throw new Error('the drawer has no way to clear the basket');
+
+  /*
+   * Two taps. One tap would let a thumb wipe a basket somebody spent time
+   * filling, so the first tap asks and names what will go.
+   */
+  s8.click(clearButton());
+  await sleep(150);
+  if (!/Tap again to clear 3 plates/i.test(clearButton()?.textContent ?? '')) {
+    throw new Error(`the confirmation does not say what will be cleared: ${clearButton()?.textContent}`);
+  }
+  if (!/Mogodu/i.test(s8.text())) throw new Error('the basket emptied on the first tap');
+
+  s8.click(clearButton());
+  await s8.waitFor(() => /Nothing in the pot yet/i.test(s8.text()), 'the empty basket', 15000);
+  await sleep(200);
+  if (/Open your basket/i.test(s8.text())) throw new Error('the bar is still showing for an empty basket');
+  return 'two taps, and the basket is empty';
+});
+
+/* ------------------------------------------------------------------ */
 
 const failed = results.filter(([s]) => s === 'FAIL');
 console.log('\n--- interaction smoke test (jsdom, live API) ---');
 for (const [status, label, detail] of results) console.log(`  ${status}  ${label}${detail ? ` — ${detail}` : ''}`);
 
-const errs = [...s1.errors, ...s3.errors, ...s5.errors, ...s6.errors];
+const errs = [...s1.errors, ...s3.errors, ...s5.errors, ...s6.errors, ...s8.errors];
 if (errs.length) {
   console.log('\n--- runtime errors ---');
   for (const e of errs.slice(0, 10)) console.log(`  ${e}`);
@@ -1469,4 +1646,5 @@ s1.close();
 s3.close();
 s5.close();
 s6.close();
+s8.close();
 process.exit(ok ? 0 : 1);

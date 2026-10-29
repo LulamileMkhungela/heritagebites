@@ -47,7 +47,9 @@ const orderResponse = await fetch(`${BASE}/api/orders`, {
       suburb: 'Sandton',
     },
     items: [{ itemId: 'tshotlo-plate', qty: 2, options: { starch: 'pap', veg: 'chakalaka' } }],
-    payment: { method: 'card', card: { number: '4242424242424242', expiry: '12/32', cvc: '123', holder: 'M AUDIT' } },
+    /* No card fields exist any more: the order is saved and the customer is
+       sent to Yoco. The receipt page is what this audit renders. */
+    payment: { method: 'card' },
   }),
 });
 if (!orderResponse.ok) throw new Error(`could not create audit order: ${await orderResponse.text()}`);

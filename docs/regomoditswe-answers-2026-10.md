@@ -62,7 +62,7 @@ Nothing to action from you yet. If you would rather quests land in a different i
 Yes — the account is confirmed, so the production setup is prepared. The full step-by-step is in [`docs/production-payments-yoco.md`](production-payments-yoco.md). In short:
 
 1. In the Yoco dashboard (live account), open **Settings → Developer / API keys** and copy the **secret key** (`sk_live_…`) and the **public key** (`pk_live_…`).
-2. Put both into the production host's secret settings as `YOCO_SECRET_KEY` and `YOCO_PUBLIC_KEY`. Do **not** send them to me by email, WhatsApp or in a document.
+2. Put them into the production host's secret settings as `HB_YOCO_SECRET_KEY` (or `HB_YOCO_PAYMENT_URL` for a payment link) and `HB_YOCO_WEBHOOK_SECRET`. Do **not** send a secret key by email, WhatsApp or in a document.
 3. Redeploy/restart. Checkout then replaces the test-card form with Yoco's own secure payment window.
 
 Why it works this way: the customer enters their card **inside Yoco's window**, not on our site. The browser hands the server only a Yoco reference, and the server confirms the amount with Yoco before an order is created. Heritage Bites never receives or stores a card number, which keeps you in the simplest PCI-DSS category. It also means a "paid" flag can never be faked in the browser.
