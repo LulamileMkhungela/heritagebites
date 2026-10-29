@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { clockTime, timeAgo, zar } from '../lib/format';
 import { Badge, Button, ContactText, LinkButton, SectionLabel, Spinner } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
-import { waHref } from '../lib/whatsapp';
+import { waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 import { useCatalog } from '../store/catalog';
 import type { Order } from '../lib/types';
 import {
@@ -57,7 +57,7 @@ export default function OrderStatus() {
       const already = state.status === 'idle' ? await hasLocalSubscription() : false;
       if (!alive) return;
       setPush(already
-        ? { status: 'subscribed', message: 'Alerts are on for this device. We will tell you when this order changes.' }
+        ? { status: 'subscribed', message: 'Alerts are on for this device. You will get one here if the kitchen cancels this order.' }
         : state);
     })();
     return () => { alive = false; };
@@ -111,6 +111,25 @@ export default function OrderStatus() {
   }
 
   if (!order) return <Spinner label="Fetching your order…" />;
+
+  /*
+   * Say what actually happened to the receipt, not what should have. The state
+   * comes from the server's outbox: `sent` has left, `queued` is retrying,
+   * `failed` gave up, `none` means no address was left. Claiming an email that
+   * never arrived is how a customer ends up with no receipt at all.
+   */
+  const receiptLine = (() => {
+    switch (order.receiptState) {
+      case 'sent':
+        return `Your receipt was emailed to ${order.receiptEmail ?? 'your inbox'}.`;
+      case 'queued':
+        return `Your receipt is queued for ${order.receiptEmail ?? 'your inbox'} and will arrive shortly.`;
+      case 'failed':
+        return 'The receipt email could not be sent — keep this page, or press “Keep this receipt on WhatsApp” below.';
+      default:
+        return 'No receipt email was sent — keep this page, or press “Keep this receipt on WhatsApp” below.';
+    }
+  })();
 
   const updateRequest = waHref(
     settings?.whatsapp,
@@ -222,6 +241,16 @@ export default function OrderStatus() {
                 ? `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout. Delivery is included in the plate price.`
                 : 'Collection is from our shadow kitchen at Standard Bank, Rosebank and Sandton. We confirm the exact collection point by WhatsApp.'}
             </p>
+            {order.fulfilment === 'collection' && (
+              <a
+                href={waHref(settings?.whatsapp, COLLECTION_POINT_ENQUIRY)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex min-h-11 items-center font-semibold text-ochre-deep hover:underline"
+              >
+                Get the exact collection point →
+              </a>
+            )}
             <p className="mt-3 text-sm text-ink/70">
               <strong>{order.customer.name}</strong>
               <br />
@@ -261,13 +290,36 @@ export default function OrderStatus() {
             </div>
           )}
 
+          {/*
+            What a customer is actually told here matters more than how it
+            reads. The kitchen is alerted on every order, but the *customer* has
+            no automatic status feed: there is no staff screen that moves an
+            order along, so the page cannot promise "you will be told when this
+            changes". Instead it says which channel is live for this specific
+            order — a receipt email, or alerts turned on for this device — and is
+            explicit that WhatsApp is a person replying, not a bot.
+          */}
           <div className="rounded-3xl border-2 border-ink/10 bg-ink p-6 text-bone">
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Need an update?</p>
-            <p className="mt-2 text-sm text-bone/70">
-              The kitchen was notified the moment you placed this order, and this page always shows the latest state.
-              WhatsApp messages are not automatic: replies are written by a person during kitchen hours, so they are not instant —
-              message or call us for an update.
-            </p>
+            <ul className="mt-2 space-y-1.5 text-sm text-bone/70">
+              <li>
+                <strong className="text-bone">The kitchen knows.</strong> Your order ticket was sent to the kitchen the
+                moment you placed it.
+              </li>
+              <li>
+                <strong className="text-bone">This page is the record.</strong> It always shows the latest state we have —
+                keep the link, or add it to your home screen, and refresh it to check.
+              </li>
+              <li>
+                <strong className="text-bone">
+                  {receiptLine}
+                </strong>
+              </li>
+              <li>
+                <strong className="text-bone">WhatsApp is a person, not a bot.</strong> Replies are written during
+                kitchen hours, so they are not instant — message or call us if you need an update now.
+              </li>
+            </ul>
             <a
               href={updateRequest}
               target="_blank"

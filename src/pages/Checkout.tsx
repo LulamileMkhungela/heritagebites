@@ -6,7 +6,7 @@ import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { detectCardBrand, formatCardNumber, formatExpiry, luhnValid, normalisePhone, zar } from '../lib/format';
 import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
-import { basketHref, waChatHref } from '../lib/whatsapp';
+import { basketHref, waChatHref, waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 
 type PayMethod = 'card' | 'cash-on-collection';
 
@@ -300,9 +300,32 @@ function LiveCheckout() {
                 </button>
               ))}
             </div>
+            {/*
+              A collection order needs somewhere to collect from, and this kitchen
+              has no public street address — it is a shadow kitchen and the exact
+              point is confirmed by a person. So the collection card carries the
+              redirect instead: one tap opens the WhatsApp conversation that
+              answers it.
+            */}
+            {fulfilment === 'collection' && (
+              <a
+                href={waHref(settings?.whatsapp, COLLECTION_POINT_ENQUIRY)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 flex min-h-11 items-center justify-between gap-3 rounded-2xl border-2 border-ink/12 px-4 py-2.5 text-sm font-semibold hover:border-ochre hover:bg-ochre/10"
+              >
+                <span>
+                  Get the collection point
+                  <span className="mt-0.5 block text-[12px] font-normal text-ink/55">
+                    {settings?.collectionPoint ?? 'Standard Bank, Rosebank and Sandton — confirmed by WhatsApp'}
+                  </span>
+                </span>
+                <span aria-hidden="true">→</span>
+              </a>
+            )}
             <p className="mt-3 text-xs text-ink/50">
-              Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Service window {settings?.serviceWindow.open}–
-              {settings?.serviceWindow.close} on Thursdays and Fridays.
+              Minimum order {zar(settings?.minDeliveryOrder ?? 100)} for delivery; delivery is included in the plate price.
+              Service window {settings?.serviceWindow.open}–{settings?.serviceWindow.close} on Thursdays and Fridays.
             </p>
           </fieldset>
 

@@ -9,7 +9,46 @@ import type { ComingSoonItem, MenuItem, PlateMenu } from '../lib/types';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
 import { asset } from '../lib/assets';
 
-const FILTERS = [{ id: 'spicy', label: 'Spicy' }];
+/*
+ * Menu filters and sorts.
+ *
+ * The two plate tiers sit close together in price (R100 and R130), so price is
+ * not a great way to narrow the menu — but it is the first thing people look
+ * for on a food site, and "cheapest first" is a fair question to ask of a menu.
+ * The filters answer the other questions customers actually ask: is it hot, can
+ * I eat for R100, and what can I order today rather than pre-order.
+ *
+ * Filters combine (spicy + R100 or less is allowed); the sort only reorders.
+ */
+const FILTERS = [
+  { id: 'spicy', label: 'Spicy', test: (item: MenuItem) => item.spice >= 2 },
+  { id: 'budget', label: 'R100 or less', test: (item: MenuItem) => item.price <= 100 },
+  { id: 'available', label: 'Available today', test: (item: MenuItem) => item.available !== false },
+] as const;
+
+const SORTS = [
+  { id: 'recommended', label: 'Recommended' },
+  { id: 'price-asc', label: 'Price: low to high' },
+  { id: 'price-desc', label: 'Price: high to low' },
+  { id: 'quickest', label: 'Quickest first' },
+] as const;
+
+type SortId = (typeof SORTS)[number]['id'];
+
+function sortItems(items: MenuItem[], sort: SortId): MenuItem[] {
+  const copy = [...items];
+  switch (sort) {
+    case 'price-asc':
+      return copy.sort((a, b) => a.price - b.price || a.name.localeCompare(b.name));
+    case 'price-desc':
+      return copy.sort((a, b) => b.price - a.price || a.name.localeCompare(b.name));
+    case 'quickest':
+      return copy.sort((a, b) => a.prepMins - b.prepMins || a.price - b.price);
+    default:
+      /* The kitchen's own order: the plates it sells most sit first. */
+      return copy.sort((a, b) => (b.orders ?? 0) - (a.orders ?? 0));
+  }
+}
 
 export default function MenuPage() {
   useDocumentTitle('Meals');
@@ -18,7 +57,8 @@ export default function MenuPage() {
   const [params, setParams] = useSearchParams();
   const [modal, setModal] = useState<MenuItem | null>(null);
   const [activeCategory, setActiveCategory] = useState('');
-  const [filter, setFilter] = useState<string>('all');
+  const [filters, setFilters] = useState<ReadonlySet<string>>(new Set());
+  const [sort, setSort] = useState<SortId>('recommended');
   const [q, setQ] = useState('');
   const [builder, setBuilder] = useState<PlateMenu | null>(null);
   /*
@@ -92,15 +132,39 @@ export default function MenuPage() {
     const live: Section[] = catalog.categories
       .map((category) => {
         let items = catalog.menu.filter((item) => item.category === category.id);
-        if (filter === 'spicy') items = items.filter((item) => item.spice >= 2);
+        for (const id of filters) {
+          const rule = FILTERS.find((f) => f.id === id);
+          if (rule) items = items.filter(rule.test);
+        }
         if (term) {
           items = items.filter((item) =>
             `${item.name} ${item.localName} ${item.language} ${item.description}`.toLowerCase().includes(term),
           );
         }
-        return { id: category.id, name: category.name, tagline: category.tagline, blurb: category.blurb, archived: false as const, items };
+        return {
+          id: category.id,
+          name: category.name,
+          tagline: category.tagline,
+          blurb: category.blurb,
+          archived: false as const,
+          items: sortItems(items, sort),
+        };
       })
       .filter((section) => section.items.length > 0);
+
+    /*
+     * The menu is grouped by kitchen, so sorting inside a section alone would
+     * put the cheapest traditional plate first and the R130 contemporary plates
+     * still below it — "price: high to low" that does not start with the most
+     * expensive plate is a broken promise. When a price sort is asked for, the
+     * sections themselves are ordered by their cheapest (or dearest) plate, and
+     * the items inside them are sorted too.
+     */
+    if (sort === 'price-asc') {
+      live.sort((a, b) => Math.min(...a.items.map((i) => i.price)) - Math.min(...b.items.map((i) => i.price)));
+    } else if (sort === 'price-desc') {
+      live.sort((a, b) => Math.max(...b.items.map((i) => i.price)) - Math.max(...a.items.map((i) => i.price)));
+    }
 
     /*
      * Spicy is a property of a sellable dish, so it hides the archive rather
@@ -108,7 +172,7 @@ export default function MenuPage() {
      * reach the archive — someone typing "kota" should find the card that says
      * it is coming, not an empty page.
      */
-    const archive: Section[] = filter !== 'all'
+    const archive: Section[] = filters.size > 0
       ? []
       : (catalog.comingSoon ?? [])
           .map((category) => {
@@ -119,7 +183,7 @@ export default function MenuPage() {
           .filter((section) => section.items.length > 0);
 
     return [...live, ...archive];
-  }, [catalog, filter, q]);
+  }, [catalog, filters, sort, q]);
 
   const lastArchived = [...sections].reverse().find((section) => section.archived);
 
@@ -132,7 +196,7 @@ export default function MenuPage() {
   /* A search or a filter must never land inside a folded section. */
   useEffect(() => {
     setClosed({});
-  }, [q, filter]);
+  }, [q, filters]);
 
   /* Keep the category chip in step with the section passing through the viewport. */
   useEffect(() => {
@@ -174,10 +238,26 @@ export default function MenuPage() {
         <div className="relative mx-auto max-w-7xl px-4">
           <SectionLabel onDark>Offering / Meals</SectionLabel>
           <h1 className="max-w-3xl font-display text-5xl font-semibold md:text-6xl">The full menu</h1>
+          {/*
+            Every price is read from the plate it belongs to. The old copy wrote
+            "R100 a plate" and "R130 a plate" as facts about the whole kitchen,
+            which stops being true as soon as one plate is priced differently.
+          */}
           <p className="mt-4 max-w-2xl text-bone/70">
-            Two plate menus. Choose a protein, a starch and a vegetable side — the plate price includes delivery.
-            Traditional plates are {zar(catalog.plateMenus.find((p) => p.id === 'traditional')?.price ?? 100)}, contemporary
-            plates {zar(catalog.plateMenus.find((p) => p.id === 'contemporary')?.price ?? 130)}.
+            Two plate menus, each at a fixed price. Choose a protein, a starch and a vegetable side, and delivery is
+            included.
+            {catalog.plateMenus.length > 0 && (
+              <>
+                {' '}
+                {catalog.plateMenus.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 ? ' · ' : ''}
+                    {p.name} {zar(p.price)}
+                  </span>
+                ))}
+                .
+              </>
+            )}
           </p>
         </div>
       </header>
@@ -187,19 +267,28 @@ export default function MenuPage() {
         <div className="grid gap-5 md:grid-cols-2">
           {catalog.plateMenus.map((plate) => (
             <Reveal key={plate.id}>
+              {/*
+                Photo + words + button in one row only from 24rem up. On a phone
+                that row squeezed the name onto three lines and left the eyebrow
+                broken in two, so the card stacks instead: picture, then the name
+                and price on one line, then the description.
+              */}
               <button
                 type="button"
                 onClick={() => setBuilder(plate)}
-                className="group flex w-full items-center gap-4 overflow-hidden rounded-3xl border-2 border-ink/10 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-ink/30"
+                className="group flex w-full items-center gap-4 overflow-hidden rounded-3xl border-2 border-ink/10 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-ink/30 max-sm:flex-wrap"
               >
                 <img src={plate.image} alt="" className="h-24 w-24 shrink-0 rounded-2xl object-cover" loading="lazy" />
-                <span className="min-w-0 flex-1">
-                  <span className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Build your plate</span>
-                  <span className="mt-0.5 block font-display text-xl font-semibold">{plate.name} · {zar(plate.price)}</span>
-                  <span className="mt-1 block text-[12px] leading-snug text-ink/60">{plate.blurb}</span>
+                <span className="min-w-0 flex-1 max-sm:order-last max-sm:basis-full">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-ochre-deep">Build your plate</span>
+                  <span className="mt-0.5 block font-display text-xl font-semibold">{plate.name}</span>
+                  <span className="mt-1 block text-[13px] leading-snug text-ink/60">{plate.blurb}</span>
                 </span>
-                <span className="shrink-0 rounded-full border-2 border-ink/15 px-3 py-2 text-xs font-bold uppercase tracking-wide group-hover:border-ink group-hover:bg-ink group-hover:text-bone">
-                  Build
+                <span className="ml-auto flex shrink-0 flex-col items-end gap-1">
+                  <span className="font-mono text-lg font-bold text-ink">{zar(plate.price)}</span>
+                  <span className="rounded-full border-2 border-ink/15 px-3 py-1.5 text-xs font-bold uppercase tracking-wide group-hover:border-ink group-hover:bg-ink group-hover:text-bone">
+                    Build
+                  </span>
                 </span>
               </button>
             </Reveal>
@@ -223,22 +312,58 @@ export default function MenuPage() {
             ))}
           </nav>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {FILTERS.map((item) => (
+            {FILTERS.map((item) => {
+              const active = filters.has(item.id);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() =>
+                    setFilters((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(item.id)) next.delete(item.id);
+                      else next.add(item.id);
+                      return next;
+                    })
+                  }
+                  aria-pressed={active}
+                  className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${active ? 'bg-ink text-bone' : 'border border-ink/15 text-ink/60 hover:border-ink/40'}`}
+                >
+                  {item.label}
+                  {active && <span aria-hidden="true" className="text-ochre">×</span>}
+                </button>
+              );
+            })}
+            {filters.size > 0 && (
               <button
-                key={item.id}
                 type="button"
-                onClick={() => setFilter(filter === item.id ? 'all' : item.id)}
-                aria-pressed={filter === item.id}
-                className={`inline-flex min-h-11 items-center rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${filter === item.id ? 'bg-ink text-bone' : 'border border-ink/15 text-ink/60 hover:border-ink/40'}`}
+                onClick={() => setFilters(new Set())}
+                className="inline-flex min-h-11 items-center px-2 py-1.5 text-xs font-semibold text-ochre-deep underline"
               >
-                {item.label}
+                Clear filters
               </button>
-            ))}
+            )}
+            {/* Sort is a menu, not a chip row: four options with long labels do
+                not fit beside the filters on a phone. */}
+            <label className="ml-auto flex min-h-11 items-center gap-2 text-xs text-ink/55">
+              <span className="sr-only">Sort meals</span>
+              <span aria-hidden="true" className="hidden uppercase tracking-wide sm:inline">Sort</span>
+              <select
+                value={sort}
+                onChange={(event) => setSort(event.target.value as SortId)}
+                className="min-h-11 rounded-full border-2 border-ink/12 bg-white px-3 py-1.5 text-xs font-semibold text-ink outline-none focus:border-ochre"
+                aria-label="Sort meals"
+              >
+                {SORTS.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </label>
             <input
               value={q}
               onChange={(event) => setQ(event.target.value)}
               placeholder="Search meals…"
-              className="ml-auto min-h-11 w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre sm:w-auto"
+              className="min-h-11 w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre sm:w-auto"
               aria-label="Search meals"
             />
           </div>
@@ -250,7 +375,7 @@ export default function MenuPage() {
           <div className="rounded-3xl border-2 border-dashed border-ink/20 p-12 text-center">
             <p className="font-display text-2xl">No meals match that search</p>
             <p className="mt-2 text-sm text-ink/55">Try a different word or clear the filters.</p>
-            <Button className="mt-5" variant="outline" onClick={() => { setFilter('all'); setQ(''); }}>Show all meals</Button>
+            <Button className="mt-5" variant="outline" onClick={() => { setFilters(new Set()); setQ(''); }}>Show all meals</Button>
           </div>
         ) : sections.map((section) => {
           const open = !closed[section.id];
@@ -274,7 +399,7 @@ export default function MenuPage() {
               tapping the category name tucks it away.
             */}
             <div className="mb-5">
-              <SectionLabel>{section.tagline}</SectionLabel>
+              {section.tagline && <SectionLabel>{section.tagline}</SectionLabel>}
               <h2 id={`menu-heading-${section.id}`} className="font-display text-2xl font-semibold sm:text-3xl md:text-4xl">
                 {/*
                   Name and count sit in one inline flow, so the count belongs to
@@ -313,7 +438,7 @@ export default function MenuPage() {
               <p className="mt-2 max-w-2xl text-sm text-ink/60">{section.blurb}</p>
               {section.archived && (
                 <p className="mt-1 text-[12px] text-ink/50">
-                  Guide prices — these are not on sale yet, so nothing here can be added to a basket.
+                  Not on sale yet, so nothing here can be added to a basket.
                 </p>
               )}
             </div>
@@ -413,10 +538,7 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
         <span className="absolute left-3 top-3 rounded-full bg-ink/85 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-bone">
           Coming soon
         </span>
-        <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">
-          {zar(item.price)}{' '}
-          <span className="font-sans text-xs font-normal uppercase tracking-wider text-bone/70">guide price</span>
-        </span>
+        <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">{zar(item.price)}</span>
       </div>
       <div className="flex flex-1 flex-col p-4">
         <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>

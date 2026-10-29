@@ -131,6 +131,14 @@ export function loyaltyEnquiry(phone?: string): string {
     : 'Hi Heritage Bites! Please can you check my loyalty stamps?';
 }
 
+/**
+ * Asked from a collection order: the kitchen is a shadow kitchen with no public
+ * street address, so "where do I collect?" is answered by a person, on WhatsApp,
+ * with the exact point. Every collection surface links here.
+ */
+export const COLLECTION_POINT_ENQUIRY =
+  'Hi Heritage Bites! Please confirm the exact collection point for my order.';
+
 /** Asked from the WhatsApp channel card, and from the footer. */
 export const CHANNEL_ENQUIRY =
   'Hi Heritage Bites! I would like to order. Please tell me what is available and how to pay.';

@@ -159,6 +159,46 @@ await check('footer contact details are tappable and the socials are placeholder
   if (/Card payments are processed by Yoco|never receives them/.test(text())) {
     throw new Error('the removed payment placeholder is still on the page');
   }
+
+  /*
+   * "Closed the rest of the week" sat under the Thursday and Friday rows and
+   * read as "we have shut for the week". Whatever day this runs on, the hours
+   * block must say where the service actually is: open now, or when the next
+   * window starts.
+   */
+  if (/Closed the rest of the week/.test(footer.textContent ?? '')) {
+    throw new Error('the ambiguous "Closed the rest of the week" note is back');
+  }
+  if (!/(Serving now · \d{2}:\d{2}–\d{2}:\d{2}|Closed now · next service \w+ \d{2}:\d{2}–\d{2}:\d{2}|Closed now · message us)/.test(
+    footer.textContent ?? '',
+  )) {
+    throw new Error(`the footer hours block has no live service line: ${(footer.textContent ?? '').slice(-160)}`);
+  }
+
+  /* The contact pills say what the tap will do. */
+  if (!/Call us/.test(tel.textContent ?? '')) throw new Error('the phone pill does not say "Call us"');
+  if (!/Email us/.test(mailto.textContent ?? '')) throw new Error('the email pill does not say "Email us"');
+  if (!/\+27 67 013 7587/.test(tel.textContent ?? '')) throw new Error('the phone number is no longer shown');
+
+  /* "© 2026 Heritage Bites. All Rights Reserved. · Est. 2025" */
+  if (!/© \d{4} Heritage Bites\. All Rights Reserved\. · Est\. 2025/.test(text())) {
+    throw new Error('the copyright line is not in the agreed form');
+  }
+  /* The old fixed-price claims are gone: not every plate is R100 or R130. */
+  for (const phrase of [/R100 a plate · delivery included/, /R130 a plate · delivery included/, /guide price/i]) {
+    if (phrase.test(text())) throw new Error(`retired price wording is back: ${phrase}`);
+  }
+
+  /* The policies link closes the footer on the bottom line, opposite the copyright. */
+  const policiesLink = [...footer.querySelectorAll('a')].find((a) => /Policies & terms/.test(a.textContent ?? ''));
+  if (!policiesLink) throw new Error('the footer has no Policies & terms link');
+  const copy = [...footer.querySelectorAll('span')].find((sp) => /©/.test(sp.textContent ?? ''));
+  if (!copy) throw new Error('the footer has no copyright line');
+  if (policiesLink.closest('ul')) throw new Error('Policies & terms is still inside a footer link list');
+  const rowOf = (el) => Math.round(el.getBoundingClientRect().top);
+  if (Math.abs(rowOf(policiesLink) - rowOf(copy)) > 24) {
+    throw new Error('Policies & terms is not on the copyright line');
+  }
 });
 
 /* 4. Route sweep — mount each route fresh and assert it paints real content.

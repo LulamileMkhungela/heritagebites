@@ -433,6 +433,53 @@ await step('scrolling to a meal category highlights its sticky category chip', a
   return 'Contemporary Plates is selected when its section is in view';
 });
 
+await step('the menu can be sorted by price and filtered', async () => {
+  /*
+   * Price order is the first thing people look for on a food menu, and the
+   * filters answer the other real questions: is it hot, can I eat for R100, and
+   * what can I order today. Read the rendered prices back off the cards, so this
+   * checks what a customer sees rather than the state behind it.
+   */
+  const sorter = [...arch.doc.querySelectorAll('select')].find((el) => /sort/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!sorter) throw new Error('the menu has no sort control');
+
+  const cardPrices = () => [...arch.doc.querySelectorAll('[data-sellable] article')]
+    .map((card) => card.textContent ?? '')
+    .map((text) => Number((/R\s?([\d ]+)[,.]00/.exec(text) ?? [])[1]?.replace(/\s/g, '') ?? NaN))
+    .filter((n) => Number.isFinite(n));
+
+  sorter.value = 'price-desc';
+  sorter.dispatchEvent(new arch.w.Event('change', { bubbles: true }));
+  await sleep(300);
+  const high = cardPrices();
+  if (high.length < 2) throw new Error(`expected priced cards, saw ${high.length}`);
+  if (high[0] < high[high.length - 1]) throw new Error(`price: high to low is not descending: ${high.slice(0, 4)}`);
+
+  sorter.value = 'price-asc';
+  sorter.dispatchEvent(new arch.w.Event('change', { bubbles: true }));
+  await sleep(300);
+  const low = cardPrices();
+  if (low[0] > low[low.length - 1]) throw new Error(`price: low to high is not ascending: ${low.slice(0, 4)}`);
+
+  /* "R100 or less" must not leave the R130 plates on the page. */
+  const budget = arch.byText('button', /R100 or less/i)[0];
+  if (!budget) throw new Error('no R100 or less filter');
+  arch.click(budget);
+  await sleep(350);
+  const afterFilter = cardPrices();
+  if (afterFilter.some((price) => price > 100)) throw new Error(`the R100 filter left a dearer plate in: ${afterFilter}`);
+  if (arch.doc.querySelector('[data-sellable]') && !afterFilter.length) throw new Error('the filter emptied every section');
+
+  /* And clearing it puts the whole menu back. */
+  const clear = arch.byText('button', /clear filters/i)[0];
+  if (!clear) throw new Error('no way to clear the filters');
+  arch.click(clear);
+  await sleep(300);
+  if (cardPrices().length <= afterFilter.length) throw new Error('clearing the filter did not restore the menu');
+
+  return `${high.length} plates sorted both ways and filtered`;
+});
+
 await step('clicking a dish opens its detail sheet with the heritage story', async () => {
   const card = s1.byLabel('button[aria-label^="View "]', /Mogodu/)[0];
   if (!card) throw new Error('no dish card found');
@@ -460,6 +507,17 @@ await step('choosing required options then adding puts the line in the basket', 
   await sleep(150);
   await s1.waitFor(() => s1.byText('button', /Add to basket/)[0], 'the add button to mount', 15000);
   s1.click(s1.byText('button', /Add to basket/)[0]);
+  /*
+   * Adding deliberately no longer slides the drawer over the menu — a customer
+   * ordering several plates was interrupted between each one. The pinned basket
+   * bar is the feedback now, and the drawer opens when it is asked for.
+   */
+  await s1.waitFor(() => /added to basket/i.test(s1.text()), 'the basket bar to confirm the add', 8000);
+  const openBasket = [...s1.doc.querySelectorAll('button, a')].find((e) =>
+    /Your basket|Open your basket|^Basket/i.test(`${e.getAttribute('aria-label') ?? ''} ${e.textContent ?? ''}`),
+  );
+  if (!openBasket) throw new Error('no basket control');
+  s1.click(openBasket);
   await s1.waitFor(() => /Your basket/i.test(s1.text()), 'basket drawer');
   if (!/Mogodu Plate/.test(s1.text())) throw new Error('added item not in basket');
   if (!/Pap/.test(s1.text()) || !/Braised cabbage/.test(s1.text())) {
@@ -902,7 +960,7 @@ await step('the tracking page offers manual WhatsApp updates, an order ticket an
 
   const ticket = business.find((a) => body(a).includes('Heritage Bites order'));
   if (!ticket || !body(ticket).includes(s1.__code)) throw new Error('order ticket body missing');
-  if (!/not automatic/i.test(s1.text())) throw new Error('page does not clarify that WhatsApp updates are manual');
+  if (!/not automatic|a person, not a bot/i.test(s1.text())) throw new Error('page does not clarify that WhatsApp updates are manual');
   return 'manual update request + pre-filled order ticket';
 });
 
