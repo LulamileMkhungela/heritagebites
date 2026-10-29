@@ -407,6 +407,46 @@ function appendTimeline(order, status, note) {
   return order;
 }
 
+/* --------------------------- Enquiry validation ------------------------ */
+
+/*
+ * The rules a public enquiry has to pass, enforced here as well as in the
+ * browser. The browser copy is for instant feedback; this one is the guard,
+ * because the static build posts straight to Formspree and anyone can call
+ * /api/contact directly.
+ *
+ * The owner's rule (October 2026): a name, a message, and one way to reply —
+ * an email address or a cell number.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function normaliseCell(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (digits.startsWith('27')) return digits;
+  if (digits.startsWith('0')) return `27${digits.slice(1)}`;
+  return digits;
+}
+
+const isCell = (raw) => /^27[6-8]\d{8}$/.test(normaliseCell(raw));
+const isEmail = (raw) => EMAIL_RE.test(String(raw ?? '').trim());
+
+/**
+ * The reply-channel rule, shared by /api/contact and /api/quests: at least one
+ * of email/phone, and whatever is given has to be usable.
+ */
+function replyChannelErrors(email, phone) {
+  const mail = String(email ?? '').trim();
+  const cell = String(phone ?? '').trim();
+  const errors = [];
+  if (!mail && !cell) {
+    errors.push('Please give us an email address or a cell number so we can reply.');
+    return errors;
+  }
+  if (mail && !isEmail(mail)) errors.push('That email address does not look right.');
+  if (cell && !isCell(cell)) errors.push('Please use a South African cell number, e.g. 082 123 4567.');
+  return errors;
+}
+
 /* --------------------------- Contact inbox ---------------------------- */
 
 /*
@@ -857,7 +897,11 @@ app.post('/api/passport', LIMITS.loyalty, (req, res) => {
 
 app.post('/api/contact', LIMITS.contact, async (req, res) => {
   const { name, phone, email, subject, message } = req.body ?? {};
-  if (!name?.trim() || !message?.trim()) return res.status(422).json({ errors: ['Please add your name and a message.'] });
+  const problems = [];
+  if (!name?.trim()) problems.push('Please add your name.');
+  if (!message?.trim()) problems.push('Please add a message.');
+  problems.push(...replyChannelErrors(email, phone));
+  if (problems.length) return res.status(422).json({ errors: problems });
 
   const entry = {
     id: `msg_${Date.now().toString(36)}`,
@@ -892,9 +936,8 @@ app.post('/api/quests', LIMITS.quest, async (req, res) => {
   const errors = [];
 
   if (typeof name !== 'string' || name.trim().length < 2) errors.push('Please add your name so we know who asked.');
-  const digits = String(phone ?? '').replace(/\D/g, '');
-  if (digits.length < 10) errors.push('Please add a cell number we can reply to.');
   if (typeof dish !== 'string' || dish.trim().length < 5) errors.push('Tell us what you would like us to cook.');
+  errors.push(...replyChannelErrors(email, phone));
   if (errors.length) return res.status(422).json({ errors });
 
   const entry = {

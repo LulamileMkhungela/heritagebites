@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
-import { normalisePhone } from '../lib/format';
+import { isValidCellNumber, isValidEmail } from '../lib/format';
 import { Button, Badge, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useCatalog } from '../store/catalog';
 import { useDocumentTitle } from '../lib/useDocumentTitle';
@@ -63,13 +63,30 @@ export default function Quest() {
       setErrors((x) => ({ ...x, [k]: '' }));
     };
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /*
+   * Same rule as the contact form: a name, the dish, and one way to reply — an
+   * email address or a cell number. A quest nobody can answer is not a quest.
+   */
+  const validate = () => {
     const next: Record<string, string> = {};
     if (form.name.trim().length < 2) next.name = 'Please tell us your name.';
-    if (normalisePhone(form.phone).length < 11) next.phone = 'Please add a cell number we can reply to.';
     if (form.dish.trim().length < 5) next.dish = 'Tell us what you would like us to cook.';
-    if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) next.email = 'That email does not look right.';
+
+    const email = form.email.trim();
+    const phone = form.phone.trim();
+    if (!email && !phone) {
+      next.email = 'Add an email address or a cell number so we can reply.';
+      next.phone = 'Add an email address or a cell number so we can reply.';
+    } else {
+      if (email && !isValidEmail(email)) next.email = 'That email does not look right.';
+      if (phone && !isValidCellNumber(phone)) next.phone = 'Use a South African cell number, e.g. 082 123 4567.';
+    }
+    return next;
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const next = validate();
     setErrors(next);
     if (Object.keys(next).length) return;
 
@@ -214,16 +231,41 @@ export default function Quest() {
                   </p>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Your name" error={errors.name}>
-                      <input className={inputCls} value={form.name} onChange={set('name')} placeholder="Thabo Mahlangu" autoComplete="name" />
+                    <Field label="Your name *" error={errors.name}>
+                      <input
+                        className={inputCls}
+                        value={form.name}
+                        onChange={set('name')}
+                        placeholder="Thabo Mahlangu"
+                        autoComplete="name"
+                        required
+                        aria-required="true"
+                        aria-invalid={Boolean(errors.name)}
+                      />
                     </Field>
-                    <Field label="Cell number" hint="we reply here" error={errors.phone}>
-                      <input className={inputCls} value={form.phone} onChange={set('phone')} placeholder="+27 82 000 0000" autoComplete="tel" inputMode="tel" />
+                    <Field label="Cell number" hint="we reply here · required if no email" error={errors.phone}>
+                      <input
+                        className={inputCls}
+                        value={form.phone}
+                        onChange={set('phone')}
+                        placeholder="+27 82 000 0000"
+                        autoComplete="tel"
+                        inputMode="tel"
+                        aria-invalid={Boolean(errors.phone)}
+                      />
                     </Field>
                   </div>
 
-                  <Field label="Email" hint="optional" error={errors.email}>
-                    <input className={inputCls} value={form.email} onChange={set('email')} placeholder="you@example.co.za" autoComplete="email" type="email" />
+                  <Field label="Email" hint="required if no number" error={errors.email}>
+                    <input
+                      className={inputCls}
+                      value={form.email}
+                      onChange={set('email')}
+                      placeholder="you@example.co.za"
+                      autoComplete="email"
+                      type="email"
+                      aria-invalid={Boolean(errors.email)}
+                    />
                   </Field>
 
                   <Field

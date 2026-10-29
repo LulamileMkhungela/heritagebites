@@ -26,6 +26,26 @@ export function dayName(day: number) {
 export const spiceLabel = (n: number) => ['', 'Mild', 'Medium', 'Hot', 'Kasi fire'][n] ?? '';
 
 /**
+ * Is this an address we can reply to?
+ *
+ * Deliberately loose: one @, something on both sides, and a dot in the domain.
+ * Anything stricter rejects real addresses (and a typo is recoverable — the
+ * kitchen replies to the message, not to the database).
+ */
+export function isValidEmail(raw: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(raw ?? '').trim());
+}
+
+/**
+ * A South African cell number we can actually dial: +27 82 123 4567,
+ * 082 123 4567, 27821234567 and the spaced or dashed versions all pass.
+ */
+export function isValidCellNumber(raw: string) {
+  const digits = normalisePhone(raw);
+  return /^27[6-8]\d{8}$/.test(digits);
+}
+
+/**
  * South African mobile numbers. Accepts +27 and 0 prefixes, spaces and dashes.
  * Used by checkout and the loyalty-card lookup.
  */
