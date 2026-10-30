@@ -1641,13 +1641,124 @@ await step('the basket can be cleared from the bottom of the drawer', async () =
   return 'two taps, and the basket is empty';
 });
 
+/* Flow 4: the basket survives a reload, and the bar can empty it        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * "When I refresh, my plates are still there" is a promise, not a detail: the
+ * cart lives in localStorage (`hb.cart`), so a new page load — which is exactly
+ * what booting a fresh document here simulates — must show the same plates, the
+ * same quantities and the same total without the customer touching anything.
+ */
+const RELOAD_CART = {
+  state: {
+    lines: [
+      {
+        key: 'mogodu-plate::starch=pap|veg=braised-cabbage',
+        itemId: 'mogodu-plate',
+        name: 'Mogodu Plate',
+        image: '/img/plate-mogodu.jpg',
+        unitPrice: 100,
+        qty: 2,
+        picks: [{ optionId: 'starch', choiceId: 'pap', label: 'Pap', priceDelta: 0 }],
+        kind: 'menu',
+      },
+      {
+        key: 'short-rib-plate::starch=garlic-bread|veg=corn-ribs',
+        itemId: 'short-rib-plate',
+        name: 'BBQ Short Rib Plate',
+        image: '/img/plate-short-rib.jpg',
+        unitPrice: 130,
+        qty: 1,
+        picks: [{ optionId: 'starch', choiceId: 'garlic-bread', label: 'Garlic bread', priceDelta: 0 }],
+        kind: 'menu',
+      },
+    ],
+    fulfilment: 'collection',
+  },
+  version: 2,
+};
+
+const s9 = boot('/menu', { seedCart: RELOAD_CART });
+await s9.waitFor(() => /3 plates/.test(s9.text()), 'the basket bar after a reload', 20000);
+
+await step('a page load still shows the plates that were already picked', async () => {
+  if (!/3 plates · collection/.test(s9.text())) throw new Error('the bar lost the plates on reload');
+  if (!/R330/.test(s9.text())) throw new Error(`the bar lost the running total: ${s9.text().slice(0, 200)}`);
+
+  const open = [...s9.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  s9.click(open);
+  await s9.waitFor(() => /Your basket/i.test(s9.text()), 'the basket drawer after a reload', 15000);
+  if (!/Mogodu/.test(s9.text()) || !/Short Rib/i.test(s9.text())) {
+    throw new Error('the drawer does not list both plates that were picked before the reload');
+  }
+  const close = [...s9.doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Close');
+  s9.click(close);
+  await sleep(300);
+  return 'plates, quantities and total all restored';
+});
+
+await step('the bar can empty the whole basket without opening it', async () => {
+  const clearOnBar = () => [...s9.doc.querySelectorAll('button')].find((b) => /^Clear the basket/i.test(b.getAttribute('aria-label') ?? ''));
+  if (!clearOnBar()) throw new Error('the basket bar has no clear button');
+  s9.click(clearOnBar());
+  await sleep(400);
+
+  if (/Open your basket/i.test(s9.text())) throw new Error('the bar is still showing after clearing');
+  const stored = JSON.parse(s9.w.localStorage.getItem('hb.cart') ?? '{}');
+  const lines = stored?.state?.lines ?? [];
+  if (lines.length) throw new Error(`${lines.length} line(s) survived the clear button`);
+  return 'one tap on the bar, and nothing is left in storage';
+});
+
+/* Flow 5: the footer's Meals menu                                         */
+/* ------------------------------------------------------------------ */
+
+await step('the footer keeps ordering behind one "Meals" toggle', async () => {
+  const footer = s9.doc.querySelector('footer');
+  if (!footer) throw new Error('no footer on the page');
+
+  const toggle = footer.querySelector('button[aria-controls="footer-meals"]');
+  if (!toggle) throw new Error('the footer has no Meals toggle');
+  if (!/Meals/.test(toggle.textContent ?? '')) throw new Error('the toggle is not labelled Meals');
+
+  const group = footer.querySelector('#footer-meals');
+  if (!group) throw new Error('the toggle points at a group that does not exist');
+  if (toggle.getAttribute('aria-expanded') !== 'false') throw new Error('the menu should start closed');
+  if (!/hidden/.test(group.className)) throw new Error('the closed menu is still showing');
+
+  /* Every route a customer orders on is inside it. */
+  const inside = [...group.querySelectorAll('a')].map((a) => a.getAttribute('href'));
+  for (const href of ['/menu', '/specials', '/passport', '/checkout']) {
+    if (!inside.includes(href)) throw new Error(`${href} is missing from the Meals menu`);
+  }
+
+  s9.click(toggle);
+  await sleep(150);
+  if (toggle.getAttribute('aria-expanded') !== 'true') throw new Error('the toggle did not open');
+  if (/hidden/.test(group.className)) throw new Error('the menu is still hidden after the click');
+
+  /*
+   * Loyalty card and Customer quest sit after the group as their own items —
+   * they are not part of ordering a plate, which is why they are outside it.
+   */
+  const items = [...footer.querySelectorAll('li')].map((li) => (li.querySelector(':scope > a')?.textContent ?? '').trim());
+  if (!items.includes('Loyalty card')) throw new Error('Loyalty card is not a top-level footer item');
+  if (!items.includes('Customer quest')) throw new Error('Customer quest is not a top-level footer item');
+
+  s9.click(toggle);
+  await sleep(150);
+  if (toggle.getAttribute('aria-expanded') !== 'false') throw new Error('the toggle does not close again');
+  return 'closed by default, four ordering links inside, loyalty and quest outside';
+});
+
 /* ------------------------------------------------------------------ */
 
 const failed = results.filter(([s]) => s === 'FAIL');
 console.log('\n--- interaction smoke test (jsdom, live API) ---');
 for (const [status, label, detail] of results) console.log(`  ${status}  ${label}${detail ? ` — ${detail}` : ''}`);
 
-const errs = [...s1.errors, ...s3.errors, ...s5.errors, ...s6.errors, ...s8.errors];
+const errs = [...s1.errors, ...s3.errors, ...s5.errors, ...s6.errors, ...s8.errors, ...s9.errors];
 if (errs.length) {
   console.log('\n--- runtime errors ---');
   for (const e of errs.slice(0, 10)) console.log(`  ${e}`);
@@ -1658,6 +1769,8 @@ console.log(`\n${ok ? 'ALL GREEN' : 'FAILURES'}: ${results.length - failed.lengt
 s1.close();
 s3.close();
 s5.close();
+s8.close();
+s9.close();
 s6.close();
 s8.close();
 process.exit(ok ? 0 : 1);

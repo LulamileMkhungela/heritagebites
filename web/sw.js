@@ -31,8 +31,10 @@ self.addEventListener('push', (event) => {
     tag: payload.tag || 'heritagebites',
     data: payload.data || {},
     requireInteraction: Boolean(payload.requireInteraction),
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    /* The real badge, so a kitchen alert on a phone looks like the shop. */
+    icon: '/icon-192.png',
+    /* Android wants a small monochrome mark here; the tile reads as one at 24px. */
+    badge: '/favicon-32.png',
     /*
      * Two notifications share a tag (one per order), so a busy kitchen replaces
      * the previous alert for the same order instead of stacking duplicates.

@@ -28,8 +28,28 @@ export const BRAND = 'Heritage Bites';
 export const LOCALE = 'en_ZA';
 export const TAGLINE = 'Every Bite Tells a Story';
 
-/** The image used when a page is shared; every page has a real photograph. */
-export const DEFAULT_SHARE_IMAGE = '/img/hero-feast.jpg';
+/**
+ * The picture a pasted link shows.
+ *
+ * Built by `scripts/build-brand-assets.py`: the badge, the tagline, the price
+ * band, the delivery areas and the service days on one 1200×630 card. A logo on
+ * its own would tell a stranger nothing about whether they want to tap it, and
+ * a photograph alone would not say what the shop is or where it delivers.
+ */
+export const DEFAULT_SHARE_IMAGE = '/img/social-card.jpg';
+
+/**
+ * Its size and type.
+ *
+ * `og:image:width` and `og:image:height` are what stop WhatsApp and Facebook
+ * guessing at a crop: without them the first scrape often renders a sliver or a
+ * square before it learns better.
+ */
+export const SHARE_IMAGE_META = { width: 1200, height: 630, type: 'image/jpeg' };
+
+/** Read by screen readers, and used when the image itself cannot load. */
+export const SHARE_IMAGE_ALT =
+  'The Heritage Bites logo: a cooking pot on an engraved badge, with the words Heritage Bites and Every Bite Tells a Story.';
 
 /**
  * Pages a search engine may index.
@@ -459,8 +479,22 @@ export function headHtml(path, options = {}) {
   );
   if (description) tags.push(`<meta property="og:description" content="${escapeHtml(description)}" />`);
   if (canonical) tags.push(`<meta property="og:url" content="${escapeHtml(canonical)}" />`);
-  if (base) tags.push(`<meta property="og:image" content="${escapeHtml(`${base}${image}`)}" />`);
+  if (base) {
+    const absolute = `${base}${image}`;
+    tags.push(
+      `<meta property="og:image" content="${escapeHtml(absolute)}" />`,
+      `<meta property="og:image:type" content="${SHARE_IMAGE_META.type}" />`,
+      `<meta property="og:image:width" content="${SHARE_IMAGE_META.width}" />`,
+      `<meta property="og:image:height" content="${SHARE_IMAGE_META.height}" />`,
+      `<meta property="og:image:alt" content="${escapeHtml(SHARE_IMAGE_ALT)}" />`,
+      /* Twitter/X does not read the og: tags for images. */
+      `<meta name="twitter:image" content="${escapeHtml(absolute)}" />`,
+      `<meta name="twitter:image:alt" content="${escapeHtml(SHARE_IMAGE_ALT)}" />`,
+    );
+  }
   tags.push('<meta name="twitter:card" content="summary_large_image" />');
+  if (description) tags.push(`<meta name="twitter:description" content="${escapeHtml(description)}" />`);
+  tags.push(`<meta name="twitter:title" content="${escapeHtml(documentTitle(title))}" />`);
 
   /* Structured data: the shop, the site, then this page's own node. */
   const nodes = [];

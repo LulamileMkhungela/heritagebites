@@ -7,6 +7,7 @@ import { STATIC_PREVIEW } from '../lib/api';
 import { api } from '../lib/api';
 import { zar } from '../lib/format';
 import { useOverlay } from '../lib/useOverlay';
+import { asset } from '../lib/assets';
 import { HeritageBand } from './ui';
 import { BasketBar } from './BasketBar';
 import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
@@ -80,12 +81,21 @@ export default function Layout() {
       <header ref={headerRef} className="sticky top-0 z-50 border-b border-bone/15 bg-ink text-bone backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-4 sm:px-4 sm:py-3">
           <Link to="/" onClick={() => setMenuOpen(false)} className="group flex min-h-11 min-w-11 items-center gap-2 sm:gap-3" aria-label="Heritage Bites home">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-bone text-ink transition-transform group-hover:rotate-3">
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                <path d="M4 12h16M4 12c0 4.4 3.6 8 8 8s8-3.6 8-8" />
-                <path d="M7 8.5c0-1.4 1-1.4 1-2.8M11.5 8.5c0-1.4 1-1.4 1-2.8M16 8.5c0-1.4 1-1.4 1-2.8" />
-              </svg>
-            </span>
+            {/*
+              The shop's own badge. It replaces a generic pot icon: a customer who
+              has met this mark on a WhatsApp message or in a Google result should
+              meet the same one on the site. The artwork is white, so it sits on
+              the ink bar without a plate behind it; alt is empty because the link
+              is already named for screen readers, and the wordmark beside it says
+              the name in visible text.
+            */}
+            <img
+              src={asset('/img/logo-badge.png')}
+              alt=""
+              width={44}
+              height={44}
+              className="h-11 w-11 shrink-0 object-contain transition-transform group-hover:rotate-3"
+            />
             {/*
               The wordmark is the only purely decorative thing in the bar, so it is
               what gives way on a 320px phone: below 360px the icon alone remains
@@ -307,6 +317,8 @@ function Footer() {
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
   const wa = waHref(s?.whatsapp, CHANNEL_ENQUIRY);
+  /* The "Meals" group in the Order column starts closed; see the button below. */
+  const [mealsOpen, setMealsOpen] = useState(false);
 
   /*
    * The hours block used to end with a fixed "Closed the rest of the week",
@@ -336,7 +348,17 @@ function Footer() {
             A brand wordmark, not a section heading — marking it up as one put an
             <h3> on every page ahead of any real h2, so the outline jumped h1 -> h3.
           */}
-          <p className="font-display text-3xl font-semibold">Heritage Bites</p>
+          <div className="flex items-center gap-3">
+            <img
+              src={asset('/img/logo-badge.png')}
+              alt=""
+              width={56}
+              height={56}
+              loading="lazy"
+              className="h-14 w-14 shrink-0 object-contain"
+            />
+            <p className="font-display text-3xl font-semibold">Heritage Bites</p>
+          </div>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-bone/65">
             South African plates cooked with care, Thursdays and Fridays. Order online for collection or delivery in Rosebank and Sandton.
           </p>
@@ -442,10 +464,44 @@ function Footer() {
 
         <div>
           <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre">Order</h2>
+          {/*
+            "Meals" opens rather than navigates: the four things a customer
+            ordering actually needs sit behind it, so the footer column stays
+            short instead of listing every page. The links are still rendered
+            when it is closed (CSS hides them, the DOM keeps them), so a crawler
+            and a keyboard reach them either way.
+          */}
           <ul className="space-y-2 text-sm text-bone/70">
-            <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Meals</Link></li>
-            <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">This week</Link></li>
-            <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
+            <li>
+              <button
+                type="button"
+                onClick={() => setMealsOpen((open) => !open)}
+                aria-expanded={mealsOpen}
+                aria-controls="footer-meals"
+                className="inline-flex min-h-11 min-w-11 items-center gap-1.5 font-semibold text-bone hover:text-ochre"
+              >
+                Meals
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className={`h-3.5 w-3.5 transition-transform ${mealsOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <ul id="footer-meals" className={`mt-1 space-y-1 border-l border-bone/20 pl-4 ${mealsOpen ? 'block' : 'hidden'}`}>
+                <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Meals</Link></li>
+                <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">This week</Link></li>
+                <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
+                <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
+              </ul>
+            </li>
+            {/* The two pages that are not part of ordering a plate. */}
             <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
             <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer quest</Link></li>
             <li>

@@ -5,6 +5,8 @@ import {
   BRAND,
   DEFAULT_SHARE_IMAGE,
   LOCALE,
+  SHARE_IMAGE_ALT,
+  SHARE_IMAGE_META,
   breadcrumbJsonLd,
   canonicalUrl,
   documentTitle,
@@ -177,8 +179,19 @@ export function usePageSeo(path: string, options: PageSeoOptions = {}) {
     setMeta('property', 'og:title', documentTitle(ownTitle));
     setMeta('property', 'og:description', ownDescription || null);
     setMeta('property', 'og:url', canonical);
-    setMeta('property', 'og:image', siteUrl ? `${siteUrl}${image ?? DEFAULT_SHARE_IMAGE}` : null);
+    /* The share card, with the size a scraper needs to render it correctly. */
+    const shareImage = siteUrl ? `${siteUrl}${image ?? DEFAULT_SHARE_IMAGE}` : null;
+    setMeta('property', 'og:image', shareImage);
+    setMeta('property', 'og:image:type', shareImage ? SHARE_IMAGE_META.type : null);
+    setMeta('property', 'og:image:width', shareImage ? String(SHARE_IMAGE_META.width) : null);
+    setMeta('property', 'og:image:height', shareImage ? String(SHARE_IMAGE_META.height) : null);
+    setMeta('property', 'og:image:alt', shareImage ? SHARE_IMAGE_ALT : null);
+    /* Twitter/X does not read the og: tags for images. */
+    setMeta('name', 'twitter:image', shareImage);
+    setMeta('name', 'twitter:image:alt', shareImage ? SHARE_IMAGE_ALT : null);
     setMeta('name', 'twitter:card', 'summary_large_image');
+    setMeta('name', 'twitter:title', documentTitle(ownTitle));
+    setMeta('name', 'twitter:description', ownDescription || null);
 
     /*
      * Structured data, as one @graph: the shop, the site, this page's place in

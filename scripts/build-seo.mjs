@@ -59,6 +59,12 @@ const flag = (name, fallback = null) => {
 const dir = String(flag('dir', 'dist'));
 const outDir = join(root, dir);
 const withRoutes = Boolean(flag('routes', false));
+/*
+ * Whether the built folder is served from a sub-path (GitHub Pages) rather than
+ * the domain root. Root-absolute icon and manifest links would 404 there, so they
+ * are made relative; the per-route copies then push them up one level.
+ */
+const relativeAssets = Boolean(flag('relative-assets', false));
 const catalogPath = flag('catalog', null);
 
 /* Where this deployment is served from. First real answer wins. */
@@ -112,7 +118,9 @@ if (catalogPath && existsSync(join(root, String(catalogPath)))) {
 
 /* -------------------------------------------------------------- the shell -- */
 
-const shell = readFileSync(join(outDir, 'index.html'), 'utf8');
+const shellRaw = readFileSync(join(outDir, 'index.html'), 'utf8');
+/* `/favicon.ico` → `./favicon.ico` when the site does not live at the root. */
+const shell = relativeAssets ? shellRaw.replace(/(\s(?:href|src)=")\//g, '$1./') : shellRaw;
 const start = shell.indexOf(HEAD_START);
 const end = shell.indexOf(HEAD_END);
 if (start === -1 || end === -1) {
@@ -144,7 +152,7 @@ if (withRoutes) {
     mkdirSync(dirname(target), { recursive: true });
 
     /*
-     * The built shell refers to `./assets/…` and `./favicon.svg` because it
+     * The built shell refers to `./assets/…` and `./favicon-32.png` because it
      * normally sits at the folder root. A copy one level down would resolve
      * those inside the route's own folder, so the relative prefix is pushed up.
      */

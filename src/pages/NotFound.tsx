@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { LinkButton } from '../components/ui';
+import { asset } from '../lib/assets';
 import { usePageSeo } from '../lib/seo';
 
 export default function NotFound() {
@@ -7,6 +8,15 @@ export default function NotFound() {
   usePageSeo('/404', { title: 'Page not found', index: false });
   return (
     <section className="mx-auto grid max-w-3xl place-items-center px-4 py-28 text-center">
+      {/* The badge in ink: this page is bone, and the white artwork would vanish.
+          Decorative — the header already says whose site this is. */}
+      <img
+        src={asset('/img/logo-badge-ink.png')}
+        alt=""
+        width={104}
+        height={104}
+        className="mb-6 h-24 w-24 object-contain opacity-90"
+      />
       <p className="font-mono text-sm uppercase tracking-[0.3em] text-ochre-deep">Error 404</p>
       <h1 className="mt-4 font-display text-5xl font-semibold md:text-6xl">This plate came back empty</h1>
       <p className="mt-4 max-w-md text-ink/60">

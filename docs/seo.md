@@ -14,6 +14,7 @@ automatic, what is not — and the two decisions only the owner can make.
 | `robots.txt`, `sitemap.xml` | `scripts/build-seo.mjs` | Built — needs `HB_SITE_URL` |
 | Structured data (Restaurant, WebSite, BreadcrumbList, Menu) | `shared/seo.js` | Built |
 | Open Graph + Twitter cards (link previews) | the same head | Built |
+| The shared card image, the tab icon, the phone icons | `scripts/build-brand-assets.py` | Built |
 | One static document per route (for crawlers and Pages) | `scripts/build-seo.mjs --routes` | Built |
 | Private screens kept out of the index | route table (`/checkout`, `/order/…`, `/alerts`) | Built |
 | Internal links between related pages | each page | Built (menu → service details, contact) |
@@ -76,6 +77,41 @@ What happens without it:
 Coming-soon dishes are deliberately left out of the menu structured data: they
 have no price and cannot be ordered, so advertising one as an offer would be a
 promise the kitchen has not made.
+
+## The picture a link shows
+
+A pasted link is a shopfront: before anybody reads a title, they see a picture.
+Every route therefore shares one card, `public/img/social-card.jpg` — 1200×630,
+the 1.91:1 that WhatsApp, Facebook, LinkedIn, Slack and X all crop to. It carries
+the badge, "Every Bite Tells a Story", "South African plates · R100–R130",
+"Delivered in Rosebank & Sandton", the Thursday/Friday window and an "Order
+online" button.
+
+Every line on it is a fact the site already publishes. There is no address
+(the business does not publish one), no rating and no review count — a card that
+promises a 4.9 stars nobody gave is the kind of claim that is easy to print and
+impossible to stand behind.
+
+`headHtml()` emits, for every public route:
+
+```
+og:image            https://<site>/img/social-card.jpg
+og:image:type       image/jpeg
+og:image:width      1200
+og:image:height     630
+og:image:alt        a sentence describing the badge
+twitter:image       (X ignores og:* for images)
+twitter:image:alt
+twitter:card        summary_large_image
+```
+
+The width and height are not decoration: without them a scraper guesses the crop
+and the first share often renders as a square or a sliver.
+
+Regenerate the card with `scripts/build-brand-assets.py` (see the README). Then,
+**after a deploy, re-scrape**: Facebook's Sharing Debugger and LinkedIn's Post
+Inspector both cache the first render for weeks, and WhatsApp caches silently, so
+an old preview after a fresh deploy is the cache answering, not the markup.
 
 ## Checking it
 
