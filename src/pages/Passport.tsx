@@ -3,14 +3,14 @@ import { api, STATIC_PREVIEW } from '../lib/api';
 import { zar } from '../lib/format';
 import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { normalisePhone } from '../lib/format';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import { useCatalog } from '../store/catalog';
 import { waHref, loyaltyEnquiry } from '../lib/whatsapp';
 
 const CARD_SIZE = 10;
 
 export default function Passport() {
-  useDocumentTitle('Loyalty card');
+  usePageSeo('/passport');
   const catalog = useCatalog((s) => s.data);
   const settings = catalog?.settings;
   const [phone, setPhone] = useState('');

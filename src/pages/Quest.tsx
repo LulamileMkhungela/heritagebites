@@ -4,7 +4,7 @@ import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { isValidCellNumber, isValidEmail } from '../lib/format';
 import { Button, Badge, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { useCatalog } from '../store/catalog';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import { waHref } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
@@ -31,7 +31,7 @@ const SERVICE_DAYS = [
 const groupHeading = (label: string) => label.replace(/^choose your\s+/i, '');
 
 export default function Quest() {
-  useDocumentTitle('Customer quest');
+  usePageSeo('/quest');
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
 

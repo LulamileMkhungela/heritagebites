@@ -1148,3 +1148,113 @@ describe('static hosting', () => {
     }
   });
 });
+
+describe('the head served to a crawler', () => {
+  /*
+   * The React app sets these itself, but only after it has run. A crawler that
+   * executes no JavaScript — and every link preview in WhatsApp — reads this HTML
+   * and nothing else, so the shell has to carry the route's own metadata.
+   *
+   * `HB_PUBLIC_URL` is set for this suite, which stands in for the deployment
+   * address. The last test proves the fallback: with no configured address the
+   * host the request arrived on is used, never a domain typed into the source.
+   */
+  const html = async (path) => {
+    const res = await fetch(`${base}${path}`, { headers: { Accept: 'text/html' } });
+    return { res, body: await res.text() };
+  };
+
+  test('the home page declares its own title, description and canonical', async () => {
+    const { res, body } = await html('/');
+    assert.equal(res.status, 200);
+    assert.match(body, /<title>South African Plates in Rosebank &amp; Sandton — Heritage Bites<\/title>/);
+    assert.match(body, /<meta name="description" content="South African plates from R100/);
+    assert.match(body, /<link rel="canonical" href="https:\/\/heritagebites\.test\/" \/>/);
+    assert.match(body, /<meta name="robots" content="index,follow/);
+  });
+
+  test('every public route answers with its own metadata, not the home page\'s', async () => {
+    const expected = {
+      '/menu': /<title>The Menu &amp; Prices — Heritage Bites<\/title>/,
+      '/specials': /<title>This Week&#39;s Cooking &amp; Delivery — Heritage Bites<\/title>/,
+      '/about': /<title>Our Story, Vision &amp; Mission — Heritage Bites<\/title>/,
+      '/contact': /<title>Contact &amp; WhatsApp — Heritage Bites<\/title>/,
+      '/policies': /<title>Policies &amp; Terms — Heritage Bites<\/title>/,
+      '/passport': /<title>Loyalty Card — Heritage Bites<\/title>/,
+      '/quest': /<title>Ask Us to Cook It — Heritage Bites<\/title>/,
+    };
+    for (const [path, pattern] of Object.entries(expected)) {
+      const { res, body } = await html(path);
+      assert.equal(res.status, 200, `${path} should be 200`);
+      assert.match(body, pattern, `${path} carries the wrong title`);
+      assert.ok(
+        body.includes(`<link rel="canonical" href="https://heritagebites.test${path}" />`),
+        `${path} has no canonical for its own address`,
+      );
+      /* One title element, one description, one canonical. */
+      assert.equal((body.match(/<title>/g) ?? []).length, 1, `${path} has more than one title`);
+      assert.equal((body.match(/rel="canonical"/g) ?? []).length, 1, `${path} has more than one canonical`);
+    }
+  });
+
+  test('the checkout and an order page are kept out of the index', async () => {
+    for (const path of ['/checkout', '/order/HB-1042A']) {
+      const { res, body } = await html(path);
+      assert.equal(res.status, 200, `${path} should still render`);
+      assert.match(body, /<meta name="robots" content="noindex,nofollow" \/>/, `${path} must be noindex`);
+      assert.doesNotMatch(body, /rel="canonical"/, `${path} must not advertise a canonical`);
+    }
+    assert.match((await html('/order/HB-1042A')).body, /<title>Order tracking — Heritage Bites<\/title>/);
+  });
+
+  test('the business is described from the live catalogue, not a hardcoded copy', async () => {
+    const { body } = await html('/');
+    /* Each node is its own block in the served HTML; the app sends one @graph. */
+    const blocks = [...body.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) =>
+      JSON.parse(m[1].replace(/<\\\//g, '</')),
+    );
+    assert.ok(blocks.length, 'no structured data on the home page');
+    const nodes = blocks.flatMap((node) => node['@graph'] ?? [node]);
+    const restaurant = nodes.find((node) => node['@type'] === 'Restaurant');
+    assert.ok(restaurant, 'no Restaurant node');
+    assert.equal(restaurant.name, 'Heritage Bites');
+    assert.deepEqual(restaurant.areaServed.map((a) => a.name), ['Rosebank', 'Sandton']);
+    assert.equal(restaurant.telephone, '+27670137587');
+    assert.equal(restaurant.address, undefined, 'the business has no public street address to claim');
+  });
+
+  test('without a configured address the head uses the host that was asked', async () => {
+    const saved = process.env.HB_PUBLIC_URL;
+    delete process.env.HB_PUBLIC_URL;
+    try {
+      const { body } = await html('/menu');
+      /*
+       * The suite runs on 127.0.0.1, which is explicitly not a public address, so
+       * the honest outcome is no canonical at all rather than one pointing at a
+       * laptop.
+       */
+      assert.doesNotMatch(body, /rel="canonical"/);
+      assert.match(body, /<title>The Menu &amp; Prices — Heritage Bites<\/title>/);
+    } finally {
+      process.env.HB_PUBLIC_URL = saved;
+    }
+  });
+
+  test('robots.txt and sitemap.xml are served as files', async () => {
+    const robots = await fetch(`${base}/robots.txt`);
+    assert.equal(robots.status, 200);
+    const txt = await robots.text();
+    assert.match(txt, /^User-agent: \*$/m);
+    assert.match(txt, /^Disallow: \/order\/$/m);
+
+    /* The sitemap is only written when the build knew the public address. */
+    const sitemap = await fetch(`${base}/sitemap.xml`);
+    if (sitemap.status === 200) {
+      const xml = await sitemap.text();
+      assert.match(xml, /<urlset/);
+      assert.doesNotMatch(xml, /\/checkout/);
+    } else {
+      assert.equal(sitemap.status, 404, 'a missing sitemap must 404, not answer with the shell');
+    }
+  });
+});

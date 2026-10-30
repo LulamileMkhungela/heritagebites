@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { Button, Field, SectionLabel, inputCls } from '../components/ui';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import {
   checkPush,
   hasLocalSubscription,
@@ -23,7 +23,7 @@ import {
  * the phone or tablet that should receive alerts.
  */
 export default function OrderAlerts() {
-  useDocumentTitle('Order alerts');
+  usePageSeo('/alerts', { title: 'Order alerts' });
   const [params] = useSearchParams();
   const [key, setKey] = useState(params.get('key') ?? '');
   const [state, setState] = useState<PushState | null>(null);

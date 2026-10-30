@@ -1,8 +1,8 @@
 User-agent: *
 Allow: /
 
-# Checkout and order tracking are per-customer and carry no indexable content.
+# Order tracking, the checkout and owner alerts are per-customer screens with
+# nothing to read until they are in use.
 Disallow: /checkout
 Disallow: /order/
-
-Sitemap: https://heritagebites.co.za/sitemap.xml
+Disallow: /alerts

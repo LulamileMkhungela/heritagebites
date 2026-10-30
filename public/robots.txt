@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-
-# Checkout and order tracking are per-customer and carry no indexable content.
-Disallow: /checkout
-Disallow: /order/
-
-Sitemap: https://heritagebites.co.za/sitemap.xml

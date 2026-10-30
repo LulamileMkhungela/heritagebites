@@ -66,7 +66,7 @@ await page.setViewport({ width: 1440, height: 1000 });
 await check('the catalogue snapshot loads and the site paints', async () => {
   await goto('');
   const body = await text();
-  if (!/A taste of heritage/i.test(body)) throw new Error('home page did not render');
+  if (!/A taste of South African heritage/i.test(body)) throw new Error('home page did not render');
   if (!/Mogodu/i.test(body)) throw new Error('no dishes rendered — the catalogue snapshot is missing');
   if (!/R100,00/.test(body)) throw new Error('plate prices are missing from the preview');
   return 'catalogue + prices present';

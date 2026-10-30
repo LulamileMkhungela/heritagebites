@@ -1254,14 +1254,14 @@
     "open": false,
     "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Thursday",
-    "timeLabel": "22:03",
+    "dayLabel": "Friday",
+    "timeLabel": "08:53",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Thursday 12:00–13:30",
+    "todayLabel": "Friday 12:00–13:30",
     "nextWindowLabel": "Friday 12:00–13:30",
-    "headline": "Today's window has closed",
-    "message": "Today's 12:00–13:30 window has closed, but the next one is Friday 12:00–13:30. Place your order now and it will be cooked then.",
-    "shortMessage": "Today's window has closed — next up Friday.",
+    "headline": "Not cooking yet",
+    "message": "The pots go on at 12:00. Place your order now and it goes in first — today's window is 12:00–13:30.",
+    "shortMessage": "Pots go on at 12:00 today — order now and you are first in the queue.",
     "serviceDays": [
       "Thursday",
       "Friday"
@@ -1282,5 +1282,5 @@
     "customerEmail": false,
     "ownerEmail": false
   },
-  "today": 4
+  "today": 5
 }

@@ -4,14 +4,14 @@ import { useCatalog } from '../store/catalog';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { isValidCellNumber, isValidEmail } from '../lib/format';
 import { Button, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import { waHref, GENERAL_ENQUIRY } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
 const SUBJECTS = ['General enquiry', 'Catering quote', 'Feedback', 'Something went wrong with my order', 'Work with us'];
 
 export default function Contact() {
-  useDocumentTitle('Contact');
+  usePageSeo('/contact');
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
   /* "Open chat" used to open an empty WhatsApp box. It now opens with the first
@@ -90,7 +90,7 @@ export default function Contact() {
         <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/30" />
         <div className="relative mx-auto max-w-7xl px-4">
           <SectionLabel onDark>Contact</SectionLabel>
-          <h1 className="font-display text-5xl font-semibold md:text-6xl">Talk to a human</h1>
+          <h1 className="font-display text-5xl font-semibold md:text-6xl">Talk to a human about your order</h1>
           <p className="mt-4 max-w-2xl text-bone/70">
             Questions about the menu, catering for an event, or an order that went sideways — phone is fastest, WhatsApp is
             close behind. Enquiries sent here reach our monitored inbox.
