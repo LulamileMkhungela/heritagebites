@@ -26,6 +26,7 @@ export function BasketBar() {
   const lines = useCart((s) => s.lines);
   const open = useCart((s) => s.open);
   const setOpen = useCart((s) => s.setOpen);
+  const clear = useCart((s) => s.clear);
   const fulfilment = useCart((s) => s.fulfilment);
   const catalog = useCatalog((s) => s.data);
 
@@ -92,6 +93,24 @@ export function BasketBar() {
                   : 'Collection — nothing extra'}
               </span>
             </span>
+          </button>
+
+          {/*
+            Empty the whole basket without opening it. Someone who has tried
+            three plates and wants to start again should not have to open the
+            drawer, scroll it and confirm — and the bar is where their
+            selection is already summarised.
+          */}
+          <button
+            type="button"
+            onClick={clear}
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-2 border-ink/15 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink/60 transition-colors hover:border-chili hover:text-chili sm:px-4"
+            aria-label={`Clear the basket, ${count} plate${count === 1 ? '' : 's'}`}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6" />
+            </svg>
+            <span className="hidden sm:inline">Clear</span>
           </button>
 
           <button

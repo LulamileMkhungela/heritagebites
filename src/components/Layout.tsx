@@ -317,6 +317,8 @@ function Footer() {
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
   const wa = waHref(s?.whatsapp, CHANNEL_ENQUIRY);
+  /* The "Meals" group in the Order column starts closed; see the button below. */
+  const [mealsOpen, setMealsOpen] = useState(false);
 
   /*
    * The hours block used to end with a fixed "Closed the rest of the week",
@@ -462,10 +464,44 @@ function Footer() {
 
         <div>
           <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre">Order</h2>
+          {/*
+            "Meals" opens rather than navigates: the four things a customer
+            ordering actually needs sit behind it, so the footer column stays
+            short instead of listing every page. The links are still rendered
+            when it is closed (CSS hides them, the DOM keeps them), so a crawler
+            and a keyboard reach them either way.
+          */}
           <ul className="space-y-2 text-sm text-bone/70">
-            <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Meals</Link></li>
-            <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">This week</Link></li>
-            <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
+            <li>
+              <button
+                type="button"
+                onClick={() => setMealsOpen((open) => !open)}
+                aria-expanded={mealsOpen}
+                aria-controls="footer-meals"
+                className="inline-flex min-h-11 min-w-11 items-center gap-1.5 font-semibold text-bone hover:text-ochre"
+              >
+                Meals
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className={`h-3.5 w-3.5 transition-transform ${mealsOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <ul id="footer-meals" className={`mt-1 space-y-1 border-l border-bone/20 pl-4 ${mealsOpen ? 'block' : 'hidden'}`}>
+                <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Meals</Link></li>
+                <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">This week</Link></li>
+                <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
+                <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
+              </ul>
+            </li>
+            {/* The two pages that are not part of ordering a plate. */}
             <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
             <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer quest</Link></li>
             <li>
