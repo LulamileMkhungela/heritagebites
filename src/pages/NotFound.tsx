@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { LinkButton } from '../components/ui';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 
 export default function NotFound() {
-  useDocumentTitle('Page not found');
+  /* A wrong address is not a page, so it is kept out of the index. */
+  usePageSeo('/404', { title: 'Page not found', index: false });
   return (
     <section className="mx-auto grid max-w-3xl place-items-center px-4 py-28 text-center">
       <p className="font-mono text-sm uppercase tracking-[0.3em] text-ochre-deep">Error 404</p>

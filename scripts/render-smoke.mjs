@@ -107,7 +107,7 @@ await check('header + navigation render', async () => {
 });
 
 await check('hero renders with the real headline', async () => {
-  await waitFor(() => /A taste of heritage/i.test(text()), 'hero headline');
+  await waitFor(() => /A taste of South African heritage/i.test(text()), 'hero headline');
   if (!html().includes('hero-feast')) throw new Error('hero image not referenced');
 });
 
@@ -231,23 +231,30 @@ const trackingPath = `/order/${orderCode}?token=${encodeURIComponent(tracking.tr
 /* `title` guards per-route <title>. A SPA otherwise ships the one title from
    index.html everywhere, so every tab and shared link reads the same thing. */
 const ROUTES = [
-  { path: '/', expect: [/A taste of heritage/i, /Cooked Thursdays/i], title: /^Traditional & Contemporary Plates — Heritage Bites$/ },
-  { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/, /Heritage Pots/, /Coming soon/i], title: /^Meals — Heritage Bites$/ },
-  { path: '/specials', expect: [/Thursdays & Fridays/i, /R100|R130/], title: /^This Week — Heritage Bites$/ },
-  { path: '/policies', expect: [/Privacy Policy/i, /Refund Policy/i, /Order Cancellation Policy/i], title: /^Policies & Terms — Heritage Bites$/ },
-  { path: '/about', expect: [/Every bite tells a story/i, /Vision/i, /Mission/i, /How we started/i], title: /^About Us \| Our Story, Vision & Mission — Heritage Bites$/ },
-  { path: '/contact', expect: [/Talk to a human/i], title: /^Contact — Heritage Bites$/ },
-  { path: '/checkout', expect: [/basket is empty/i], title: /^Checkout — Heritage Bites$/ },
-  { path: '/passport', expect: [/Your loyalty card/i], title: /^Loyalty card — Heritage Bites$/ },
-  { path: '/quest', expect: [/Ask us to cook it/i, /What the kitchen cooks/i, /Send your quest/i], title: /^Customer quest — Heritage Bites$/ },
-  { path: trackingPath, displayPath: '/order/[secure-link]', expect: [new RegExp(orderCode), /Order received/i], title: new RegExp(`^Order ${orderCode} — Heritage Bites$`) },
+  /*
+   * Each route states its own title, description and indexing instruction: the
+   * titles are what a search result shows, the descriptions are what it prints
+   * underneath, and the robots instruction keeps private screens out.
+   */
+  { path: '/', expect: [/A taste of South African heritage/i, /Cooked Thursdays/i], title: /^South African Plates in Rosebank & Sandton — Heritage Bites$/, description: /^South African plates from R100/ },
+  { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/, /Heritage Pots/, /Coming soon/i], title: /^The Menu & Prices — Heritage Bites$/, description: /^Every plate on the Heritage Bites menu/ },
+  { path: '/specials', expect: [/Thursdays & Fridays/i, /R100|R130/], title: /^This Week's Cooking & Delivery — Heritage Bites$/, description: /^What is cooking this week/ },
+  { path: '/policies', expect: [/Privacy Policy/i, /Refund Policy/i, /Order Cancellation Policy/i], title: /^Policies & Terms — Heritage Bites$/, description: /^Delivery and collection, refunds/ },
+  { path: '/about', expect: [/Every bite tells a story/i, /Vision/i, /Mission/i, /How we started/i], title: /^Our Story, Vision & Mission — Heritage Bites$/, description: /^Heritage Bites began in a family kitchen/ },
+  { path: '/contact', expect: [/Talk to a human/i], title: /^Contact & WhatsApp — Heritage Bites$/, description: /^Call or WhatsApp \+27 67 013 7587/ },
+  { path: '/checkout', expect: [/basket is empty/i], title: /^Checkout — Heritage Bites$/, noindex: true },
+  { path: '/passport', expect: [/Your loyalty card/i], title: /^Loyalty Card — Heritage Bites$/, description: /^Look up your Heritage Bites loyalty card/ },
+  { path: '/quest', expect: [/Ask us to cook it/i, /What the kitchen cooks/i, /Send your quest/i], title: /^Ask Us to Cook It — Heritage Bites$/, description: /^Ask the Heritage Bites kitchen/ },
+  { path: trackingPath, displayPath: '/order/[secure-link]', expect: [new RegExp(orderCode), /Order received/i], title: new RegExp(`^Order ${orderCode} — Heritage Bites$`), noindex: true },
   /* Owner enrolment. jsdom has no PushManager, so this also proves the page
      degrades to an explanation instead of throwing. */
-  { path: '/alerts', expect: [/Enrol this device/i, /cannot receive/i], title: /^Order alerts — Heritage Bites$/ },
-  { path: '/no-such-page', expect: [/This plate came back empty/i], title: /^Page not found — Heritage Bites$/ },
+  { path: '/alerts', expect: [/Enrol this device/i, /cannot receive/i], title: /^Order alerts — Heritage Bites$/, noindex: true },
+  { path: '/no-such-page', expect: [/This plate came back empty/i], title: /^Page not found — Heritage Bites$/, noindex: true },
 ];
 
 const routeResults = [];
+/* Every route must answer with its own title; a duplicate competes with itself. */
+const seenTitles = new Map();
 for (const route of ROUTES) {
   const routeLabel = route.displayPath ?? route.path;
   const errors2 = [];
@@ -284,6 +291,49 @@ for (const route of ROUTES) {
     if (route.title && !route.title.test(w.document.title)) {
       throw new Error(`document.title is "${w.document.title}", expected ${route.title}`);
     }
+
+    /*
+     * The head a crawler reads: one description per page (an SPA otherwise ships
+     * the home page's everywhere), and an explicit instruction on the screens
+     * that must stay out of the index.
+     */
+    const description = w.document.head.querySelector('meta[name="description"]')?.getAttribute('content') ?? '';
+    if (route.description && !route.description.test(description)) {
+      throw new Error(`meta description is "${description}", expected ${route.description}`);
+    }
+    const robots = w.document.head.querySelector('meta[name="robots"]')?.getAttribute('content') ?? '';
+    if (route.noindex && !/noindex/.test(robots)) {
+      throw new Error(`${route.path} is not marked noindex (robots: "${robots}")`);
+    }
+    if (!route.noindex && !/^index/.test(robots)) {
+      throw new Error(`${route.path} should be indexable (robots: "${robots}")`);
+    }
+    if (!route.noindex && !description) {
+      throw new Error(`${route.path} has no meta description`);
+    }
+
+    /*
+     * Two structural rules a search engine reads before any words: one <h1> per
+     * page (a second one dilutes which heading is the topic), and a heading that
+     * actually says something.
+     */
+    const headings = [...w.document.querySelectorAll('h1')];
+    if (headings.length !== 1) {
+      throw new Error(`${route.path} has ${headings.length} <h1> elements, expected 1`);
+    }
+    const heading = (headings[0].textContent ?? '').replace(/\s+/g, ' ').trim();
+    /* A private screen may head itself with an order code; a public page may not. */
+    if (!route.noindex && heading.length < 12) {
+      throw new Error(`${route.path}'s <h1> says very little: "${heading}"`);
+    }
+
+    /* No two routes may share a title, or they compete for one search result. */
+    const titleKey = w.document.title;
+    if (seenTitles.has(titleKey)) {
+      throw new Error(`the title "${titleKey}" is also used by ${seenTitles.get(titleKey)}`);
+    }
+    seenTitles.set(titleKey, routeLabel);
+
     routeResults.push(['PASS', routeLabel, '']);
   } catch (e) {
     routeResults.push(['FAIL', routeLabel, e.message]);
@@ -291,6 +341,133 @@ for (const route of ROUTES) {
   const realErrors = errors2.filter((e) => !/Not implemented: HTMLCanvasElement|Could not parse CSS/i.test(e));
   if (realErrors.length) routeResults.push(['FAIL', `${routeLabel} (runtime)`, realErrors[0]]);
   w.close();
+}
+
+/* 4a. A head the server already wrote must not be thrown away. */
+
+/*
+ * On a real deployment the Express host (or the static build) puts the canonical
+ * and og:url into the HTML before the app runs. The app then takes over — but on a
+ * host whose address it cannot determine for itself (a proxy, a LAN address, a
+ * preview) it must leave those alone rather than deleting them.
+ */
+{
+  const errors4 = [];
+  const vc4 = new VirtualConsole();
+  vc4.on('jsdomError', (e) => errors4.push(e.message));
+  vc4.on('error', (...a) => errors4.push(a.join(' ')));
+  const d4 = new JSDOM(
+    `<!doctype html><html lang="en-ZA"><head><title>Menu — Heritage Bites</title>
+      <link rel="canonical" href="https://heritagebites.test/menu" />
+      <meta property="og:url" content="https://heritagebites.test/menu" />
+    </head><body><div id="root"></div></body></html>`,
+    { url: `${BASE}/menu`, runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: vc4 },
+  );
+  const w4 = d4.window;
+  w4.fetch = (input, init) => {
+    const url = typeof input === 'string' && input.startsWith('/') ? `${BASE}${input}` : input;
+    return fetch(url, init);
+  };
+  w4.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+  w4.scrollTo = () => {};
+  w4.HTMLElement.prototype.scrollIntoView = () => {};
+
+  try {
+    w4.eval(bundle);
+    await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 12000) {
+        if (/Mogodu/i.test(w4.document.body.textContent ?? '')) return;
+        await sleep(150);
+      }
+      throw new Error('the menu did not render');
+    })();
+    const canonical = w4.document.head.querySelector('link[rel="canonical"]')?.getAttribute('href');
+    const ogUrl = w4.document.head.querySelector('meta[property="og:url"]')?.getAttribute('content');
+    if (canonical !== 'https://heritagebites.test/menu') throw new Error(`the server's canonical was discarded ("${canonical}")`);
+    if (ogUrl !== 'https://heritagebites.test/menu') throw new Error(`the server's og:url was discarded ("${ogUrl}")`);
+    checks.push(['PASS', "a server-written canonical survives the app taking over the head"]);
+  } catch (e) {
+    checks.push(['FAIL', "a server-written canonical survives the app taking over the head", e.message]);
+  }
+  w4.close();
+}
+
+/* 4b. The same app, served from a public address. */
+
+/*
+ * Canonical tags and structured data only exist when the app knows where it is
+ * published — on 127.0.0.1 the honest answer is "nowhere a crawler should go",
+ * so the route sweep above sees neither. This boots the menu at a public address
+ * and checks what a search engine would actually be told.
+ */
+const PUBLIC_ORIGIN = 'https://heritagebites.test';
+{
+  const errors3 = [];
+  const vc3 = new VirtualConsole();
+  vc3.on('jsdomError', (e) => errors3.push(e.message));
+  vc3.on('error', (...a) => errors3.push(a.join(' ')));
+  const d3 = new JSDOM(
+    `<!doctype html><html lang="en-ZA"><head><title>Heritage Bites</title></head><body><div id="root"></div></body></html>`,
+    { url: `${PUBLIC_ORIGIN}/menu`, runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: vc3 },
+  );
+  const w3 = d3.window;
+  w3.fetch = (input, init) => {
+    const url = typeof input === 'string' && input.startsWith('/') ? `${BASE}${input}` : input;
+    return fetch(url, init);
+  };
+  w3.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+  w3.scrollTo = () => {};
+  w3.HTMLElement.prototype.scrollIntoView = () => {};
+
+  try {
+    w3.eval(bundle);
+    await (async () => {
+      const start = Date.now();
+      while (Date.now() - start < 12000) {
+        if (/Mogodu/i.test(w3.document.body.textContent ?? '')) return;
+        await sleep(150);
+      }
+      throw new Error('the menu did not render');
+    })();
+
+    const canonical = w3.document.head.querySelector('link[rel="canonical"]')?.getAttribute('href');
+    if (canonical !== `${PUBLIC_ORIGIN}/menu`) throw new Error(`canonical is "${canonical}"`);
+
+    const ogUrl = w3.document.head.querySelector('meta[property="og:url"]')?.getAttribute('content');
+    if (ogUrl !== `${PUBLIC_ORIGIN}/menu`) throw new Error(`og:url is "${ogUrl}"`);
+
+    /* One share image, absolute, so WhatsApp can actually fetch it. */
+    const ogImage = w3.document.head.querySelector('meta[property="og:image"]')?.getAttribute('content') ?? '';
+    if (!ogImage.startsWith(`${PUBLIC_ORIGIN}/`)) throw new Error(`og:image is not absolute: "${ogImage}"`);
+
+    /* Structured data: the shop, the site, the breadcrumb, and the menu. */
+    const raw = w3.document.head.querySelector('script[data-hb-seo-jsonld]')?.textContent ?? '';
+    if (!raw) throw new Error('no JSON-LD was written');
+    const graph = JSON.parse(raw)['@graph'];
+    const types = graph.map((node) => node['@type']);
+    for (const expected of ['Restaurant', 'WebSite', 'BreadcrumbList', 'Menu']) {
+      if (!types.includes(expected)) throw new Error(`the JSON-LD graph has no ${expected} (${types.join(', ')})`);
+    }
+    const restaurant = graph.find((node) => node['@type'] === 'Restaurant');
+    if (restaurant.telephone !== '+27670137587') throw new Error(`the phone is "${restaurant.telephone}"`);
+    if (restaurant.address) throw new Error('a street address was claimed for a business without one');
+
+    const menu = graph.find((node) => node['@type'] === 'Menu');
+    const items = menu.hasMenuSection.flatMap((section) => section.hasMenuItem);
+    if (items.length < 4) throw new Error(`only ${items.length} dish(es) in the menu data`);
+    for (const item of items) {
+      if (!/^\d+\.\d{2}$/.test(item.offers?.price ?? '')) throw new Error(`${item.name} has no price`);
+      if (item.offers.priceCurrency !== 'ZAR') throw new Error(`${item.name} is priced in ${item.offers.priceCurrency}`);
+    }
+
+    checks.push(['PASS', 'canonical, open graph and structured data at a public address']);
+  } catch (e) {
+    checks.push(['FAIL', 'canonical, open graph and structured data at a public address', e.message]);
+  }
+  const real3 = errors3.filter((e) => !/Not implemented: HTMLCanvasElement|Could not parse CSS|Not implemented: navigation/i.test(e));
+  if (real3.length) checks.push(['FAIL', 'public-address boot (runtime)', real3[0]]);
+  w3.close();
 }
 
 /* 5. Report. */

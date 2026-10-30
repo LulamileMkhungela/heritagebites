@@ -1,10 +1,10 @@
 import { useCatalog } from '../store/catalog';
 import { HeritageBand, LinkButton, Reveal, SectionLabel } from '../components/ui';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
 
 export default function About() {
-  useDocumentTitle('About Us | Our Story, Vision & Mission');
+  usePageSeo('/about');
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
 

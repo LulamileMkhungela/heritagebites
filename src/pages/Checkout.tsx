@@ -5,7 +5,7 @@ import { useCatalog } from '../store/catalog';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { normalisePhone, zar } from '../lib/format';
 import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import { basketHref, waChatHref, waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
 import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
@@ -31,7 +31,11 @@ function rememberTracking(code: string, token: string) {
 }
 
 function LiveCheckout() {
-  useDocumentTitle('Checkout');
+  /*
+   * A checkout is a form, not a page worth indexing: there is nothing in it to
+   * find until somebody has a basket.
+   */
+  usePageSeo('/checkout', { title: 'Checkout' });
   const nav = useNavigate();
   const catalog = useCatalog((s) => s.data);
   const lines = useCart((s) => s.lines);
@@ -732,6 +736,10 @@ function PreviewCheckout() {
 }
 
 export default function Checkout() {
-  useDocumentTitle('Checkout');
+  /*
+   * A checkout is a form, not a page worth indexing: there is nothing in it to
+   * find until somebody has a basket.
+   */
+  usePageSeo('/checkout', { title: 'Checkout' });
   return STATIC_PREVIEW ? <PreviewCheckout /> : <LiveCheckout />;
 }

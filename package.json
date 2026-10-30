@@ -10,7 +10,7 @@
     "dev:api": "node server/index.js",
     "sandbox:yoco": "node scripts/yoco-sandbox.mjs",
     "check:payments": "node scripts/payment-check.mjs",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/build-seo.mjs --dir dist",
     "build:pages": "node scripts/build-pages.mjs",
     "preview": "vite preview",
     "start": "node server/index.js",

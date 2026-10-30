@@ -132,6 +132,24 @@ try {
   rmSync(dataDir, { recursive: true, force: true });
 }
 
+/* ------------------------------------------------------------ search SEO -- */
+
+/*
+ * Pages serves files. `/menu` therefore has to *be* a file, or the visitor gets
+ * the 404 fallback and the crawler gets nothing: one document per route, each
+ * with its own title, description, canonical and structured data, is the
+ * difference between eight indexable pages and one.
+ *
+ * The site address is passed in rather than guessed — `HB_SITE_URL`, falling back
+ * to `VITE_SITE_URL`/`HB_PUBLIC_URL`. Without one, the script still writes
+ * robots.txt and the per-route documents, and says clearly that it skipped the
+ * sitemap because a sitemap of invented URLs is worse than none.
+ */
+step('Writing search metadata, one document per route');
+run('node', ['scripts/build-seo.mjs', '--dir', dir, '--routes', '--catalog', `${dir}/api/catalog.json`], {
+  HB_SITE_URL: process.env.HB_SITE_URL ?? process.env.VITE_SITE_URL ?? '',
+});
+
 /* ------------------------------------------------------- Pages plumbing -- */
 
 step('Writing the Pages fallbacks and .nojekyll');

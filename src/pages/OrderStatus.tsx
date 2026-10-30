@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { clockTime, timeAgo, zar } from '../lib/format';
 import { Badge, Button, ContactText, LinkButton, SectionLabel, Spinner } from '../components/ui';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import { waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 import { useCatalog } from '../store/catalog';
 import type { Order } from '../lib/types';
@@ -42,7 +42,14 @@ export default function OrderStatus() {
 
   /* The order code in the tab title means two tracking tabs stay tellable
      apart, which matters when someone has ordered for more than one table. */
-  useDocumentTitle(order ? `Order ${order.code}` : `Order ${code || 'tracking'}`);
+  /*
+   * One customer's order page, behind a one-time token. The title says which
+   * order so a receipt is findable in the browser's history; `noindex` comes with
+   * the private route, and the page must never appear in a search result.
+   */
+  usePageSeo(`/order/${code || 'tracking'}`, {
+    title: order ? `Order ${order.code}` : 'Order tracking',
+  });
 
   const refresh = useCallback(async () => {
     try {

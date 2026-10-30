@@ -35,6 +35,7 @@ The combined handoff PDF, [`docs/heritage-bites-complete.pdf`](docs/heritage-bit
 
 - [`docs/regomoditswe-answers-2026-10.md`](docs/regomoditswe-answers-2026-10.md) — how the owner's answers were applied.
 - [`docs/production-payments-yoco.md`](docs/production-payments-yoco.md) — switching card payments live.
+- [`docs/seo.md`](docs/seo.md) — search foundations: titles, canonicals, sitemap, structured data, and the domain decision.
 - [`docs/what-i-need-from-kemorego.md`](docs/what-i-need-from-kemorego.md) / `.pdf` — what is still outstanding from the business.
 - [`docs/what-is-needed.md`](docs/what-is-needed.md) / `.pdf` — technical launch checklist.
 - [`docs/screens/heritage-bites-screens.pdf`](docs/screens/heritage-bites-screens.pdf) — screens only.
@@ -305,6 +306,29 @@ node scripts/build-combined-pdf.mjs
 ```
 
 `HB_ONLY=01-home,02-home-mobile` limits a screenshot run to named screens without clearing the rest.
+
+## Search foundations
+
+Every public page states its own title, description, canonical address and
+structured data, and the private screens (checkout, an order behind a token, the
+owner's alerts) are `noindex`. The route table and the builders live once in
+`shared/seo.js`, and the app, the Express host, the static build, `robots.txt`
+and `sitemap.xml` all derive from it — four copies of the same facts would drift.
+
+Nothing in the source names a domain. Set the address the site is actually served
+from and everything follows:
+
+```bash
+HB_SITE_URL=https://<the real address> npm run build          # dist/ + robots + sitemap
+HB_SITE_URL=https://<the real address> npm run build:pages    # web/ + one file per route
+```
+
+Without it, titles and descriptions are still correct, but no canonical and no
+sitemap are written rather than inventing a domain. `npm run test:render` checks
+each route's head, its single `<h1>`, that no two routes share a title, and — at a
+public origin — the canonical and the Restaurant/Menu structured data.
+[`docs/seo.md`](docs/seo.md) has the full picture, including the one decision that
+is still the owner's: `heritagebites.co.za` currently serves a different website.
 
 ## Public routes
 

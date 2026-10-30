@@ -7,12 +7,16 @@ import { zar } from '../lib/format';
 import { Button, HeritageBand, LinkButton, Reveal, SectionLabel } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import { basketHref, waUrlWithText, CHANNEL_ENQUIRY } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
 export default function Home() {
-  useDocumentTitle('Traditional & Contemporary Plates');
+  /*
+   * The site-level page: its own title, description and canonical, plus the
+   * business's structured data (built from the live catalogue settings).
+   */
+  usePageSeo('/');
   const catalog = useCatalog((s) => s.data);
   const [modal, setModal] = useState<MenuItem | null>(null);
 
@@ -82,8 +86,13 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             Est. {s?.established ?? 2025} · Every Bite Tells a Story
           </div>
 
+          {/*
+            The h1 names the food and the place, not just the mood: it is the
+            strongest signal a search engine has about what this page sells, and
+            "a taste of heritage" alone could be anything.
+          */}
           <h1 className="font-display text-5xl font-semibold leading-[0.95] tracking-tight md:text-7xl">
-            A taste of heritage,
+            A taste of South African heritage,
             <br />
             <span className="text-ochre">made with love.</span>
           </h1>

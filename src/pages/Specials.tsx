@@ -1,7 +1,7 @@
 import { useCatalog } from '../store/catalog';
 import { zar } from '../lib/format';
 import { LinkButton, Reveal, SectionLabel, Spinner } from '../components/ui';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { usePageSeo } from '../lib/seo';
 import { waHref } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
@@ -16,7 +16,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
  * the two confirmed plate prices and the delivery rules.
  */
 export default function Specials() {
-  useDocumentTitle('This Week');
+  usePageSeo('/specials');
   const catalog = useCatalog((s) => s.data);
 
   if (!catalog) return <Spinner label="Loading this week…" />;
@@ -33,7 +33,7 @@ export default function Specials() {
         <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/30" />
         <div className="relative mx-auto max-w-7xl px-4">
           <SectionLabel onDark>This week</SectionLabel>
-          <h1 className="max-w-3xl font-display text-5xl font-semibold md:text-6xl">Thursdays &amp; Fridays</h1>
+          <h1 className="max-w-3xl font-display text-5xl font-semibold md:text-6xl">Cooked Thursdays &amp; Fridays</h1>
           <p className="mt-4 max-w-2xl text-bone/70">
             We cook two days a week, serving delivery and collection between {settings.serviceWindow.open} and{' '}
             {settings.serviceWindow.close}. Weekly specials are announced on WhatsApp — ask us what is on this week.

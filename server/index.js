@@ -9,7 +9,7 @@ import 'dotenv/config';
 import express from 'express';
 import compression from 'compression';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { store, has } from './lib/store.js';
@@ -31,6 +31,7 @@ import {
 import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
 import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
+import { HEAD_END, HEAD_START, headHtml, normaliseSiteUrl } from '../shared/seo.js';
 
 const PORT = Number(process.env.PORT || 4000);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -1217,6 +1218,59 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
  * app on 5173 while proxying /api here.
  */
 const DIST = join(here, '..', 'dist');
+
+/**
+ * The built shell, with a route's own `<head>` in place of the marked block.
+ *
+ * A crawler that does not run JavaScript — and every link unfurler in WhatsApp,
+ * Facebook and Slack — reads this HTML and nothing else. Serving one title and
+ * one description for the whole site is how an SPA ends up with eight pages
+ * competing under the home page's summary, so the shell is rewritten per route
+ * from the same table the app uses (`shared/seo.js`).
+ *
+ * The shell is read once and the results cached by path: a few strings per route,
+ * built lazily, so the first request for /menu pays for it and the rest do not.
+ */
+function shellRenderer(shell) {
+  const start = shell.indexOf(HEAD_START);
+  const end = shell.indexOf(HEAD_END);
+  if (start === -1 || end === -1) return null;
+  const cache = new Map();
+
+  return function render(path, siteUrl) {
+    /* Cached per address as well as per route: two hosts must not share a
+       canonical tag. */
+    const key = `${siteUrl ?? ''}|${path}`;
+    if (cache.has(key)) return cache.get(key);
+    const html =
+      shell.slice(0, start) +
+      HEAD_START +
+      '\n    ' +
+      headHtml(path, { siteUrl, settings: get('settings') }) +
+      '\n    ' +
+      HEAD_END +
+      shell.slice(end + HEAD_END.length);
+    cache.set(key, html);
+    return html;
+  };
+}
+
+/**
+ * The address this page is publicly served from.
+ *
+ * `HB_SITE_URL` (or `HB_PUBLIC_URL`) when the deployment states it, otherwise the
+ * host the request arrived on. Deliberately *not* the built-in default used for
+ * receipt links: that is a different website, and a canonical pointing at it
+ * would tell Google this shop's pages are duplicates of somebody else's.
+ */
+function seoSiteUrl(req) {
+  const configured = normaliseSiteUrl(process.env.HB_SITE_URL) ?? normaliseSiteUrl(process.env.HB_PUBLIC_URL);
+  if (configured) return configured;
+  const host = req.get?.('host');
+  if (!host) return null;
+  return normaliseSiteUrl(`${req.protocol}://${host}`);
+}
+
 if (existsSync(DIST)) {
   app.use(express.static(DIST, { maxAge: '1h', index: false }));
 
@@ -1230,6 +1284,9 @@ if (existsSync(DIST)) {
    * "not found" screen — but with a 404 status. Serving them 200 is a soft 404:
    * crawlers index a page whose entire content is an apology.
    */
+  const shellPath = join(DIST, 'index.html');
+  const renderShell = shellRenderer(readFileSync(shellPath, 'utf8'));
+
   const KNOWN_ROUTES = new Set([
     '/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest', '/alerts',
   ]);
@@ -1244,6 +1301,15 @@ if (existsSync(DIST)) {
     }
     if (!req.accepts('html')) return next();
     const status = isKnownRoute(path) ? 200 : 404;
+    /* No caching of the shell: the head differs per route, and a shared cache
+       would hand /menu's title to the next visitor of /. */
+    res.set('Cache-Control', 'no-cache');
+    try {
+      const rendered = renderShell(path, seoSiteUrl(req));
+      if (rendered) return res.status(status).type('html').send(rendered);
+    } catch (error) {
+      console.error(`[seo] could not write the head for ${path}: ${String(error?.message ?? error).slice(0, 160)}`);
+    }
     return res.status(status).sendFile(join(DIST, 'index.html'));
   });
 

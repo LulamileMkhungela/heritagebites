@@ -6,7 +6,8 @@ import { zar } from '../lib/format';
 import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateMenu } from '../lib/types';
-import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { menuJsonLd } from '../../shared/seo.js';
+import { currentSiteUrl, usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
 
 /*
@@ -43,9 +44,19 @@ function sortItems(items: MenuItem[], sort: SortId): MenuItem[] {
 }
 
 export default function MenuPage() {
-  useDocumentTitle('Meals');
+  /*
+   * The menu is the page most likely to be found from a search for a dish, so it
+   * carries a schema.org Menu built from the same plates the customer sees —
+   * prices included, coming-soon dishes excluded.
+   */
   const catalog = useCatalog((s) => s.data);
   const loading = useCatalog((s) => s.loading);
+  /*
+   * The menu is the page most likely to be found from a search for a dish, so it
+   * carries a schema.org Menu built from the same plates the customer sees —
+   * prices included, coming-soon dishes excluded.
+   */
+  usePageSeo('/menu', { jsonLd: catalog ? menuJsonLd(currentSiteUrl(), catalog) : null });
   const [params, setParams] = useSearchParams();
   const [modal, setModal] = useState<MenuItem | null>(null);
   const [activeCategory, setActiveCategory] = useState('');
@@ -435,6 +446,32 @@ export default function MenuPage() {
           </section>
           );
         })}
+        {/*
+          The menu is where a customer decides; the two pages that answer "when",
+          "where" and "how much" are one tap away, in words rather than only in
+          the footer. Both links carry real information, so this is a route to an
+          answer, not a keyword.
+        */}
+        <section className="mx-auto mt-14 max-w-7xl px-4 pb-4">
+          <div className="rounded-3xl border-2 border-ink/10 bg-white p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
+            <p className="max-w-2xl text-sm leading-relaxed text-ink/70">
+              Every plate is cooked on a Thursday or a Friday between{' '}
+              {catalog?.settings?.serviceWindow.open ?? '12:00'} and{' '}
+              {catalog?.settings?.serviceWindow.close ?? '13:30'}, with delivery included in{' '}
+              {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')}.{' '}
+              <Link to="/specials" className="font-semibold text-ochre-deep underline">
+                How delivery and collection work
+              </Link>
+              .
+            </p>
+            <p className="mt-3 shrink-0 text-sm text-ink/70 sm:mt-0">
+              Questions before you order?{' '}
+              <Link to="/contact" className="font-semibold text-ochre-deep underline">
+                Talk to us
+              </Link>
+            </p>
+          </div>
+        </section>
       </main>
 
       {modal && <ItemModal item={modal} onClose={closeDish} />}
