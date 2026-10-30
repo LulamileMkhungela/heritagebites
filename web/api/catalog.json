@@ -1251,17 +1251,17 @@
     ]
   },
   "service": {
-    "open": false,
+    "open": true,
     "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Friday",
-    "timeLabel": "08:53",
+    "timeLabel": "12:21",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Friday 12:00–13:30",
-    "nextWindowLabel": "Friday 12:00–13:30",
-    "headline": "Not cooking yet",
-    "message": "The pots go on at 12:00. Place your order now and it goes in first — today's window is 12:00–13:30.",
-    "shortMessage": "Pots go on at 12:00 today — order now and you are first in the queue.",
+    "nextWindowLabel": "Thursday 12:00–13:30",
+    "headline": "Serving now",
+    "message": "We are serving now — delivery and collection until 13:30.",
+    "shortMessage": "Serving now until 13:30.",
     "serviceDays": [
       "Thursday",
       "Friday"

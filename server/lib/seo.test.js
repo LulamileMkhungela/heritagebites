@@ -251,7 +251,9 @@ describe('the head served for a route', () => {
     assert.match(html, /<meta name="description" content="Every plate on the Heritage Bites menu/);
     assert.match(html, new RegExp(`<link rel="canonical" href="${SITE}/menu" />`));
     assert.match(html, new RegExp(`<meta property="og:url" content="${SITE}/menu" />`));
-    assert.match(html, new RegExp(`<meta property="og:image" content="${SITE}/img/hero-feast.jpg" />`));
+    assert.match(html, new RegExp(`<meta property="og:image" content="${SITE}/img/social-card.jpg" />`));
+    assert.match(html, /<meta property="og:image:width" content="1200" \/>/);
+    assert.match(html, /<meta property="og:image:height" content="630" \/>/);
     assert.match(html, /<meta property="og:site_name" content="Heritage Bites" \/>/);
     assert.match(html, /<meta name="robots" content="index,follow/);
   });

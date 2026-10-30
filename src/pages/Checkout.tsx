@@ -5,6 +5,7 @@ import { useCatalog } from '../store/catalog';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { normalisePhone, zar } from '../lib/format';
 import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
+import { asset } from '../lib/assets';
 import { usePageSeo } from '../lib/seo';
 import { basketHref, waChatHref, waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
@@ -267,7 +268,14 @@ function LiveCheckout() {
   if (!lines.length) {
     return (
       <section className="mx-auto max-w-lg px-4 py-24 text-center">
-        <p className="text-4xl">🧺</p>
+        {/* The empty state used to be an emoji; the badge is the shop's own mark. */}
+        <img
+          src={asset('/img/logo-badge-ink.png')}
+          alt=""
+          width={96}
+          height={96}
+          className="mx-auto h-24 w-24 object-contain opacity-85"
+        />
         <h1 className="mt-4 font-display text-4xl font-semibold">Your basket is empty</h1>
         <p className="mt-3 text-ink/60">Add a plate or two from the menu and come back here to check out.</p>
         <Link to="/menu" className="mt-6 inline-block rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone">

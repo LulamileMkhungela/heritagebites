@@ -330,6 +330,67 @@ public origin — the canonical and the Restaurant/Menu structured data.
 [`docs/seo.md`](docs/seo.md) has the full picture, including the one decision that
 is still the owner's: `heritagebites.co.za` currently serves a different website.
 
+## The logo, the icons and the share card
+
+The shop's badge is the brand everywhere it can be a file: the header and footer
+of the site, the browser tab, the iOS home screen, the Android launcher, a browser
+notification, and the picture that appears when the link is pasted into WhatsApp,
+Facebook, LinkedIn or Slack.
+
+Every one of those files is generated from the artwork by
+`scripts/build-brand-assets.py`; none was drawn separately.
+
+| File | Where it shows | Size |
+| --- | --- | --- |
+| `public/img/logo-badge.png` | header, footer, share card | 512px, white on transparent |
+| `public/img/logo-badge-ink.png` | the 404 page, the empty basket | 512px, ink on transparent |
+| `public/img/social-card.jpg` | a pasted link | 1200×630 |
+| `public/favicon.ico` · `favicon-16.png` · `favicon-32.png` | the browser tab | 16/32/48 |
+| `public/apple-touch-icon.png` | iOS home screen | 180, opaque |
+| `public/icon-192.png` · `icon-512.png` · `icon-maskable-512.png` | Android, the manifest | 192/512 |
+| `public/manifest.webmanifest` | install prompt, Android | — |
+
+### Why the tab icon is the pot, not the whole badge
+
+The badge is an engraving: arched "HERITAGE", "BITES", "EST. 2025" and crossed
+cutlery, all inside a ring. At 16px that ring is a grey smudge — checked by
+rendering it at true size next to the alternatives rather than assuming. The pot
+is the one part of the mark that survives the size, so it is cut out of the
+artwork by connected-component analysis, set on an ink tile (white art vanishes in
+a light tab, dark art in a dark one), and used for the tab, the home screen and
+the notification icon. The full badge is used wherever there is room for it.
+
+### Regenerating
+
+The builder needs Pillow, numpy, scipy and fontTools, and the site's own typefaces
+as TTF (they ship as woff2, which Pillow cannot read):
+
+```bash
+pip install --break-system-packages pillow numpy scipy fonttools brotli
+python3 scripts/woff2-to-ttf.py            # public/fonts/*.woff2 → /tmp/*.ttf
+python3 scripts/build-brand-assets.py <the supplied logo.png>
+npm run build && npm run build:pages
+```
+
+`server/lib/brand.test.js` reads the dimensions out of the files themselves, so a
+missing, empty or wrongly sized icon fails `npm test` rather than shipping.
+
+### The share card
+
+`shared/seo.js` names `DEFAULT_SHARE_IMAGE`, its size and its alt text, and both
+the app and the server emit `og:image`, `og:image:width/height/type/alt` and the
+`twitter:image` pair. Everything on the card is a fact the shop already states on
+the site: South African plates, R100–R130, delivery in Rosebank and Sandton,
+Thursdays and Fridays 12:00–13:30. No address, rating or review is invented to
+fill space.
+
+Social networks cache a preview the first time they see a URL and can hold it for
+weeks. After a deploy, paste the link into the
+[Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/) and the
+[LinkedIn Post Inspector](https://www.linkedin.com/post-inspector/) and ask them to
+re-scrape; WhatsApp caches too, so an unchanged preview after a deploy is usually
+the cache, not the code.
+
 ## Public routes
 
 - `/` — home

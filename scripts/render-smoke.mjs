@@ -109,6 +109,11 @@ await check('header + navigation render', async () => {
 await check('hero renders with the real headline', async () => {
   await waitFor(() => /A taste of South African heritage/i.test(text()), 'hero headline');
   if (!html().includes('hero-feast')) throw new Error('hero image not referenced');
+  /* The icon links live in index.html's head, which jsdom's bare shell never
+     has; server/lib/brand.test.js asserts those against the real file. */
+  /* The supplied badge has to be the mark on the page, not a look-alike. */
+  if (!window.document.querySelector('header img[src*="logo-badge"]')) throw new Error('the header does not show the logo badge');
+  if (!window.document.querySelector('footer img[src*="logo-badge"]')) throw new Error('the footer does not show the logo badge');
 });
 
 await check('catalogue loads from the API and dishes render', async () => {

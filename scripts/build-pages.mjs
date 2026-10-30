@@ -146,7 +146,7 @@ try {
  * sitemap because a sitemap of invented URLs is worse than none.
  */
 step('Writing search metadata, one document per route');
-run('node', ['scripts/build-seo.mjs', '--dir', dir, '--routes', '--catalog', `${dir}/api/catalog.json`], {
+run('node', ['scripts/build-seo.mjs', '--dir', dir, '--routes', '--relative-assets', '--catalog', `${dir}/api/catalog.json`], {
   HB_SITE_URL: process.env.HB_SITE_URL ?? process.env.VITE_SITE_URL ?? '',
 });
 
