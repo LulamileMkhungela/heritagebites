@@ -74,6 +74,19 @@ message bundle to buy.
 | Customer | Email receipt with private tracking link | Yes, when they left an email | Yes | R0 |
 | Customer / owner | WhatsApp | No — one tap, sent from their own app | — | R0, unlimited |
 
+### Handing this to the owner
+
+`notifications.env.example` is the file to give her: one page, plain language,
+four parts — the email account, the shop's own web address, the phone keys, and
+two optional extras. She fills it in, saves it as `.env`, and runs
+`npm run check:notifications`, which logs in to the mail account, sends her a
+test ticket, and prints exactly what is still missing.
+
+[`docs/notifications-setup.md`](docs/notifications-setup.md) is the same
+instructions with the failure table: what each error means and what to change.
+The short version of why those exist: when notifications are wrong nothing
+crashes. Orders are saved, the site looks healthy, and the kitchen never hears.
+
 ### Which alert does who get?
 
 - **Owner, the moment an order lands:** a Web Push notification on every enrolled
@@ -278,6 +291,8 @@ npm run test:interaction # exercise storefront, contact, checkout and order flow
 npm run test:a11y        # route-level accessibility audit
 npm run test:pages       # the GitHub Pages preview (needs `npm run build:pages` + `preview:pages`)
 npm run test:mobile      # phone layout: 12 routes × 4 widths, real Chromium
+npm run check:notifications  # logs in to the owner's mail account and sends a real test
+npm run notify:check     # the live site's own view of every alert channel
 npm run backup           # gzipped copy of the runtime JSON store (orders, stamps, outbox)
 npm run verify           # all of the above
 npm run build            # TypeScript and production build

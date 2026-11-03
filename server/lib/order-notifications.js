@@ -243,7 +243,13 @@ function readSmtp(prefix) {
     port,
     secure: secureRaw === undefined ? port === 465 : secureRaw === 'true',
     user,
-    pass,
+    /*
+     * Gmail and several hosts display App Passwords as four groups —
+     * "abcd efgh ijkl mnop" — and a password with spaces in it fails
+     * authentication with a message that does not mention spaces. Nobody types
+     * an SMTP password containing a space on purpose, so the spaces go.
+     */
+    pass: pass.replace(/\s+/g, ''),
     from,
   };
 }
@@ -545,7 +551,14 @@ export async function processNextOrderAlert(transport, config) {
 
 /* -------------------------------- Worker ------------------------------- */
 
-function transportFor(smtp) {
+/**
+ * One nodemailer transport for an SMTP block.
+ *
+ * Exported because `scripts/check-notification-setup.mjs` must test the *same*
+ * connection the worker uses. A checker with its own copy of these settings is a
+ * checker that can pass while the real thing fails.
+ */
+export function transportFor(smtp) {
   return nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,

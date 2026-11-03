@@ -18,6 +18,7 @@ import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents,
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
 import { customerEmailConfig, emailConfig, enqueueOrderAlert, notifyStatus, publicBaseUrl, startOrderNotificationWorker } from './lib/order-notifications.js';
+import { notificationSetup } from './lib/notification-setup.js';
 import {
   confirmOrderSubscription,
   notifyOrderDevices,
@@ -568,7 +569,19 @@ app.get('/api/health', (_req, res) => {
     paymentDriver: paymentDriver(),
     orders: get('orders').length,
     /* Which free notification channels are configured — booleans, no secrets. */
-    notifications: { ...notifyStatus(), push: pushStatus() },
+    /*
+     * `setup` is the part a monitor needs: not "is SMTP present" but "would a
+     * customer's receipt link to this shop", plus every other thing the owner's
+     * details get wrong. Secrets are never included — only verdicts.
+     */
+    notifications: {
+      ...notifyStatus(),
+      push: pushStatus(),
+      setup: (() => {
+        const { issues, ready, origin, originIsPlaceholder, ownerKeySet } = notificationSetup();
+        return { ready, origin, originIsPlaceholder, ownerKeySet, issues };
+      })(),
+    },
     time: new Date().toISOString(),
   });
 });
@@ -1336,5 +1349,23 @@ if (process.env.NODE_ENV !== 'test') {
      * meets it, and by then the order has already been handed over.
      */
     for (const warning of paymentWarnings()) console.warn(`[payments] ${warning}`);
+
+    /*
+     * Same treatment for notifications. This used to be one calm line — "no SMTP
+     * configuration yet" — which is easy to scroll past and says nothing about
+     * the receipt link pointing at a different restaurant. Errors are loud.
+     */
+    const setup = notificationSetup();
+    for (const issue of setup.issues) {
+      const line = `[notifications] ${issue.message}`;
+      if (issue.severity === 'error') console.error(line);
+      else console.warn(line);
+    }
+    if (setup.ready) {
+      console.log(
+        `[notifications] ready — kitchen ${setup.kitchenEmail?.to ?? '(push only)'}, `
+          + `receipts ${setup.customerEmail ? 'on' : 'off'}, push ${setup.push.configured ? setup.push.ownerDevices + ' device(s)' : 'off'}`,
+      );
+    }
   });
 }
