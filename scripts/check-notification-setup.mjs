@@ -107,8 +107,14 @@ const [kind, words] = PUSH_WORDS[setup.push.reason] ?? ['dot', `unknown state ($
 ({ tick, cross, dot })[kind](`Push keys:         ${words}`);
 if (kind === 'cross') failures.push(`Push: ${words}`);
 if (setup.push.configured) dot(`kitchen devices enrolled: ${setup.push.ownerDevices}${setup.push.ownerDevices ? '' : '  (open /alerts on the phone to enrol one)'}`);
-if (setup.originIsPlaceholder) {
-  cross(`Tracking links:    ${setup.origin}  ← NOT YOUR SITE (see below)`);
+/*
+ * The marker follows the verdict, not just the one placeholder this script knows
+ * about. A tick beside a broken address is how an owner concludes the file is
+ * finished.
+ */
+const originIssue = setup.issues.find((issue) => issue.code === 'public-url');
+if (originIssue) {
+  cross(`Tracking links:    ${setup.origin}  ← not usable (see below)`);
 } else {
   tick(`Tracking links:    ${setup.origin}`);
 }
@@ -145,6 +151,19 @@ async function testOwner() {
     return;
   }
 
+  /*
+   * Do not dial the mail server with the template's own sentence in the password
+   * field. Google would answer "username and password not accepted", and the
+   * honest conclusion — "you have not filled this in yet" — would be lost behind
+   * advice about revoked App Passwords.
+   */
+  const unfilled = setup.issues.filter((issue) => issue.code === 'password-not-set');
+  if (unfilled.length) {
+    cross('The password has not been filled in yet, so the login was not attempted.');
+    dot('Edit .env and replace HB_SMTP_PASS with the real App Password, then run this again.');
+    return;
+  }
+
   const transport = transportFor(owner);
   try {
     await transport.verify();
@@ -158,6 +177,9 @@ async function testOwner() {
     say('                  or a normal account password was pasted instead of an App Password.');
     say('      · Brevo  -> the SMTP login is not the account email; copy it from SMTP settings.');
     say('      · host/port blocked by the host firewall (try port 587 with SECURE=false).');
+    if (/TLS|socket|ECONN|ETIMEDOUT|ENOTFOUND/i.test(message)) {
+      say('      · the machine cannot reach that host at all — check its outbound mail access.');
+    }
     process.exit(2);
   }
 

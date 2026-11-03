@@ -7,58 +7,105 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { notificationSetup, PLACEHOLDER_ORIGIN } from './notification-setup.js';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 
-/** Every HB_ variable the notification path reads, in one place. */
-const NOTIFICATION_VARS = [
-  'HB_SMTP_HOST',
-  'HB_SMTP_PORT',
-  'HB_SMTP_SECURE',
-  'HB_SMTP_USER',
-  'HB_SMTP_PASS',
-  'HB_SMTP_FROM',
-  'HB_ORDER_ALERT_EMAIL',
-  'HB_ORDER_EMAIL_ENABLED',
-  'HB_CUSTOMER_SMTP_HOST',
-  'HB_CUSTOMER_SMTP_PORT',
-  'HB_CUSTOMER_SMTP_SECURE',
-  'HB_CUSTOMER_SMTP_USER',
-  'HB_CUSTOMER_SMTP_PASS',
-  'HB_CUSTOMER_SMTP_FROM',
-  'HB_CUSTOMER_EMAIL_ENABLED',
-  'HB_ORDER_EMAIL_POLL_MS',
-  'HB_PUBLIC_URL',
-  'HB_VAPID_PUBLIC_KEY',
-  'HB_VAPID_PRIVATE_KEY',
-  'HB_VAPID_SUBJECT',
-  'HB_OWNER_PUSH_KEY',
-  'HB_PUSH_ENABLED',
-  'HB_PUSH_DRY_RUN',
-];
+/**
+ * Every HB_ variable the notification path reads — taken from the source, not
+ * from a list somebody remembered to update.
+ *
+ * A hand-written list is how this test would have passed while missing a
+ * variable: add `HB_SMTP_TIMEOUT` to the code and the old assertion would still
+ * be green. This reads the server sources and takes the names from there.
+ *
+ * `HB_CUSTOMER_SMTP_` and `HB_SMTP_` are the prefixes built by `readSmtp()`, so
+ * they are expanded to the five settings each really reads.
+ */
+const PREFIX_SETTINGS = ['HOST', 'PORT', 'SECURE', 'USER', 'PASS', 'FROM'];
 
-/** Run with exactly these settings; everything else is neutralised. */
+function notificationVarsFromSource() {
+  /*
+   * Only environments reads, not every mention.
+   *
+   * The first version of this scanned for `HB_[A-Z_]+` anywhere, which picked up
+   * names out of log messages and comments — `"HB_VAPID_* are not a valid key
+   * pair"` produced a variable called `HB_VAPID_`. A test that invents its own
+   * findings teaches you to ignore it.
+   */
+  /*
+   * Exactly the notification surface: the modules that decide who is told about
+   * an order, and the two scripts that report on it. Scanning the whole server
+   * dragged in HOSTNAME and NODE_ENV from the screenshot tooling, which is noise
+   * in a list whose job is to be trusted.
+   */
+  const sources = [
+    join(ROOT, 'server', 'lib', 'order-notifications.js'),
+    join(ROOT, 'server', 'lib', 'web-push.js'),
+    join(ROOT, 'server', 'lib', 'notification-setup.js'),
+    join(ROOT, 'scripts', 'notification-check.mjs'),
+    join(ROOT, 'scripts', 'check-notification-setup.mjs'),
+  ];
+
+  const names = new Set();
+  for (const file of sources) {
+    const code = readFileSync(file, 'utf8');
+    /* process.env.HB_X and process.env['HB_X'] */
+    for (const match of code.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) names.add(match[1]);
+    for (const match of code.matchAll(/process\.env\[\s*['"`]([A-Z][A-Z0-9_]+)['"`]\s*\]/g)) names.add(match[1]);
+
+    /* Prefixes: readSmtp('HB_SMTP_') reads HOST, PORT, SECURE, USER, PASS, FROM. */
+    for (const match of code.matchAll(/readSmtp\(\s*['"]([A-Z][A-Z0-9_]+_)['"]\s*\)/g)) {
+      for (const suffix of PREFIX_SETTINGS) names.add(`${match[1]}${suffix}`);
+    }
+  }
+  return [...names].sort();
+}
+
+const NOTIFICATION_VARS = notificationVarsFromSource();
+
+/**
+ * Names that surface in the scan but are not the owner's notification duty.
+ *
+ * Listed one by one, with a reason, rather than hidden behind a pattern — so the
+ * next person can see this was considered, not forgotten.
+ */
+const NOT_AN_OWNER_SETTING = {
+  NODE_ENV: "Node's own mode, set by the host",
+  SMOKE_BASE: 'test alias for HB_BASE, never used in production',
+};
+
+/**
+ * Settings the template may mention that the scan cannot see: they are read
+ * outside the notification modules.
+ */
+const MENTIONED_ELSEWHERE = {
+  HB_BASE: 'a command-line example (`HB_BASE=https://… npm run notify:check`)',
+  HB_CONTACT_FORMSPREE_URL: 'the contact-form inbox, read by server/index.js',
+};
+
+/**
+ * Run with exactly these settings; everything else is neutralised.
+ *
+ * Without the clearing step a developer's own `.env` leaks into the test run and
+ * the results depend on whose laptop it is. dotenv loads that file into
+ * `process.env` for the server, so the tests must clear the same names.
+ */
 async function withEnv(vars, fn) {
   const saved = {};
-  const clear = [
-    ...NOTIFICATION_VARS,
-    'HB_SITE_URL',
-  ];
-  for (const key of clear) {
+  for (const key of NOTIFICATION_VARS) {
     saved[key] = process.env[key];
     delete process.env[key];
   }
-  /* Keep the tests independent of whatever .env the machine happens to have. */
-  saved.HB_ORDER_EMAIL_ENABLED = process.env.HB_ORDER_EMAIL_ENABLED;
 
   for (const [key, value] of Object.entries(vars)) {
     saved[key] = process.env[key];
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   try {
     return await fn();
   } finally {
@@ -242,8 +289,23 @@ describe('the template the owner fills in', () => {
   );
 
   test('documents every variable the notification code reads', () => {
-    const missing = NOTIFICATION_VARS.filter((name) => !assigned.has(name));
+    const relevant = NOTIFICATION_VARS.filter((name) => !(name in NOT_AN_OWNER_SETTING));
+    /* A sanity floor: if the scan stops finding the modules, say so rather than
+     * passing an empty comparison. */
+    assert.ok(relevant.length >= 18, `the scan found only ${relevant.length} variables — is it still reading the right files?`);
+    const missing = relevant.filter((name) => !assigned.has(name));
     assert.deepEqual(missing, [], `notifications.env.example does not mention: ${missing.join(', ')}`);
+  });
+
+  test('every name in the template is one the code actually reads', () => {
+    /*
+     * The other direction: a typo such as HB_SMPT_HOST would show up as a missing
+     * variable above, but a made-up one (HB_SMTP_PASSWORD) would quietly do
+     * nothing. Cross-check both ways.
+     */
+    const known = new Set(notificationVarsFromSource());
+    const invented = [...assigned].filter((name) => !known.has(name) && !(name in MENTIONED_ELSEWHERE));
+    assert.deepEqual(invented, [], `notifications.env.example names variables nothing reads: ${invented.join(', ')}`);
   });
 
   test('never shows a real secret', () => {

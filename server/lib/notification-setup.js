@@ -33,6 +33,22 @@ export const PLACEHOLDER_ORIGIN = 'https://heritagebites.co.za';
 
 const looksLikeEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value ?? '').trim());
 
+/**
+ * Is this value still the template's instruction, not a real value?
+ *
+ * `notifications.env.example` ships sentences where secrets go — "paste the
+ * 16-character Google App Password here". Copied into `.env` unchanged and sent to
+ * Google, that fails authentication, and the person is told their App Password
+ * was revoked. They then spend an afternoon creating App Passwords that were
+ * never the problem. This is the difference between "wrong password" and
+ * "you have not filled this in yet", and it is worth its own message.
+ */
+function looksUnfilled(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return true;
+  return /^(paste|enter|your|insert|replace|todo|tbc)\b|paste the|your-shop|your-domain|address-here|change-?me|example\.(com|org|co\.za)/i.test(text);
+}
+
 /** Is this origin one we can put in an email to a paying customer? */
 function originProblem(origin) {
   if (!origin) return 'HB_PUBLIC_URL is empty, so receipts cannot contain a working tracking link.';
@@ -60,8 +76,14 @@ function originProblem(origin) {
       'and the order page carries a private token, so serve the site over https before taking real orders.'
     );
   }
-  if (/example\.(com|org|co\.za)|your-domain|<.+>/.test(origin)) {
-    return `HB_PUBLIC_URL (${origin}) is still a placeholder. Replace it with the real address.`;
+  /*
+   * Still the template's own example. Caught explicitly because this shipped
+   * once without the check: `https://your-shop-address-here.co.za` passed every
+   * other test, so an unfilled file looked ready while every receipt linked to a
+   * domain that does not exist.
+   */
+  if (/your-shop|address-here|your-domain|change-?me|example\.(com|org|co\.za)|<.+>/.test(origin)) {
+    return `HB_PUBLIC_URL (${origin}) is still the placeholder from the template. Put in the real address of this site.`;
   }
   return null;
 }
@@ -100,19 +122,32 @@ export function notificationSetup() {
     );
   }
 
-  /* 2. The alert address is where the ticket goes; a typo sends it nowhere. */
+  /* 2. The password is the one value people forget to replace. */
+  const smtpPassword = String(process.env.HB_SMTP_PASS ?? '');
+  const customerPassword = String(process.env.HB_CUSTOMER_SMTP_PASS ?? '');
+  const unfilled = [smtpPassword, customerPassword].filter((value) => value && looksUnfilled(value));
+  if (unfilled.length) {
+    error(
+      'password-not-set',
+      'The mail password is still the text from the template. Replace HB_SMTP_PASS with the ' +
+        '16-character App Password (Google Account -> Security -> App passwords), or the login will be refused ' +
+        'for a reason that has nothing to do with the real password.',
+    );
+  }
+
+  /* 3. The alert address is where the ticket goes; a typo sends it nowhere. */
   if (owner && !looksLikeEmail(owner.to)) {
     error('alert-address-invalid', `HB_ORDER_ALERT_EMAIL (${owner.to}) is not an email address, so kitchen tickets will bounce.`);
   }
 
-  /* 3. The tracking link the customer clicks. */
+  /* 4. The tracking link the customer clicks. */
   const problem = originProblem(origin);
   if (problem && (customer || owner)) {
     /* Only fatal when a customer will actually receive a link. */
     (customer ? error : warn)('public-url', problem);
   }
 
-  /* 4. Push keys are useless without the password that lets a device enrol. */
+  /* 5. Push keys are useless without the password that lets a device enrol. */
   if (push.reason === 'no-owner-key') {
     error(
       'no-owner-key',
@@ -124,7 +159,7 @@ export function notificationSetup() {
     error('push-keys', `Push is switched on but unusable (${push.reason}). Run \`npm run push:keys\` and replace HB_VAPID_*.`);
   }
 
-  /* 5. Silent modes that look configured. */
+  /* 6. Silent modes that look configured. */
   if (process.env.HB_PUSH_DRY_RUN === 'true') {
     warn('push-dry-run', 'HB_PUSH_DRY_RUN=true: pushes are logged, not delivered. Fine on a laptop, fatal on the live site.');
   }
