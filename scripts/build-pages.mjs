@@ -90,6 +90,14 @@ const run = (command, args, env = {}) => {
 /* ----------------------------------------------------------------- build -- */
 
 step(`Type-check and build the static preview (base: ${base})`);
+/*
+ * Say which form the alert control will post to. Three variants can be built in a
+ * row from one shell (default, another form, off), and the last one wins — without
+ * this line, publishing the "off" build by accident is one arrow-up away.
+ */
+console.log(previewAlertUrl
+  ? `  preview alert form: ${previewAlertUrl} — the checkout will show "Open the test alert"`
+  : '  preview alert form: none — the checkout will NOT show the alert test control');
 run('npx', ['tsc', '-b']);
 run('npx', ['vite', 'build', '--outDir', dir, '--emptyOutDir'], {
   VITE_BASE: base,
@@ -214,6 +222,7 @@ console.log(`
 
   Site base   ${base} (relative — works at any mount point)
   Preview     ordering, payments, loyalty lookup and messages are off
+  Alert test  ${previewAlertUrl ? `${previewAlertUrl} (marked HB-TEST)` : 'OFF — no control in this build'}
   Snapshot    ${dir}/api/catalog.json
   Fallbacks   ${dir}/404.html and 404.html at the repository root
   Publish     commit ${dir}/ and push.
