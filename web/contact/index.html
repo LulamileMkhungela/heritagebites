@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-ZA">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#16100C" />
+    <!--
+      Search metadata for this document.
+
+      Everything between these two markers is replaced, per route, by whoever
+      answers the request: `scripts/build-seo.mjs` writes one file per route for
+      the static build, and the Express host rewrites this block for the shell it
+      serves (see `shared/seo.js`). The React app then keeps it current as the
+      customer navigates.
+
+      As written here it is the home page's metadata — the honest fallback for any
+      path nobody described. Note what is *absent*: no canonical and no og:url.
+      Those have to name the address the page is actually served from, and a
+      domain typed into the source is how a shop ends up telling Google it is a
+      duplicate of somebody else's website.
+    -->
+    <!--seo:start-->
+    <title>Contact &amp; WhatsApp — Heritage Bites</title>
+    <meta name="description" content="Call or WhatsApp +27 67 013 7587, email heritagebitesfood@gmail.com, or send a message about an order, delivery in Rosebank and Sandton, or the weekly menu." />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta property="og:site_name" content="Heritage Bites" />
+    <meta property="og:locale" content="en_ZA" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Contact &amp; WhatsApp — Heritage Bites" />
+    <meta property="og:description" content="Call or WhatsApp +27 67 013 7587, email heritagebitesfood@gmail.com, or send a message about an order, delivery in Rosebank and Sandton, or the weekly menu." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:description" content="Call or WhatsApp +27 67 013 7587, email heritagebitesfood@gmail.com, or send a message about an order, delivery in Rosebank and Sandton, or the weekly menu." />
+    <meta name="twitter:title" content="Contact &amp; WhatsApp — Heritage Bites" />
+    <!--seo:end-->
+    <!--
+      The logo, everywhere a browser or a phone wants one.
+
+      The tab icon is the pot from the badge rather than the whole badge: at 16px
+      the ring of lettering is a grey smudge, and the pot is the one shape that
+      survives the size. The full badge is used where there is room — the header,
+      the footer and the share card. See scripts/build-brand-assets.py.
+    -->
+    <link rel="icon" href="../favicon.ico" sizes="48x48" />
+    <link rel="icon" href="../favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="../favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="../apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="../manifest.webmanifest" />
+    <!--
+      Typefaces are self-hosted from /fonts (declared in src/index.css). The
+      site makes no third-party font request, so it renders identically on a
+      network that blocks Google, and first paint no longer waits on a
+      stylesheet from another origin.
+      The first Fraunces rule above is a variable-range declaration; the explicit
+      weight rules after it exist because the latin subsets are static files.
+    -->
+    <link rel="preload" href="../fonts/fraunces-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="../fonts/manrope-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <script type="module" crossorigin src="../assets/index-CFz7yBtr.js"></script>
+    <link rel="stylesheet" crossorigin href="../assets/index-DQdJggos.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <!--
+      This file is the *source* entry: it points at /src/main.tsx, which only
+      Vite can serve. If it is ever opened directly by a browser — which is what
+      happens when GitHub Pages publishes the repository root instead of the
+      built folder — nothing can mount, and the visitor gets a white screen with
+      no explanation.
+
+      So: when this document is being served unbundled, hand over to the built
+      preview in ./web/. The check is deliberately narrow.
+
+        - `script[src$=".tsx"]` only exists before a build. In the built site
+          Vite has already rewritten it to /assets/index-*.js, so this never
+          fires on the Express host.
+        - `@vite/client` means the dev server is serving us, where /src/main.tsx
+          is perfectly valid and redirecting would be wrong.
+    -->
+    <script>
+      (function () {
+        var dev = document.querySelector('script[src*="@vite/client"]');
+        var unbundled = document.querySelector('script[src$=".tsx"]');
+        if (!dev && unbundled) window.location.replace('./web/');
+      })();
+    </script>
+    <noscript>
+      <p style="font-family: system-ui, sans-serif; padding: 2rem">
+        Heritage Bites needs JavaScript. You can also reach us on
+        <a href="https://wa.me/27670137587">WhatsApp</a> or
+        <a href="tel:+27670137587">+27 67 013 7587</a>.
+      </p>
+    </noscript>
+  </body>
+</html>
