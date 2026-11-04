@@ -240,6 +240,9 @@ the exact six-line message template):
 
 - It sends to the **owner's** number only. Formspree has no way to reach a
   customer's number, and no way to check whether one is on WhatsApp.
+- The chat's sender is **Formspree** (a WhatsApp Business Account), not Heritage
+  Bites, and that cannot be renamed — the business name lives inside the message
+  (form name plus the template's first line), not above it.
 - Every alert is one Formspree submission. The Free plan allows **50 a month
   across the account**; after that the alert stops. Reusing the contact form shares
   that quota with enquiries.

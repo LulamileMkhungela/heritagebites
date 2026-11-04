@@ -11,6 +11,7 @@ must work, because this one shares a metered third-party quota and cannot retry.
 | --- | --- |
 | **Is** | an alert to the **owner's** phone, in the chat they already check, seconds after an order lands |
 | **Is not** | a message to the **customer**. Formspree sends each form to one verified number and cannot reach a customer's number, test whether that number is on WhatsApp, or carry a business-initiated template |
+| **Is not** | branded as Heritage Bites. The chat's sender is **Formspree** — a WhatsApp Business Account with a US number — and that cannot be renamed. The business name appears inside the message, not above it |
 | **Is not** | a receipt. Six lines, a glance. The full ticket is the email and the tracking page |
 | **Costs** | R0 on the Free plan, up to 50 submissions a month across the whole Formspree account, then it silently stops |
 
@@ -19,6 +20,44 @@ message already written, pressed by a person
 (`server/lib/notify.js`, `src/lib/whatsapp.ts`). Automated messages *to customers*
 need Meta's Cloud API, business verification, approved templates, opt-in and a card
 on file — see [Why WhatsApp is free here](#why-whatsapp-is-free-here) in the README.
+
+## The sender is Formspree, not Heritage Bites
+
+This is the part that surprises people, so it is worth saying before anything else.
+
+The alert arrives in a chat whose contact card reads **Formspree**, with a United
+States number and a "Business Account" badge — the same chat that announced
+*"Your form … is now connected to WhatsApp"* and sent the six-digit verification
+code. That is not a settings mistake and it cannot be changed from the template
+editor: the sender identity belongs to the **WhatsApp Business Account Formspree
+registered with Meta**, and a plugin cannot impersonate the business that installed
+it. Putting "Heritage Bites" in the sender slot means owning that account yourself
+(Cloud API, business verification, approved templates, per-message fees) — the path
+this build deliberately avoids.
+
+What the business does control is everything inside the message:
+
+| | |
+| --- | --- |
+| **Sender** | `Formspree` · US number · Business account — fixed |
+| **First (grey) line** | the **form name** — rename the form to "Heritage Bites orders" |
+| **Line 1 of the template** | `Heritage Bites — new order {{code}}` — repeat the name, because a chat labelled Formspree has to identify itself in the text |
+| **The rest** | the order: time, type, food, payment, customer, address |
+
+Practical consequences:
+
+- **Pin or mute the chat.** It is a notification channel, not a conversation: a reply
+  goes back to Formspree's automated business account, not to the customer and not to
+  the kitchen phone.
+- **The customer sees nothing from Formspree.** The plugin sends to one verified
+  number — yours. A customer's first and only WhatsApp contact about an order is the
+  message their own app sends to **+27 67 013 7587** via the site's pre-filled
+  `wa.me` link, which arrives from the kitchen's normal WhatsApp and can be replied to.
+- **A Formspree-branded message is not a scam signal** for the family member who sees
+  it on the kitchen phone: it carries the Meta "secure service" banner, a verified
+  business account and the order's own details. If it still bothers the owner, the
+  push notification and the email ticket are the unbranded alternatives, and this
+  channel is optional.
 
 ## 1. Name the form "Heritage Bites"
 
