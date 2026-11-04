@@ -49,6 +49,23 @@ const dist = join(root, dir);
 const base = process.env.VITE_BASE || './';
 
 /*
+ * The one thing a preview *can* still demonstrate end to end: the owner's WhatsApp
+ * order alert. Pages has no server, so a real order can never be saved there, but
+ * the alert form can be posted to from the browser — which is all the Formspree
+ * plugin needs. The checkout shows a "test the alert" panel only when this is set.
+ *
+ * Defaults to the test form the business supplied. Set the variable to an empty
+ * string to publish a build with no alert control at all, and note that any form ID
+ * baked in here is public in the JavaScript — see docs/whatsapp-order-alerts.md.
+ * A different, dedicated orders form is the better choice for real use:
+ *
+ *   HB_PREVIEW_ORDER_ALERT_URL=https://formspree.io/f/xvkkkwve npm run build:pages
+ */
+const previewAlertUrl = process.env.HB_PREVIEW_ORDER_ALERT_URL !== undefined
+  ? process.env.HB_PREVIEW_ORDER_ALERT_URL.trim()
+  : 'https://formspree.io/f/xvkgqalq';
+
+/*
  * Where the folder is expected to live in the browser, used only for the
  * repository-root fallback page. Default matches a project site published from
  * the branch root, which is the case this fallback exists for.
@@ -79,6 +96,8 @@ run('npx', ['vite', 'build', '--outDir', dir, '--emptyOutDir'], {
   VITE_STATIC_PREVIEW: '1',
   // A preview never talks to a live API, even if a stray env var says so.
   VITE_API_BASE: '',
+  /* Empty means "no alert control in this build". */
+  VITE_PREVIEW_ORDER_ALERT_URL: previewAlertUrl,
 });
 
 if (!existsSync(join(dist, 'index.html'))) fail(`vite build produced no ${dir}/index.html`);

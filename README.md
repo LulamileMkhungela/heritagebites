@@ -255,6 +255,12 @@ So the honest summary: the kitchen can be told about an order **on WhatsApp** (f
 best-effort, capped), while the **customer** is still met with a pre-filled `wa.me`
 link they press themselves.
 
+The alert can also be rehearsed without a server: the GitHub Pages preview's
+checkout carries a *test the alert* panel that posts the same nine fields, marked
+`HB-TEST`, so the message can be checked on the phone before a service day. It
+creates no order and charges nothing. `HB_PREVIEW_ORDER_ALERT_URL` decides which
+form that build points at (the test form by default, empty for no control).
+
 What it does instead is hand the message to the customer's own WhatsApp, pre-filled:
 the receipt page has *Message us about HB-xxxx* (a structured ticket to the kitchen),
 *Keep this receipt on WhatsApp* (sends the receipt and tracking link into any chat

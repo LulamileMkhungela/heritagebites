@@ -170,6 +170,79 @@ await check('checkout is a preview that prices the basket without charging', asy
   return 'R200,00 basket, no live order button, WhatsApp handoff pre-filled';
 });
 
+await check("the preview can rehearse the owner's WhatsApp alert", async () => {
+  /*
+   * The one write a static build can honestly make: the alert form needs no
+   * server, only a POST. This is the check that the payload matches the live
+   * server's — same field names, same total, and an order code that cannot be
+   * mistaken for a real order on the kitchen's phone.
+   */
+  const posted = [];
+  await page.setRequestInterception(true);
+  const onRequest = (request) => {
+    if (!request.url().startsWith('https://formspree.io/')) return request.continue();
+    if (request.method() === 'OPTIONS') {
+      return request.respond({
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'content-type, accept',
+          'Access-Control-Max-Age': '600',
+        },
+      });
+    }
+    posted.push({ url: request.url(), body: request.postData() ?? '' });
+    return request.respond({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
+  };
+  page.on('request', onRequest);
+
+  try {
+    await goto('checkout');
+    const opened = await page.evaluate(() => {
+      const open = [...document.querySelectorAll('button')].find((b) => /Open the test alert/i.test(b.textContent ?? ''));
+      if (!open) return false;
+      open.click();
+      return true;
+    });
+    if (!opened) throw new Error('the preview checkout has no test-alert control');
+
+    await page.evaluate(() => {
+      [...document.querySelectorAll('button')]
+        .find((b) => /Send test alert/i.test(b.textContent ?? ''))
+        ?.click();
+    });
+    await new Promise((r) => setTimeout(r, 1500));
+    if (!/Test alert sent/i.test(await text())) throw new Error('the preview did not report a successful test alert');
+  } finally {
+    page.off('request', onRequest);
+    await page.setRequestInterception(false);
+  }
+
+  if (posted.length !== 1) throw new Error(`expected 1 alert post, saw ${posted.length}`);
+  let alert;
+  try {
+    alert = JSON.parse(posted[0].body);
+  } catch {
+    throw new Error('the alert was not posted as JSON');
+  }
+  for (const field of ['code', 'when', 'type', 'items', 'pay', 'total', 'name', 'phone', 'where']) {
+    if (!alert[field]) throw new Error(`the alert is missing the "${field}" field the template inserts`);
+  }
+  if (!/^HB-TEST-/.test(alert.code)) throw new Error('a preview alert could be mistaken for a real order');
+  if (!/Mogodu/.test(alert.items)) throw new Error('the alert does not carry the basket');
+  if (alert.total !== 'R200.00') throw new Error(`the alert total is wrong: ${alert.total}`);
+  if (!/^Collect/.test(alert.where)) throw new Error('the alert does not say the order is a collection');
+  if (!/TEST/.test(alert.source)) throw new Error('the alert does not mark itself as a test');
+
+  return `alert posted with all 9 template fields, marked ${alert.code}`;
+});
+
 await check('the enquiry and quest forms really submit from the static build', async () => {
   /*
    * The owner's point: the POST endpoints exist, so a form must submit — and on

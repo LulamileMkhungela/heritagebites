@@ -244,7 +244,61 @@ push and the ticket. A card order normally reads `to be paid` in that first
 message; the Yoco webhook is what changes the order, and it does not send a second
 WhatsApp alert.
 
-## 6. Checking it is alive
+## 6. Rehearsing it from the GitHub Pages preview
+
+This is the one write a static build can honestly make. Pages has no server, so an
+order there is refused by design — but the alert form needs no server, only a
+`POST` from the browser, which is exactly what the plugin listens for.
+
+**Build and publish**
+
+```bash
+npm run build:pages          # bakes in the test form by default
+git add web/ && git commit -m "Rebuild the preview" && git push
+```
+
+The control appears at **`/checkout`** in the preview, under the basket: *"Testing
+the owner's WhatsApp alert?"* → **Open the test alert** → add a name and phone (and
+an address if the basket is a delivery) → **Send test alert**. The message lands in
+the Formspree chat within seconds, and the page confirms it was sent.
+
+**What it sends** — the same nine fields as a real order, built by the same module
+the server uses (`shared/order-alert.js`), so the rehearsal cannot drift from the
+live message. Deliberately marked as a rehearsal:
+
+| | |
+| --- | --- |
+| `code` | `HB-TEST-4821`, never a real `HB-…` code |
+| `where` | ends in `Notes: TEST — sent from the GitHub Pages preview, no order was placed` |
+| `source` | `heritagebites.co.za/pages-preview (TEST)` |
+| everything else | the real basket, real prices, the live service window, `Card (Yoco) · to be paid` |
+
+**What it does not do:** create an order, take a payment, issue a receipt, stamp a
+loyalty card, or put anything in the tracker. It is a message, nothing more.
+
+**Limits you should expect**
+
+- The form ID is in the published JavaScript, because a browser has to post to it.
+  A stranger who reads the bundle can therefore post to that form too. That is fine
+  for a test form; it is another reason the real channel should use a **dedicated
+  orders form**, not the contact inbox.
+- Free plan, 50 submissions a month, account-wide. Use the button a handful of
+  times, not in a loop.
+- No WhatsApp plugin connected on that form means the POST succeeds and no message
+  arrives — the page can only report what Formspree answered.
+
+**Switching the preview to a different form, or off:**
+
+```bash
+HB_PREVIEW_ORDER_ALERT_URL=https://formspree.io/f/xvkkkwve npm run build:pages   # another form
+HB_PREVIEW_ORDER_ALERT_URL= npm run build:pages                                  # no control at all
+```
+
+`npm run test:pages` covers this path: it intercepts the Formspree call, asserts all
+nine fields, the total, the collection line and the `HB-TEST` code, and then lets
+the page show its success state.
+
+## 7. Checking it is alive
 
 ```bash
 npm run alert:test                      # one sample order through the real endpoint
