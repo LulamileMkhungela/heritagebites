@@ -18,6 +18,7 @@ import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents,
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
 import { customerEmailConfig, emailConfig, enqueueOrderAlert, notifyStatus, publicBaseUrl, startOrderNotificationWorker } from './lib/order-notifications.js';
+import { sendOrderWhatsAppAlert } from './lib/order-whatsapp-alert.js';
 import {
   confirmOrderSubscription,
   notifyOrderDevices,
@@ -519,12 +520,19 @@ async function forwardToInbox(payload, label) {
   }
 }
 
+/*
+ * Enquiries and quests only need one reply channel, so a phone-only enquiry has no
+ * email. Formspree prints a blank line for a missing field, and a blank line in a
+ * WhatsApp message reads like a bug — so say "not supplied" instead.
+ */
+const orNotSupplied = (value) => String(value ?? '').trim() || 'not supplied';
+
 async function forwardContact(entry) {
   return forwardToInbox(
     {
       name: entry.name,
-      phone: entry.phone,
-      email: entry.email,
+      phone: orNotSupplied(entry.phone),
+      email: orNotSupplied(entry.email),
       subject: entry.subject,
       message: entry.message,
       _subject: `Heritage Bites website enquiry — ${entry.subject}`,
@@ -549,8 +557,8 @@ async function forwardQuest(entry) {
   return forwardToInbox(
     {
       name: entry.name,
-      phone: entry.phone,
-      email: entry.email,
+      phone: orNotSupplied(entry.phone),
+      email: orNotSupplied(entry.email),
       subject: `Meal quest — ${entry.dish}`.slice(0, 120),
       message: summary,
       _subject: `Heritage Bites meal quest — ${entry.name}`.slice(0, 120),
@@ -575,6 +583,17 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
   const settings = get('settings');
+  /*
+   * The order-alert endpoint is server-side only.
+   *
+   * Formspree accepts submissions from anyone holding the form ID, and this one
+   * buzzes the owner's phone and spends a submission from the monthly quota. It
+   * has no business in a public catalogue payload a scraper can read, so it is
+   * removed here rather than "kept private" by hope. The contact endpoint is
+   * different: the static build posts to it from the browser on purpose.
+   */
+  const { orderWhatsappFormspreeUrl: _ownerAlertEndpoint, ...publicSettings } = settings ?? {};
+  void _ownerAlertEndpoint;
   res.json({
     categories: get('categories'),
     /**
@@ -586,7 +605,7 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
     menu: get('menu'),
     plateMenus: get('plateMenus') ?? seed.plateMenus,
     policies: get('policies') ?? seed.policies,
-    settings,
+    settings: publicSettings,
     service: serviceStatus(settings),
     payments: paymentConfig(),
     contact: { inboxConfigured: contactEndpoint() !== null },
@@ -867,6 +886,15 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   void notifyOwnerDevices(order).catch((error) => {
     console.error(`[push] owner alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
   });
+
+  /*
+   * The spare owner channel: Formspree turns a submission into a WhatsApp message
+   * on the owner's verified number. Fire-and-forget on purpose — it is the channel
+   * most likely to be out of quota, and an order must never wait for it, or fail
+   * because of it. Send after the order is saved so the alert can only ever follow
+   * a real order, never create the impression of one.
+   */
+  void sendOrderWhatsAppAlert(order);
 
   try {
     /* The one-time tracking token lets the customer receipt deep-link into the

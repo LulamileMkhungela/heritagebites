@@ -33,6 +33,8 @@ process.env.HB_PUSH_DRY_RUN = 'true';
 // Keep the contact endpoint offline: the Formspree call is exercised by its own
 // unit test with a stub, never against the real inbox from a test run.
 process.env.HB_CONTACT_FORMSPREE_URL = '';
+/* The WhatsApp order alert is a metered third-party form: no test may post to it. */
+process.env.HB_ORDER_WHATSAPP_FORMSPREE_URL = '';
 /*
  * Online payments: the suite uses a Yoco *payment link* (no secret key, no
  * network) plus a webhook secret, which is exactly the setup the business can
@@ -185,6 +187,12 @@ describe('catalogue + search', () => {
     assert.equal(c.settings.serviceWindow.open, '12:00');
     assert.equal(c.settings.serviceWindow.close, '13:30');
     assert.equal(c.settings.contactFormspreeUrl, 'https://formspree.io/f/xvkkkwve');
+    /*
+     * The order-alert form is server-side only: it buzzes the owner's phone and
+     * spends a metered submission, so publishing its ID would invite anyone to do
+     * both. The contact endpoint stays public because the static build posts to it.
+     */
+    assert.equal('orderWhatsappFormspreeUrl' in c.settings, false, 'the order-alert endpoint must not be published');
 
     const open = c.settings.hours.filter((h) => !h.closed).map((h) => h.label);
     assert.deepEqual(open, ['Thursday', 'Friday'], 'the kitchen serves two days a week');
@@ -422,6 +430,7 @@ describe('cross-origin API access', () => {
         HB_DATA_DIR: dir,
         HB_ALLOWED_ORIGINS: 'https://lulamilemkhungela.github.io/',
         HB_CONTACT_FORMSPREE_URL: '',
+        HB_ORDER_WHATSAPP_FORMSPREE_URL: '',
         HB_ORDER_EMAIL_ENABLED: 'false',
       },
       stdio: 'ignore',

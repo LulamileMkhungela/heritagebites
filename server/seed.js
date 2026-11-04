@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 6;
+export const SEED_VERSION = 7;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -537,6 +537,22 @@ export const settings = {
 
   /* Contact form inbox (Formspree), supplied by the business. */
   contactFormspreeUrl: 'https://formspree.io/f/xvkkkwve',
+
+  /*
+   * Order alerts on WhatsApp: every order is posted here, and Formspree's WhatsApp
+   * plugin turns it into a message on the owner's verified number.
+   *
+   * Server-side only — stripped from /api/catalog — because a public form ID that
+   * buzzes the owner's phone can be posted to by anyone, and every fake submission
+   * spends one of the Free plan's 50 a month.
+   *
+   * This is the bring-up/test endpoint the owner supplied. Once the message
+   * template is right, point it at the business form (xvkkkwve) or, better, a
+   * dedicated "Heritage Bites orders" form with its own number and quota — see
+   * docs/whatsapp-order-alerts.md. Set HB_ORDER_WHATSAPP_FORMSPREE_URL to override
+   * it from the environment, or to an empty string to switch it off.
+   */
+  orderWhatsappFormspreeUrl: 'https://formspree.io/f/xvkgqalq',
 
   loyaltyRateCents: 5000,
 
