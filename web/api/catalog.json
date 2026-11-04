@@ -1251,17 +1251,17 @@
     ]
   },
   "service": {
-    "open": true,
-    "isServiceDay": true,
+    "open": false,
+    "isServiceDay": false,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Friday",
-    "timeLabel": "12:37",
+    "dayLabel": "Wednesday",
+    "timeLabel": "15:50",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Friday 12:00–13:30",
+    "todayLabel": "Wednesday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Serving now",
-    "message": "We are serving now — delivery and collection until 13:30.",
-    "shortMessage": "Serving now until 13:30.",
+    "headline": "Wednesday is a rest day",
+    "message": "The pots are resting today — and honestly, so are we. We cook on Thursdays and Fridays, 12:00–13:30, and we are working towards being open every day. Your order will go in first for Thursday 12:00–13:30.",
+    "shortMessage": "Rest day — we cook Thursdays and Fridays, 12:00–13:30. Your order goes in first on Thursday.",
     "serviceDays": [
       "Thursday",
       "Friday"
@@ -1282,5 +1282,5 @@
     "customerEmail": false,
     "ownerEmail": false
   },
-  "today": 5
+  "today": 3
 }

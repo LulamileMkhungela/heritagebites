@@ -27,7 +27,7 @@ Outside the window the site still takes orders, but labels them **pre-orders** f
 
 The kitchen/manager console, staff roles, seeded staff logins and admin API have been removed. No staff-facing order workflow remains in this application. Successful orders are saved and alerted on: a Web Push notification to every enrolled kitchen device, an email ticket to `heritagebitesfood@gmail.com`, a Web Push confirmation to a customer who enabled alerts, and an email receipt to the customer (when they left an address). Push and email are independent — nothing is delivered until the VAPID keys and SMTP settings exist on the host, but the order is still saved and still tracked. The alerts do not provide a staff queue or advance order statuses. Order receipts are secure contact points, not live kitchen tracking.
 
-The Contact form forwards each enquiry to the business Formspree endpoint **and** keeps a local copy, so a delivery failure never loses a message. WhatsApp remains a tap-to-send channel in both directions: see [Free order notifications](#free-order-notifications-push--email--whatsapp) for why that is deliberate.
+The Contact form forwards each enquiry to the business Formspree endpoint **and** keeps a local copy, so a delivery failure never loses a message. WhatsApp is tap-to-send for anything that reaches a **customer** — a person presses send from their own app — while the **owner** can also receive each order on WhatsApp through Formspree's plugin, as a capped spare channel. See [Free order notifications](#free-order-notifications-push--email--whatsapp) and [`docs/whatsapp-order-alerts.md`](docs/whatsapp-order-alerts.md) for why the two are deliberately different.
 
 **Card numbers never reach this server, and there is no card field on the checkout.** The customer places the order, is sent to Yoco's own payment page (card or instant EFT), and returns; a signed webhook from Yoco is the only thing that can mark the order paid. Configure it with `HB_YOCO_PAYMENT_URL` (a Yoco payment link, quickest) or `HB_YOCO_SECRET_KEY` (Checkout API, fixes the amount), plus `HB_YOCO_WEBHOOK_SECRET`. Without any of these the checkout says online payment is not switched on yet and offers WhatsApp or cash on collection instead. The redirect and the paid-by-webhook step are tested end to end against a stand-in gateway (`npm run sandbox:yoco`, see `server/yoco-checkout-flow.test.js`), and test mode with Yoco's own `sk_test_` key is written up in [`docs/production-payments-yoco.md`](docs/production-payments-yoco.md). Run `npm run check:payments` on the server before launch: it fetches the configured payment link and refuses to call a dead one ready.
 
@@ -35,6 +35,7 @@ The combined handoff PDF, [`docs/heritage-bites-complete.pdf`](docs/heritage-bit
 
 - [`docs/regomoditswe-answers-2026-10.md`](docs/regomoditswe-answers-2026-10.md) — how the owner's answers were applied.
 - [`docs/production-payments-yoco.md`](docs/production-payments-yoco.md) — switching card payments live.
+- [`docs/whatsapp-order-alerts.md`](docs/whatsapp-order-alerts.md) — owner order alerts on WhatsApp: setup, the message template, and what the plugin cannot do.
 - [`docs/seo.md`](docs/seo.md) — search foundations: titles, canonicals, sitemap, structured data, and the domain decision.
 - [`docs/what-i-need-from-kemorego.md`](docs/what-i-need-from-kemorego.md) / `.pdf` — what is still outstanding from the business.
 - [`docs/what-is-needed.md`](docs/what-is-needed.md) / `.pdf` — technical launch checklist.
@@ -70,9 +71,10 @@ message bundle to buy.
 | --- | --- | --- | --- | --- |
 | Owner | **Web Push** to enrolled kitchen devices | Yes, within seconds | Yes | R0 |
 | Owner | Email ticket to `HB_ORDER_ALERT_EMAIL` | Yes, background worker | Yes | R0 |
+| Owner | **WhatsApp**, through Formspree's WhatsApp plugin (the spare) | Yes — one attempt, no retry | Yes | R0 up to 50 submissions/month, then it stops |
 | Customer | **Web Push** confirmation + cancellation for their order | Yes, once they tap "Alert me" | Yes | R0 |
 | Customer | Email receipt with private tracking link | Yes, when they left an email | Yes | R0 |
-| Customer / owner | WhatsApp | No — one tap, sent from their own app | — | R0, unlimited |
+| Customer / owner | WhatsApp, a person presses send | No — one tap, from their own app | — | R0, unlimited |
 
 ### Which alert does who get?
 
@@ -80,6 +82,9 @@ message bundle to buy.
   kitchen device (phone and/or counter tablet), plus the email ticket as the
   permanent record. The push says the code, plate count, total and
   collection/delivery; `requireInteraction` keeps it on screen until acknowledged.
+  If a Formspree endpoint is configured, a compact order summary is also posted
+  there for the WhatsApp plugin to deliver — see
+  [`docs/whatsapp-order-alerts.md`](docs/whatsapp-order-alerts.md).
 - **Customer, when they opt in:** a Web Push confirmation the instant they tap
   "alert me" on their receipt — which is also their proof that alerts reach that
   phone — plus the email receipt with their tracking link. The push deliberately
@@ -216,10 +221,45 @@ Automated WhatsApp push is not free, and it is worth being precise about why.
   about in-window pricing, so treat any quoted number — including these — as
   provisional until the dashboard agrees.
 
-The conclusion does not depend on which of those figures is right: automated
-WhatsApp needs a verified Meta business account with a card on file, so it is not
-free, and this build does **not** claim to send WhatsApp notifications. The receipt
-page says so plainly.
+The conclusion does not depend on which of those figures is right: messaging
+**customers** on WhatsApp needs a verified Meta business account with a card on
+file, approved templates and opt-in, so it is not free, and this build does **not**
+claim to do it. The receipt page says so plainly.
+
+#### The one exception: alerting the owner, via Formspree
+
+An alert to the business's own phone is a different problem from messaging
+customers, and Formspree's WhatsApp plugin solves it on every plan including Free:
+each order is posted to a form, and the plugin delivers it to **one number the owner
+verified**. No Meta account, no template approval, no per-message fee.
+
+The limits are stated where they are implemented, in
+`server/lib/order-whatsapp-alert.js`, and in
+[`docs/whatsapp-order-alerts.md`](docs/whatsapp-order-alerts.md) (which also holds
+the exact six-line message template):
+
+- It sends to the **owner's** number only. Formspree has no way to reach a
+  customer's number, and no way to check whether one is on WhatsApp.
+- The chat's sender is **Formspree** (a WhatsApp Business Account), not Heritage
+  Bites, and that cannot be renamed — the business name lives inside the message
+  (form name plus the template's first line), not above it.
+- Every alert is one Formspree submission. The Free plan allows **50 a month
+  across the account**; after that the alert stops. Reusing the contact form shares
+  that quota with enquiries.
+- The order is saved and the push and email attempted first, and this alert is
+  fire-and-forget with no retry — a metered spare must never be able to fail a sale.
+- The endpoint never reaches the browser: it is stripped from `/api/catalog`,
+  because anyone holding a form ID can post to it and spend the quota.
+
+So the honest summary: the kitchen can be told about an order **on WhatsApp** (free,
+best-effort, capped), while the **customer** is still met with a pre-filled `wa.me`
+link they press themselves.
+
+The alert can also be rehearsed without a server: the GitHub Pages preview's
+checkout carries a *test the alert* panel that posts the same nine fields, marked
+`HB-TEST`, so the message can be checked on the phone before a service day. It
+creates no order and charges nothing. `HB_PREVIEW_ORDER_ALERT_URL` decides which
+form that build points at (the test form by default, empty for no control).
 
 What it does instead is hand the message to the customer's own WhatsApp, pre-filled:
 the receipt page has *Message us about HB-xxxx* (a structured ticket to the kitchen),

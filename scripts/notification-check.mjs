@@ -57,6 +57,9 @@ const pushLine = (n.push?.reason && PUSH_REASON[n.push.reason]?.()) ?? 'unknown 
 say(`  web push:             ${pushLine}${n.push?.configured
   ? ` — ${n.push.ownerDevices} kitchen device(s), ${n.push.customerDevices} customer device(s)`
   : ''}`);
+say(`  whatsapp order alert:${n.whatsappOrder
+  ? ' configured (a spare channel — push and email remain the ones that must work)'
+  : ' switched off (optional; see docs/whatsapp-order-alerts.md)'}`);
 say(`  tracking link origin: ${n.publicUrl ?? 'unknown'}`);
 say('');
 say(`  outbox:               ${outbox.pending ?? 0} pending · ${outbox.retrying ?? 0} retrying · `

@@ -187,6 +187,55 @@ async function postToInbox(
   return { ok: true, id: `enquiry_${Date.now().toString(36)}`, delivered: true };
 }
 
+/* ------------------------- Preview order alert ------------------------ */
+
+/**
+ * Where a *test* order alert goes from the static build.
+ *
+ * Baked in at build time by `scripts/build-pages.mjs`
+ * (`HB_PREVIEW_ORDER_ALERT_URL`), because Pages has no server to post an order to
+ * and the owner still needs to see the WhatsApp message before launch. Empty means
+ * the preview has no way to rehearse it, and the control does not render.
+ *
+ * This form ID is therefore public in the built JavaScript, exactly as the contact
+ * endpoint is: anyone can post to it. That is why the alerts it produces are
+ * labelled TEST and why the real channel should use a dedicated orders form — see
+ * `docs/whatsapp-order-alerts.md`.
+ */
+export const PREVIEW_ORDER_ALERT_URL: string = String(env.VITE_PREVIEW_ORDER_ALERT_URL ?? '').trim();
+
+export const PREVIEW_ALERT_NOTICE =
+  'That test alert could not be sent. A Formspree form on the Free plan allows 50 submissions a month, ' +
+  'so the allowance may be spent. You can still order for real on WhatsApp: +27 67 013 7587.';
+
+/**
+ * Post a sample order straight to the alert form from the browser.
+ *
+ * Only the preview does this. The live site's alerts are sent by the server, after
+ * an order is saved, so nothing here can produce an order that does not exist.
+ */
+async function postPreviewAlert(payload: Record<string, unknown>): Promise<{ delivered: boolean }> {
+  if (!STATIC_PREVIEW || !PREVIEW_ORDER_ALERT_URL) {
+    throw new ApiError(503, PREVIEW_ALERT_NOTICE, [PREVIEW_ALERT_NOTICE], { preview: true });
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(PREVIEW_ORDER_ALERT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new ApiError(0, PREVIEW_ALERT_NOTICE, [PREVIEW_ALERT_NOTICE], { preview: true });
+  }
+
+  if (!res.ok) {
+    throw new ApiError(res.status, PREVIEW_ALERT_NOTICE, [PREVIEW_ALERT_NOTICE], { preview: true });
+  }
+  return { delivered: true };
+}
+
 /* ------------------------------ Public -------------------------------- */
 
 export const api = {
@@ -261,6 +310,9 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+
+  /** A preview-only rehearsal of the owner's WhatsApp alert. Never an order. */
+  previewOrderAlert: (payload: Record<string, unknown>) => postPreviewAlert(payload),
 
   /** A customer quest: a request for a dish, not an order. */
   quest: (payload: unknown, endpoint?: string) => {

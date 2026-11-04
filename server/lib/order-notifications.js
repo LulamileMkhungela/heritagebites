@@ -27,6 +27,7 @@ import nodemailer from 'nodemailer';
 import { store } from './store.js';
 import { whatsappLink } from './notify.js';
 import { pushStatus } from './web-push.js';
+import { orderWhatsAppEndpoint } from './order-whatsapp-alert.js';
 
 const JOB_STORE = 'orderNotificationJobs';
 const MAX_ATTEMPTS = 5;
@@ -344,6 +345,12 @@ export function notifyStatus() {
     /* True when receipts go through their own verified-domain account. */
     customerEmailDedicated: Boolean(customer?.dedicated),
     push,
+    /**
+     * The spare owner channel (Formspree → WhatsApp). Reported, but never part of
+     * `healthy`: it is a convenience on top of push and email, it shares a metered
+     * third-party quota, and its absence must not make the site look broken.
+     */
+    whatsappOrder: Boolean(orderWhatsAppEndpoint()),
     publicUrl: publicBaseUrl(),
     /**
      * One boolean for a monitor to alert on.

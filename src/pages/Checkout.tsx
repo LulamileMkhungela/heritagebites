@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart, toApiItems, cartSubtotal } from '../store/cart';
 import { useCatalog } from '../store/catalog';
-import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
+import { api, ApiError, PREVIEW_ORDER_ALERT_URL, STATIC_PREVIEW } from '../lib/api';
 import { normalisePhone, zar } from '../lib/format';
 import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { asset } from '../lib/assets';
 import { usePageSeo } from '../lib/seo';
 import { basketHref, waChatHref, waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
-import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
+import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaFor } from '../../shared/service.js';
+import { buildOrderWhatsAppAlert } from '../../shared/order-alert.js';
 import type { AddressSuggestion } from '../lib/address';
 
 type PayMethod = 'card' | 'cash-on-collection';
@@ -738,8 +739,144 @@ function PreviewCheckout() {
           </LinkButton>
           <LinkButton to="/menu" variant="outline">Back to the menu</LinkButton>
         </div>
+
+        <OrderAlertTest />
       </div>
     </section>
+  );
+}
+
+
+/* ---------------------- Preview: test the alert ------------------------ */
+
+/**
+ * A rehearsal of the owner's WhatsApp alert, from the static build.
+ *
+ * Pages has no API, so the real alert — sent by the server after an order is saved
+ * — can never fire there. The owner still needs to see the message, with real
+ * basket content, before trusting it on a live service day. So this posts the same
+ * payload the server would build (`shared/order-alert.js`) to the same Formspree
+ * form, and says so: the order code is prefixed `HB-TEST`, the note says TEST, and
+ * the panel states plainly that no order exists as a result.
+ *
+ * It is behind a link rather than on show, because the form ID is in a public
+ * bundle and every press is one of the month's 50 Free-plan submissions.
+ */
+function OrderAlertTest() {
+  const catalog = useCatalog((s) => s.data);
+  const lines = useCart((s) => s.lines);
+  const fulfilment = useCart((s) => s.fulfilment);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
+  const [problem, setProblem] = useState('');
+
+  if (!PREVIEW_ORDER_ALERT_URL) return null;
+
+  const send = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setState('sending');
+    setProblem('');
+
+    const typedAddress = address.trim();
+    const area = fulfilment === 'delivery' && typedAddress
+      ? deliveryAreaFor(typedAddress, catalog?.settings) ?? ''
+      : '';
+    const service = catalog?.service;
+
+    const order = {
+      /* A code that cannot be mistaken for a real order on the kitchen's phone. */
+      code: `HB-TEST-${String(Math.floor(Math.random() * 9000) + 1000)}`,
+      createdAt: new Date().toISOString(),
+      fulfilment,
+      serviceWindow: {
+        label: service?.nextWindowLabel ?? service?.windowLabel ?? '',
+        isPreOrder: Boolean(service && !service.open),
+      },
+      /* Nothing is ever charged from a preview, so the alert must not imply it was. */
+      payment: { method: 'card', status: 'awaiting_payment' },
+      items: lines.map((line) => ({
+        qty: line.qty,
+        name: line.name,
+        options: line.picks.map((pick) => ({ label: pick.label })),
+        lineTotal: line.unitPrice * line.qty,
+      })),
+      totals: { total: cartSubtotal(lines) },
+      customer: {
+        name: name.trim() || 'Preview customer',
+        phone: phone.trim() || '082 000 0000',
+        email: '',
+        address: fulfilment === 'delivery' ? typedAddress || '24 Bath Avenue, Rosebank' : '',
+        suburb: area,
+        notes: 'TEST — sent from the GitHub Pages preview, no order was placed',
+      },
+      source: 'heritagebites.co.za/pages-preview (TEST)',
+    };
+
+    try {
+      await api.previewOrderAlert(buildOrderWhatsAppAlert(order));
+      setState('sent');
+    } catch (error) {
+      setState('failed');
+      setProblem(error instanceof ApiError ? error.message : 'That test alert could not be sent.');
+    }
+  };
+
+  return (
+    <div className="mt-8 rounded-[2rem] border-2 border-dashed border-ink/15 p-6">
+      <h2 className="font-display text-lg font-semibold">Testing the owner&rsquo;s WhatsApp alert?</h2>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink/60">
+        Sends this basket to the business&rsquo;s alert form so you can see the WhatsApp message the kitchen
+        will get. It is a test: <strong className="font-semibold text-ink">no order is created, nothing is
+        charged</strong>, and the message is marked <code className="font-mono text-[12px]">TEST</code>.
+      </p>
+
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="mt-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep underline underline-offset-4"
+        >
+          Open the test alert
+        </button>
+      ) : (
+        <form onSubmit={send} className="mt-5 grid gap-4 sm:grid-cols-2">
+          <Field label="Name in the message">
+            <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Thandi Mokoena" autoComplete="name" />
+          </Field>
+          <Field label="Phone in the message">
+            <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="082 123 4567" inputMode="tel" autoComplete="tel" />
+          </Field>
+          {fulfilment === 'delivery' && (
+            <Field label="Delivery address in the message" hint="Rosebank or Sandton, so the area shows correctly.">
+              <input className={inputCls} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="24 Bath Avenue, Rosebank" autoComplete="street-address" />
+            </Field>
+          )}
+          <div className="sm:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button type="submit" variant="outline" disabled={state === 'sending' || lines.length === 0}>
+              {state === 'sending' ? 'Sending…' : 'Send test alert'}
+            </Button>
+            <span className="text-xs text-ink/50">One press = one Formspree submission.</span>
+          </div>
+          {lines.length === 0 && (
+            <p className="sm:col-span-2 text-sm text-ink/60">Add something to the basket first, so the message has food in it.</p>
+          )}
+          {state === 'sent' && (
+            <p className="sm:col-span-2 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-900" role="status">
+              Test alert sent. Check WhatsApp on the number the Formspree form is connected to — it should arrive
+              within a few seconds, in the Formspree chat.
+            </p>
+          )}
+          {state === 'failed' && (
+            <p className="sm:col-span-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
+              {problem}
+            </p>
+          )}
+        </form>
+      )}
+    </div>
   );
 }
 

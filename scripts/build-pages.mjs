@@ -49,6 +49,23 @@ const dist = join(root, dir);
 const base = process.env.VITE_BASE || './';
 
 /*
+ * The one thing a preview *can* still demonstrate end to end: the owner's WhatsApp
+ * order alert. Pages has no server, so a real order can never be saved there, but
+ * the alert form can be posted to from the browser — which is all the Formspree
+ * plugin needs. The checkout shows a "test the alert" panel only when this is set.
+ *
+ * Defaults to the test form the business supplied. Set the variable to an empty
+ * string to publish a build with no alert control at all, and note that any form ID
+ * baked in here is public in the JavaScript — see docs/whatsapp-order-alerts.md.
+ * A different, dedicated orders form is the better choice for real use:
+ *
+ *   HB_PREVIEW_ORDER_ALERT_URL=https://formspree.io/f/xvkkkwve npm run build:pages
+ */
+const previewAlertUrl = process.env.HB_PREVIEW_ORDER_ALERT_URL !== undefined
+  ? process.env.HB_PREVIEW_ORDER_ALERT_URL.trim()
+  : 'https://formspree.io/f/xvkgqalq';
+
+/*
  * Where the folder is expected to live in the browser, used only for the
  * repository-root fallback page. Default matches a project site published from
  * the branch root, which is the case this fallback exists for.
@@ -73,12 +90,22 @@ const run = (command, args, env = {}) => {
 /* ----------------------------------------------------------------- build -- */
 
 step(`Type-check and build the static preview (base: ${base})`);
+/*
+ * Say which form the alert control will post to. Three variants can be built in a
+ * row from one shell (default, another form, off), and the last one wins — without
+ * this line, publishing the "off" build by accident is one arrow-up away.
+ */
+console.log(previewAlertUrl
+  ? `  preview alert form: ${previewAlertUrl} — the checkout will show "Open the test alert"`
+  : '  preview alert form: none — the checkout will NOT show the alert test control');
 run('npx', ['tsc', '-b']);
 run('npx', ['vite', 'build', '--outDir', dir, '--emptyOutDir'], {
   VITE_BASE: base,
   VITE_STATIC_PREVIEW: '1',
   // A preview never talks to a live API, even if a stray env var says so.
   VITE_API_BASE: '',
+  /* Empty means "no alert control in this build". */
+  VITE_PREVIEW_ORDER_ALERT_URL: previewAlertUrl,
 });
 
 if (!existsSync(join(dist, 'index.html'))) fail(`vite build produced no ${dir}/index.html`);
@@ -102,6 +129,7 @@ const child = spawn('node', ['server/index.js'], {
     HB_DATA_DIR: dataDir,
     // Never forward anything from a build machine, even by accident.
     HB_CONTACT_FORMSPREE_URL: '',
+    HB_ORDER_WHATSAPP_FORMSPREE_URL: '',
     HB_ORDER_EMAIL_ENABLED: 'false',
   },
 });
@@ -194,6 +222,7 @@ console.log(`
 
   Site base   ${base} (relative — works at any mount point)
   Preview     ordering, payments, loyalty lookup and messages are off
+  Alert test  ${previewAlertUrl ? `${previewAlertUrl} (marked HB-TEST)` : 'OFF — no control in this build'}
   Snapshot    ${dir}/api/catalog.json
   Fallbacks   ${dir}/404.html and 404.html at the repository root
   Publish     commit ${dir}/ and push.

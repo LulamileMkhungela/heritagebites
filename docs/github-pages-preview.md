@@ -90,6 +90,7 @@ run today.
 | Category chips, including the coming-soon archive | Navigate and scroll; category headings fold their section; archive cards show a photo, name and guide price but stay inert (no dish sheet, no basket) |
 | Contact form and customer quest | **Work.** With no server to forward through, the browser posts the enquiry straight to the business's Formspree endpoint, so it still lands in the monitored inbox |
 | Orders, payments, loyalty lookup, tracking | Refused in the browser with an explanation and the WhatsApp number |
+| Owner's WhatsApp order alert | **Testable.** The preview checkout has a "test the alert" panel that posts the same payload the server sends, marked `HB-TEST` — no order is created. See [`whatsapp-order-alerts.md`](whatsapp-order-alerts.md#6-rehearsing-it-from-the-github-pages-preview) |
 | Service strip ("Wednesday is a rest day…") | Live — the browser recomputes it from the shared service rules, so it never goes stale |
 | Checkout | Shows **Preview checkout**: your basket and the published plate prices, with a WhatsApp button instead of payment |
 | Contact form, Customer quest form | Submitting says the preview has ordering and messages switched off, and points to phone/WhatsApp — nothing is stored or sent |

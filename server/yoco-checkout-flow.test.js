@@ -33,6 +33,7 @@ process.env.HB_ORDER_EMAIL_ENABLED = 'false';
 process.env.HB_PUSH_DRY_RUN = 'true';
 process.env.HB_RATE_LIMIT_MULTIPLIER = '50';
 process.env.HB_CONTACT_FORMSPREE_URL = '';
+process.env.HB_ORDER_WHATSAPP_FORMSPREE_URL = '';
 
 const WEBHOOK_SECRET_RAW = 'yoco-sandbox-webhook-secret-0123456789';
 const WEBHOOK_SECRET = `whsec_${Buffer.from(WEBHOOK_SECRET_RAW).toString('base64')}`;
