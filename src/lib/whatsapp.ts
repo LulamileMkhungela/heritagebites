@@ -34,6 +34,12 @@ export function waNumber(raw?: string): string {
 export interface OrderMessageOptions {
   fulfilment?: Fulfilment;
   customer?: { name?: string; phone?: string; suburb?: string; address?: string; notes?: string } | null;
+  /**
+   * How this order will be paid: a Yoco payment link that Heritage Bites sends
+   * back in this chat (the default — the arrangement for orders taken on
+   * WhatsApp), or cash on collection when the customer chose that explicitly.
+   */
+  payment?: 'yoco' | 'cash';
   /** Extra line at the top, e.g. "Can I get this for Friday?" */
   intro?: string;
 }
@@ -74,14 +80,17 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
   if (opts.customer?.notes?.trim()) parts.push(`Notes: ${opts.customer.notes.trim()}`);
 
   /*
-   * The message itself is the order, so it ends by asking for the two things
-   * the customer cannot do inside WhatsApp: have it confirmed, and know where
-   * to pay. It used to read "I will send it through", which sounded like the
-   * customer still owed the kitchen another form or a payment link — the one
-   * sentence in the message that raised a question instead of answering one.
+   * The message itself is the order, so it ends with the one thing the customer
+   * cannot do inside WhatsApp: pay. The arrangement is Yoco — Heritage Bites
+   * replies with a payment link and the customer pays there — unless the
+   * customer picked cash on collection on the checkout.
    */
   parts.push('');
-  parts.push('Please reply here to confirm this order and let me know how to pay.');
+  parts.push(
+    opts.payment === 'cash'
+      ? 'I will pay cash on collection — please confirm this order.'
+      : 'I will pay by Yoco — please confirm this order and send me the payment link.',
+  );
 
   return parts.join('\n');
 }

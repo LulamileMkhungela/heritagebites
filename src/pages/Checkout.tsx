@@ -106,6 +106,13 @@ function LiveCheckout() {
       : method === 'card' && !online && cashAllowed
         ? 'cash-on-collection'
         : method;
+  /*
+   * What the WhatsApp order message says about payment: cash only when the
+   * customer deliberately chose it and it still applies (a delivery order cannot
+   * be cash). Every other WhatsApp order asks Heritage Bites to send the Yoco
+   * payment link — that is how payment is taken in that chat.
+   */
+  const waPayment = method === 'cash-on-collection' && method2 === 'cash-on-collection' ? 'cash' : 'yoco';
   const setMethod = (next: PayMethod) => {
     setMethodRaw(next);
     setFatal(null);
@@ -658,18 +665,21 @@ function LiveCheckout() {
                 {online ? 'Prefer not to pay online?' : 'Rather order on WhatsApp?'}
               </p>
               <p className="mt-2 text-sm text-bone/70">
-                {online
+                {waPayment === 'cash'
                   ? 'Send the same basket to us on WhatsApp and pay cash when you collect.'
-                  : 'Send the same basket to us on WhatsApp — we will arrange payment with you there.'}
+                  : 'Send the same basket to us on WhatsApp — we will confirm the order and send you a Yoco payment link.'}
               </p>
               {/*
                 The message is built from the basket itself — dishes, choices,
-                quantities, line totals and the delivery or collection choice —
-                so WhatsApp opens with the whole order already typed and the
-                customer only has to press send.
+                quantities, line totals, the delivery or collection choice, the
+                customer's details and, for delivery, the address exactly as it
+                was entered — so WhatsApp opens with the whole order already
+                typed and the customer only has to press send. It closes by
+                asking for the Yoco payment link, unless the customer picked
+                cash on collection.
               */}
               <a
-                href={basketHref(settings?.whatsapp, lines, { fulfilment, customer })}
+                href={basketHref(settings?.whatsapp, lines, { fulfilment, customer, payment: waPayment })}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full bg-ochre px-4 py-2 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"

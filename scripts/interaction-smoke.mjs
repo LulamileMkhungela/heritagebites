@@ -840,6 +840,25 @@ await step('picking a suggestion moves the delivery area to match the address', 
   return 'address and area autofilled from the picked result';
 });
 
+await step('the WhatsApp order message carries the delivery address and the Yoco payment ask', async () => {
+  /*
+   * The owner's arrangement for WhatsApp orders: the message has to be the whole
+   * order — the basket, that it is a delivery, and the address exactly as it was
+   * entered — and it closes by asking Heritage Bites to send the Yoco payment
+   * link. No payment method was clicked in this flow, so the ask is Yoco.
+   */
+  const waLink = [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')]
+    .find((a) => /Order this on WhatsApp/i.test(a.textContent ?? ''));
+  if (!waLink) throw new Error('checkout has no WhatsApp basket link');
+  const waText = new URL(waLink.href).searchParams.get('text') ?? '';
+  for (const wanted of [/I would like it delivered in Sandton/, /Address: 12 Oxford Road, Illovo, Sandton/, /I will pay by Yoco/, /send me the payment link/]) {
+    if (!wanted.test(waText)) {
+      throw new Error(`the WhatsApp message is missing "${wanted}" — the delivery address and payment ask must travel with the order: ${waText.slice(0, 220)}`);
+    }
+  }
+  return 'delivery address, area and the Yoco payment ask all in the message';
+});
+
 await step('an address that contradicts the chosen area is refused with both names', async () => {
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   /* The customer now switches the area instead of the address. */
@@ -1501,11 +1520,12 @@ await step('a cash order can be placed with no card details at all', async () =>
   }
   /*
    * The closing line used to read "I will send it through", which read as if the
-   * customer still had a step left to take. It must now ask for a reply and
-   * nothing else.
+   * customer still had a step left to take. It must now state how this order
+   * will be paid — cash here, because the customer chose it — and ask for a
+   * reply.
    */
-  if (!/Please reply here to confirm this order/.test(waText)) {
-    throw new Error(`the WhatsApp message does not close with the confirm-and-pay ask: ${waText.slice(-120)}`);
+  if (!/I will pay cash on collection/.test(waText) || !/confirm this order/.test(waText)) {
+    throw new Error(`the WhatsApp message does not close with the cash confirm ask: ${waText.slice(-160)}`);
   }
   if (/I will send it through/.test(waText)) {
     throw new Error('the WhatsApp message still asks the customer to send it through');
