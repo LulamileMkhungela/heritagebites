@@ -94,7 +94,18 @@ function LiveCheckout() {
    * payment method back to card rather than letting the choice linger.
    */
   const cashAllowed = fulfilment === 'collection' && payments?.cashOnCollection !== false;
-  const method2: PayMethod = method === 'cash-on-collection' && !cashAllowed ? 'card' : method;
+  /*
+   * The method on screen is always one the customer can actually use. Cash is
+   * only for collection, and "pay online" is only offered once the business has
+   * connected Yoco — so with payments off, a collection order simply lands on
+   * cash, and the customer never meets a dead "not switched on yet" card.
+   */
+  const method2: PayMethod =
+    method === 'cash-on-collection' && !cashAllowed
+      ? 'card'
+      : method === 'card' && !online && cashAllowed
+        ? 'cash-on-collection'
+        : method;
   const setMethod = (next: PayMethod) => {
     setMethodRaw(next);
     setFatal(null);
@@ -353,7 +364,87 @@ function LiveCheckout() {
                 <span aria-hidden="true">→</span>
               </a>
             )}
-            <p className="mt-3 text-xs text-ink/50">
+            {/*
+              Payment belongs to the same question — how the food arrives and how
+              it is paid for is one decision, made together at the top of the
+              form rather than in its own section at the bottom.
+            */}
+            <div className="mt-6 border-t-2 border-ink/10 pt-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {([
+                  {
+                    id: 'card' as PayMethod,
+                    label: 'Pay online',
+                    /*
+                     * Named for what the customer does, not for the rails under it.
+                     * Yoco takes card and instant EFT on its own page, so promising
+                     * "Visa & Mastercard" here would understate it. Only offered
+                     * when Yoco is actually connected — an option that fails at
+                     * the last step is worse than no option.
+                     */
+                    blurb: "Card or instant EFT on Yoco's secure page",
+                    show: online,
+                  },
+                  {
+                    id: 'cash-on-collection' as PayMethod,
+                    label: 'Cash on collection',
+                    blurb: 'Pay when you collect',
+                    show: cashAllowed,
+                  },
+                ].filter((m) => m.show)).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMethod(m.id)}
+                    aria-pressed={method2 === m.id}
+                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method2 === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
+                  >
+                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method2 === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
+                      {method2 === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold">{m.label}</span>
+                      <span className="block text-xs text-ink/55">{m.blurb}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {method2 === 'card' && online && (
+                <div className="animate-rise mt-5 rounded-2xl border-2 border-ink/10 bg-bone/70 p-5">
+                  <p className="text-[13px] font-semibold text-ink">You will be sent to Yoco to pay.</p>
+                  <p className="mt-2 text-xs leading-relaxed text-ink/60">
+                    Yoco takes the card or instant EFT on its own secure page, then brings you back to your order.
+                    Heritage Bites never sees or stores your card number.
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-ink/60">
+                    Your order is only marked paid once Yoco confirms the payment to us — not when the page reloads.
+                  </p>
+                </div>
+              )}
+
+              {/*
+                One line about online payment when it is off — not a dead card,
+                not an explanation box. The WhatsApp card beside the order
+                summary is the single place to act on it.
+              */}
+              {!online && (
+                <p className="mt-3 text-xs leading-relaxed text-ink/50">
+                  {fulfilment === 'delivery'
+                    ? 'Delivery orders are paid online before we cook, and online payment is not connected yet — order on WhatsApp and we will arrange it.'
+                    : 'Card payments are coming. Until then, pay cash when you collect — or order on WhatsApp.'}
+                </p>
+              )}
+
+              {online && fulfilment === 'delivery' && (
+                <p className="mt-3 text-xs text-ink/50">
+                  Delivery orders are paid online before we cook. Cash is accepted on collection only.
+                </p>
+              )}
+            </div>
+
+            <p className="mt-4 text-xs text-ink/50">
               Minimum order {zar(settings?.minDeliveryOrder ?? 100)} for delivery; delivery is included in the plate price.
               Service window {settings?.serviceWindow.open}–{settings?.serviceWindow.close} on Thursdays and Fridays.
             </p>
@@ -475,95 +566,6 @@ function LiveCheckout() {
               The kitchen gets the order the moment you place it; WhatsApp replies come from a person, so they are not instant.
             </p>
           </fieldset>
-
-          {/* Payment */}
-          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Payment</legend>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {([
-                {
-                  id: 'card' as PayMethod,
-                  label: 'Pay online',
-                  /*
-                   * Named for what the customer does, not for the rails under it.
-                   * Yoco takes card and instant EFT on its own page, so promising
-                   * "Visa & Mastercard" here would understate it — and claiming
-                   * it at all when nothing is configured would be a lie.
-                   */
-                  blurb: online ? "Card or instant EFT on Yoco's secure page" : 'Not switched on yet',
-                  show: true,
-                },
-                {
-                  id: 'cash-on-collection' as PayMethod,
-                  label: 'Cash on collection',
-                  blurb: 'Pay when you collect',
-                  show: cashAllowed,
-                },
-              ].filter((m) => m.show)).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMethod(m.id)}
-                  aria-pressed={method2 === m.id}
-                  className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method2 === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
-                >
-                  <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method2 === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
-                    {method2 === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-semibold">{m.label}</span>
-                    <span className="block text-xs text-ink/55">{m.blurb}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {/*
-              Online payment is only offered when the business has actually
-              connected Yoco. An option that fails at the last step is worse than
-              no option: it costs the customer the whole form.
-            */}
-            {method2 === 'card' && (
-              <div className="animate-rise mt-5 rounded-2xl border-2 border-ink/10 bg-bone/70 p-5">
-                {online ? (
-                  <>
-                    <p className="text-[13px] font-semibold text-ink">You will be sent to Yoco to pay.</p>
-                    <p className="mt-2 text-xs leading-relaxed text-ink/60">
-                      Yoco takes the card or instant EFT on its own secure page, then brings you back to your order.
-                      Heritage Bites never sees or stores your card number.
-                    </p>
-                    <p className="mt-2 text-xs leading-relaxed text-ink/60">
-                      Your order is only marked paid once Yoco confirms the payment to us — not when the page reloads.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-[13px] font-semibold text-ink">Online payment is not switched on yet.</p>
-                    <p className="mt-2 text-xs leading-relaxed text-ink/60">
-                      Yoco has not been connected to this site, so there is nothing to charge. Send the same basket to us
-                      on WhatsApp and we will arrange payment, or switch to collection and pay cash.
-                    </p>
-                    <a
-                      href={basketHref(settings?.whatsapp, lines, { fulfilment })}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-bone hover:bg-ink-3"
-                    >
-                      Send this basket on WhatsApp
-                    </a>
-                  </>
-                )}
-              </div>
-            )}
-
-            {fulfilment === 'delivery' && (
-              <p className="mt-2 text-xs text-ink/50">
-                {online
-                  ? 'Delivery orders are paid online before we cook. Cash is accepted on collection only.'
-                  : 'Delivery orders need online payment, which is not connected yet — order on WhatsApp for now.'}
-              </p>
-            )}
-          </fieldset>
         </div>
 
         {/* Summary */}
@@ -646,10 +648,20 @@ function LiveCheckout() {
             </div>
           </div>
 
+          {/*
+            The one WhatsApp button on this page. Every other route to WhatsApp
+            that used to appear alongside it was a duplicate of this card.
+          */}
           <Reveal delay={100}>
             <div className="mt-4 rounded-3xl border-2 border-ink/10 bg-ink p-5 text-bone">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Prefer not to pay online?</p>
-              <p className="mt-2 text-sm text-bone/70">Send the same basket to us on WhatsApp and pay cash when you collect.</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">
+                {online ? 'Prefer not to pay online?' : 'Rather order on WhatsApp?'}
+              </p>
+              <p className="mt-2 text-sm text-bone/70">
+                {online
+                  ? 'Send the same basket to us on WhatsApp and pay cash when you collect.'
+                  : 'Send the same basket to us on WhatsApp — we will arrange payment with you there.'}
+              </p>
               {/*
                 The message is built from the basket itself — dishes, choices,
                 quantities, line totals and the delivery or collection choice —
