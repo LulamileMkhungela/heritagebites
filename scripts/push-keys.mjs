@@ -23,7 +23,7 @@ console.log('Web Push keys for Heritage Bites — copy these into the host\'s se
 console.log('');
 console.log(`HB_VAPID_PUBLIC_KEY=${publicKey}`);
 console.log(`HB_VAPID_PRIVATE_KEY=${privateKey}`);
-console.log('HB_VAPID_SUBJECT=mailto:heritagebitesfood@gmail.com');
+console.log('HB_VAPID_SUBJECT=mailto:mkhungela.l@gmail.com');
 console.log('');
 console.log('Then pick an owner key — the password that lets a phone or tablet enrol');
 console.log('as a kitchen device. Make it long, keep it out of the repository:');

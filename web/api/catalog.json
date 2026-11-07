@@ -1254,11 +1254,11 @@
     "open": true,
     "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Friday",
+    "dayLabel": "Thursday",
     "timeLabel": "12:37",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Friday 12:00–13:30",
-    "nextWindowLabel": "Thursday 12:00–13:30",
+    "todayLabel": "Thursday 12:00–13:30",
+    "nextWindowLabel": "Friday 12:00–13:30",
     "headline": "Serving now",
     "message": "We are serving now — delivery and collection until 13:30.",
     "shortMessage": "Serving now until 13:30.",
@@ -1282,5 +1282,5 @@
     "customerEmail": false,
     "ownerEmail": false
   },
-  "today": 5
+  "today": 4
 }
