@@ -80,7 +80,12 @@ export default function Layout() {
       {/* Main navigation */}
       <header ref={headerRef} className="sticky top-0 z-50 border-b border-bone/15 bg-ink text-bone backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-4 sm:px-4 sm:py-3">
-          <Link to="/" onClick={() => setMenuOpen(false)} className="group flex min-h-11 min-w-11 items-center gap-2 sm:gap-3" aria-label="Heritage Bites home">
+          <Link
+            to="/"
+            onClick={() => setMenuOpen(false)}
+            className="logo-spin-host group flex min-h-11 min-w-11 items-center gap-2 sm:gap-3"
+            aria-label="Heritage Bites home"
+          >
             {/*
               The shop's own badge. It replaces a generic pot icon: a customer who
               has met this mark on a WhatsApp message or in a Google result should
@@ -94,7 +99,7 @@ export default function Layout() {
               alt=""
               width={44}
               height={44}
-              className="h-11 w-11 shrink-0 object-contain transition-transform group-hover:rotate-3"
+              className="logo-spin h-11 w-11 shrink-0 object-contain"
             />
             {/*
               The wordmark is the only purely decorative thing in the bar, so it is

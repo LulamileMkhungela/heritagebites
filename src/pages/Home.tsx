@@ -135,7 +135,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             <p className="mt-3 text-sm leading-relaxed text-bone/70">{service?.message}</p>
             <ul className="mt-5 space-y-3">
               {[
-                { t: 'Order online', d: 'Card through Yoco, or cash on collection', to: '/checkout' },
+                { t: 'Order online', d: 'Card through Yoco, or cash when you collect or receive', to: '/checkout' },
                 { t: 'WhatsApp', d: 'Message us to place an order', href: waHrefOrder },
                 { t: 'Uber Eats', d: s?.channels?.ubereats?.url ? 'Order through the app' : 'Direct ordering link coming soon', href: s?.channels?.ubereats?.url },
                 { t: 'Mr D Food', d: s?.channels?.mrd?.url ? 'Order through the app' : 'Direct ordering link coming soon', href: s?.channels?.mrd?.url },
@@ -317,7 +317,7 @@ function HowItWorks() {
 
   const steps = [
     { n: '01', t: 'Pick your plate', d: 'Choose a protein, then a starch and a vegetable side. The plate price includes everything.' },
-    { n: '02', t: 'Pay your way', d: 'Pay by card through Yoco, or pay cash when you collect. Delivery is paid by card.' },
+    { n: '02', t: 'Pay your way', d: 'Pay by card through Yoco, or in cash — at the counter when you collect, or to the driver on delivery.' },
     { n: '03', t: 'Choose collection or delivery', d: 'Collect at the plate price, or have it delivered in Rosebank and Sandton for a flat fee.' },
     {
       n: '04',

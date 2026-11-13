@@ -180,7 +180,9 @@ export default function OrderStatus() {
                 : 'Paid'
               : order.payment.status === 'awaiting_payment'
                 ? 'Awaiting payment'
-                : 'Payment on collection'}
+                : order.fulfilment === 'delivery'
+                  ? 'Payment on delivery'
+                  : 'Payment on collection'}
           </p>
         </div>
       </div>

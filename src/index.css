@@ -179,6 +179,20 @@
   .animate-pulse-ring {
     animation: hb-pulse-ring 2s ease-out infinite;
   }
+
+  /*
+   * The logo spins while the pointer is on it and stops the instant the pointer
+   * leaves. Driving it from :hover rather than a class means the stop needs no
+   * JS and cannot get out of step with the cursor: when the rule stops
+   * matching, the animation is removed and the badge returns to rest.
+   *
+   * 2.5s per revolution — slow enough to read the badge as it turns rather than
+   * a blur. It loops for as long as the pointer stays, so a hover held for ten
+   * seconds is four turns, not a stutter at the end of one.
+   */
+  .logo-spin-host:hover .logo-spin {
+    animation: hb-logo-spin 2.5s linear infinite;
+  }
 }
 
 @keyframes hb-rise {
@@ -218,6 +232,15 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes hb-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -286,3 +309,17 @@
  * breaks `position: sticky`. scripts/mobile-audit.mjs measures real element
  * widths, so the layout has to actually fit.
  */
+
+/*
+ * Motion is a preference, not a default. A spinning logo is exactly the sort of
+ * looping movement that triggers discomfort for people who have asked the OS for
+ * less of it, so the effect is dropped entirely rather than shortened.
+ *
+ * This sits outside @layer utilities on purpose: unlayered CSS beats every
+ * layered rule, so the override cannot be outranked by the utility above.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .logo-spin-host:hover .logo-spin {
+    animation: none;
+  }
+}

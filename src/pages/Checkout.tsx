@@ -12,6 +12,13 @@ import { AddressField } from '../components/AddressField';
 import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
 import type { AddressSuggestion } from '../lib/address';
 
+/*
+ * 'cash-on-collection' is a stored value, not a label: it is what the API and
+ * existing orders carry, and the customer never sees it. Cash is also accepted
+ * at the door now, so the name under-describes the behaviour — but renaming it
+ * is a data migration across server, tests and saved orders, not a copy change.
+ * The wording the customer reads is what branches on fulfilment below.
+ */
 type PayMethod = 'card' | 'cash-on-collection';
 
 type CheckoutCustomer = { name: string; phone: string; email: string; address: string; suburb: string; notes: string };
@@ -467,9 +474,17 @@ function LiveCheckout() {
                      * food is cooked instead; that is a difference in *when*, not
                      * in whether card is accepted.
                      */
+                    /*
+                     * The card blurb follows the fulfilment. Saying "at your
+                     * door" to someone collecting is simply wrong, and it was
+                     * doing exactly that: the copy was written once for delivery
+                     * and never branched.
+                     */
                     blurb: online
                       ? "Card or instant EFT on Yoco's secure page"
-                      : 'Pay by card — machine at collection, or at your door',
+                      : fulfilment === 'delivery'
+                        ? 'Pay the driver by card at the door'
+                        : 'Pay by card at the counter when you collect',
                     show: true,
                   },
                   {
@@ -513,16 +528,28 @@ function LiveCheckout() {
                   Secure Yoco payment — card or instant EFT — is sent as a link in your WhatsApp chat.
                 </p>
               )}
-              {fulfilment === 'delivery' && (
-                <p className="mt-1.5 text-xs leading-relaxed text-ink/55">
-                  Delivery can be paid by card (we bring a Yoco card machine) or in cash.
-                </p>
-              )}
+              {/*
+                The payment blurbs above already say how card works for the
+                chosen fulfilment, so this line only needs to exist when online
+                checkout is off and the customer must be told a link is coming.
+              */}
             </div>
 
+            {/*
+              The rules follow the fulfilment. The minimum order is a DELIVERY
+              rule (server/index.js only applies it when fee < 0 for delivery),
+              so quoting a minimum to someone collecting invents a restriction
+              the kitchen does not actually impose.
+            */}
             <p className="mt-4 text-xs leading-relaxed text-ink/50">
-              Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery {deliveryFee > 0 ? zar(deliveryFee) : 'included'} in
-              {' '}{settings?.deliveryAreas?.join(' & ') ?? 'Rosebank & Sandton'}{freeAbove > 0 && deliveryFee > 0 ? `, free from ${zar(freeAbove)}` : ''}.
+              {fulfilment === 'delivery' ? (
+                <>
+                  Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery {deliveryFee > 0 ? zar(deliveryFee) : 'included'} in
+                  {' '}{settings?.deliveryAreas?.join(' & ') ?? 'Rosebank & Sandton'}{freeAbove > 0 && deliveryFee > 0 ? `, free from ${zar(freeAbove)}` : ''}.
+                </>
+              ) : (
+                <>No minimum order and no delivery fee — you pay the plate price only.</>
+              )}{' '}
               Thursdays and Fridays, {settings?.serviceWindow.open}–{settings?.serviceWindow.close}.
             </p>
           </fieldset>
@@ -732,7 +759,7 @@ function LiveCheckout() {
 
               <p className={`mt-3 text-xs leading-relaxed ${waReady ? 'text-ink/55' : 'font-medium text-chili'}`}>
                 {waReady
-                  ? 'Your order goes to WhatsApp with every detail already filled in — name, number, the basket, the delivery address if you chose delivery, and your notes. Send it and we confirm, then pay by secure Yoco link or cash.'
+                  ? `Your order goes to WhatsApp with every detail already filled in — name, number, the basket, ${fulfilment === 'delivery' ? 'the delivery address' : 'the collection plan'}, and your notes. Send it and we confirm, then pay ${method2 === 'cash-on-collection' ? (fulfilment === 'delivery' ? 'cash to the driver' : 'cash at the counter') : 'by secure Yoco link or card'}.`
                   : `${waBlocked}. Fill that in above and this button opens WhatsApp with the whole order.`}
               </p>
               <p className="mt-2 text-xs leading-relaxed text-ink/45">

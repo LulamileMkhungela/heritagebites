@@ -95,9 +95,22 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
    * customer picked cash on collection on the checkout.
    */
   parts.push('');
+  /*
+   * The closing line states how the order will be paid.
+   *
+   * Card always asks for the Yoco link, because that is the channel the kitchen
+   * actually uses to collect a card payment regardless of how the food arrives.
+   *
+   * Cash has to name the right moment. It used to say "cash on collection" for
+   * every cash order, so a delivery customer was told they would pay at a
+   * collection that was not happening — the one line in the message that
+   * contradicted the fulfilment stated three lines above it.
+   */
   parts.push(
     opts.payment === 'cash'
-      ? 'I will pay cash on collection — please confirm this order.'
+      ? fulfilment === 'delivery'
+        ? 'I will pay cash on delivery — please confirm this order.'
+        : 'I will pay cash on collection — please confirm this order.'
       : 'I will pay by Yoco — please confirm this order and send me the payment link.',
   );
 
