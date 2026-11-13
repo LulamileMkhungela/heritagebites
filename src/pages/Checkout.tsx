@@ -850,10 +850,10 @@ function PreviewCheckout() {
   return (
     <section className="mx-auto max-w-3xl px-4 py-14">
       <SectionLabel>Checkout</SectionLabel>
-      <h1 className="font-display text-4xl font-semibold md:text-5xl">Preview checkout</h1>
+      <h1 className="font-display text-4xl font-semibold md:text-5xl">Finish your order</h1>
       <p className="mt-3 max-w-2xl text-ink/65">
-        This is a preview build of the site, so no payment is taken and no order is created here.
-        Your basket is still real — send it to us on WhatsApp and we will cook it.
+        No card is taken on this site. Send the basket on WhatsApp and the kitchen will confirm the total,
+        the collection point and the cooking day before anything is paid.
       </p>
 
       <div className="mt-8 rounded-[2rem] border-2 border-ink/10 bg-white p-6">
@@ -885,7 +885,7 @@ function PreviewCheckout() {
 
         <p className="mt-3 text-xs leading-relaxed text-ink/45">
           Prices are the published plate prices. Delivery in Rosebank and Sandton is included; the minimum order is R100.
-          The live site will confirm the total with the kitchen before anything is charged.
+          The kitchen confirms the total with you before anything is charged.
         </p>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">

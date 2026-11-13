@@ -72,12 +72,20 @@ await check('the catalogue snapshot loads and the site paints', async () => {
   return 'catalogue + prices present';
 });
 
-await check('the preview says what it is, on every page', async () => {
-  const body = await text();
-  if (!/switched off on this preview/i.test(body)) throw new Error('no preview notice on the home page');
-  await goto('quest');
-  if (!/switched off on this preview/i.test(await text())) throw new Error('no preview notice on /quest');
-  return 'notice present';
+/*
+ * The owner asked for the preview strip to go: it was the first thing a phone
+ * showed, above the brand, and it made a finished site look like a test build.
+ * The real guard stays where it matters — checkout is still `PreviewCheckout`
+ * and still hands the basket to WhatsApp, so nobody is charged or left waiting.
+ */
+await check('no preview bar sits above the brand', async () => {
+  for (const path of ['', 'quest', 'contact']) {
+    await goto(path);
+    const body = await text();
+    if (/switched off on this preview/i.test(body)) throw new Error(`preview bar is still on /${path}`);
+    if (/^\s*Preview\b/.test(body)) throw new Error(`a "Preview" label leads /${path}`);
+  }
+  return 'no preview bar on /, /quest, /contact';
 });
 
 await check('the service strip is computed live, not frozen at build time', async () => {
@@ -146,17 +154,24 @@ await check('checkout is a preview that prices the basket without charging', asy
   });
   await goto('checkout');
   const body = await text();
-  if (!/Preview checkout/i.test(body)) throw new Error('checkout is not in preview mode');
-  if (!/R200,00/.test(body)) throw new Error('the preview basket total is wrong');
-  if (/Place order|Pay now/i.test(body)) throw new Error('a live order button is still on the preview checkout');
+  if (!/Finish your order/i.test(body)) throw new Error('the checkout hand-off is missing');
+  if (!/R200,00/.test(body)) throw new Error('the basket total is wrong');
+  if (/Place order|Pay now/i.test(body)) throw new Error('a live order button is still on the static checkout');
 
   /*
    * The exact complaint this guards against: on the preview, "Order this on
    * WhatsApp" opened an empty chat, so the customer had to retype an order
    * the site already knew. The link must carry the basket itself.
    */
+  /*
+   * Scoped to <main>: the service strip and the footer also carry WhatsApp
+   * links, and this check used to grab whichever came first in the document.
+   * It passed only because the (now removed) preview bar happened to sit above
+   * them and happened to carry the basket. What must be true is that the
+   * checkout's own hand-off carries it.
+   */
   const wa = await page.evaluate(() =>
-    [...document.querySelectorAll('a[href^="https://wa.me/"]')]
+    [...document.querySelectorAll('main a[href^="https://wa.me/"]')]
       .map((a) => a.href)
       .find((href) => /text=/.test(href)) ?? '',
   );

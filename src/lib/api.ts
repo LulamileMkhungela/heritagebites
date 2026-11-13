@@ -110,9 +110,14 @@ export const STATIC_PREVIEW: boolean = String(env.VITE_STATIC_PREVIEW ?? '') ===
  */
 const STATIC_CATALOG = `${BASE_URL.replace(/\/$/, '')}/api/catalog.json`;
 
+/*
+ * Shown only when someone tries to place an order on a build with no server
+ * behind it. It used to open with "This is a preview…", which made a working
+ * site read like a test page; it now says what to do instead.
+ */
 export const PREVIEW_NOTICE =
-  'This is a preview of the Heritage Bites site, so ordering and payments are switched off. ' +
-  'Please call or WhatsApp us on +27 67 013 7587 and we will take it from there.';
+  'We take orders on WhatsApp or by phone on +27 67 013 7587. ' +
+  'Send us your basket there and the kitchen will confirm it with you.';
 
 /**
  * What an enquiry says when there is nowhere to send it.

@@ -67,7 +67,7 @@ export default function Passport() {
       */}
       {STATIC_PREVIEW && (
         <div className="mt-8 rounded-3xl border-2 border-ochre bg-ochre/10 p-5">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">Preview build</p>
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">Check your card on WhatsApp</p>
           <p className="mt-1.5 text-sm text-ink/70">
             Stamp lookups need the live site. In the meantime, WhatsApp us on{' '}
             <a href={waHref(settings?.whatsapp, loyaltyEnquiry(phone))} target="_blank" rel="noreferrer" className="font-semibold text-ochre-deep underline">
