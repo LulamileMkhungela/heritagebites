@@ -279,7 +279,7 @@ export default function Contact() {
         </div>
       </section>
 
-      <HeritageBand className="h-2 w-full" />
+      <HeritageBand className="h-5 w-full" width={1440} />
     </>
   );
 }

@@ -64,7 +64,7 @@ export function BasketBar() {
       {/* Keeps the bar from covering the last line of the footer. */}
       <div aria-hidden="true" className="h-24" />
       <div className="fixed inset-x-0 bottom-0 z-40 bg-bone/95 backdrop-blur">
-        <HeritageBand className="h-1.5 w-full text-ink" />
+        <HeritageBand className="h-4 w-full" width={1440} on="ink" />
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
           <button
             type="button"

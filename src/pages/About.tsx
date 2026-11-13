@@ -58,7 +58,7 @@ export default function About() {
         </div>
       </section>
 
-      <HeritageBand className="h-2 w-full" />
+      <HeritageBand className="h-5 w-full" width={1440} />
 
       {/* Vision + Mission */}
       <section className="border-b-2 border-ink/10 bg-ink py-20 text-bone">

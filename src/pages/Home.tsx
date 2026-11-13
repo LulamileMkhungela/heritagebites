@@ -179,7 +179,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
           </div>
         </Reveal>
       </div>
-      <HeritageBand className="relative h-2 w-full" />
+      <HeritageBand className="relative h-5 w-full" width={1440} />
     </section>
   );
 }
