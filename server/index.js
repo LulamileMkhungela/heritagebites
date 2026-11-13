@@ -17,7 +17,15 @@ import { paymentConfig, paymentDriver, paymentWarnings, readYocoEvent, startYoco
 import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents, orderCode, loyaltyPointsFor } from './lib/pricing.js';
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
-import { customerEmailConfig, emailConfig, enqueueOrderAlert, notifyStatus, publicBaseUrl, startOrderNotificationWorker } from './lib/order-notifications.js';
+/*
+ * Order alerts are Web Push only.
+ *
+ * Email alerts needed an SMTP host, port and app password configured on the
+ * server before a single kitchen ticket could be sent — that is infrastructure
+ * work, not "put your address in". Anything the owner cannot switch on by
+ * entering their own email address has been removed, so what remains is the
+ * push channel: generated keys and a device enrolled once at /alerts.
+ */
 import {
   confirmOrderSubscription,
   notifyOrderDevices,
@@ -349,39 +357,7 @@ function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
   return { lines, errors, totals, discount: disc };
 }
 
-/**
- * `t***@example.co.za` — enough to recognise your own inbox, not enough to leak
- * it to anyone who happens to hold a tracking link.
- */
-function maskEmail(value) {
-  const email = String(value ?? '').trim();
-  const at = email.indexOf('@');
-  if (at < 1) return null;
-  const local = email.slice(0, at);
-  return `${local[0]}${'*'.repeat(Math.max(1, Math.min(3, local.length - 1)))}${email.slice(at)}`;
-}
-
-/**
- * What actually happened to the customer's receipt.
- *
- * The page must not promise an email that was never queued: with no SMTP
- * configured no customer-email job exists at all, so the state is `none` and the
- * order page stays quiet instead of claiming a receipt was sent.
- */
-function receiptStatusFor(order) {
-  const jobs = store.load('orderNotificationJobs', []) ?? [];
-  const job = jobs.find((entry) => entry.orderCode === order.code
-    && (entry.channel ?? 'owner-email') === 'customer-email');
-  const state = !job
-    ? 'none'
-    : job.status === 'sent'
-      ? 'sent'
-      : job.status === 'failed' ? 'failed' : 'queued';
-  return { email: maskEmail(order.customer?.email), state };
-}
-
 function publicOrder(order) {
-  const receipt = receiptStatusFor(order);
   const settings = get('settings');
   return {
     id: order.id,
@@ -395,12 +371,13 @@ function publicOrder(order) {
     fulfilmentLabel: fulfilmentLabel(order.fulfilment),
     customer: { name: order.customer.name, phone: order.customer.phone },
     /*
-     * Confirmation of where the receipt was emailed, masked. The full address is
-     * never returned: this payload is also served from the tracking link, and a
-     * masked address is enough for the customer to recognise their own inbox.
+     * No receipt email is sent or promised: email alerts are gone, and the
+     * WhatsApp chat is the customer's record. The fields stay in the payload as
+     * explicit nulls so an older cached client cannot claim a receipt that was
+     * never queued.
      */
-    receiptEmail: receipt.state === 'none' ? null : receipt.email,
-    receiptState: receipt.state,
+    receiptEmail: null,
+    receiptState: 'none',
     items: order.items,
     totals: order.totals,
     payment: {
@@ -570,7 +547,7 @@ app.get('/api/health', (_req, res) => {
     paymentDriver: paymentDriver(),
     orders: get('orders').length,
     /* Which free notification channels are configured — booleans, no secrets. */
-    notifications: { ...notifyStatus(), push: pushStatus() },
+    notifications: { push: pushStatus() },
     time: new Date().toISOString(),
   });
 });
@@ -593,18 +570,11 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
     payments: paymentConfig(),
     contact: { inboxConfigured: contactEndpoint() !== null },
     /*
-     * Which automatic channels are actually live, as booleans.
-     *
-     * The checkout used to promise "we email your receipt as soon as the order
-     * is placed" unconditionally. That is only true when SMTP is configured —
-     * without it no receipt is sent and the customer waits for an email that
-     * never arrives. The page needs to know, so it can say what will really
-     * happen instead of what the copy hopes will happen.
+     * Which automatic channels are actually live. Push is the only one: email
+     * alerts needed SMTP configured on the host, so they are gone rather than
+     * left looking like a feature the owner could switch on with an address.
      */
-    notifications: {
-      customerEmail: Boolean(customerEmailConfig()),
-      ownerEmail: Boolean(emailConfig()),
-    },
+    notifications: { push: Boolean(pushStatus()?.configured) },
     today: todayDay(),
   });
 });
@@ -720,9 +690,12 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   if (!PAYMENT_METHODS.includes(payment.method)) {
     return res.status(422).json({ errors: ['Unknown payment method.'] });
   }
-  if (payment.method === 'cash-on-collection' && fulfilment === 'delivery') {
-    return res.status(422).json({ errors: ['Cash is only accepted on collection. Please pay by card, or choose collection.'] });
-  }
+  /*
+   * Cash is accepted on delivery too. The kitchen carries a Yoco card machine
+   * and a cash float, so a delivery customer can choose either — the old rule
+   * that refused cash on delivery only pushed people into a card payment they
+   * may not have wanted to make.
+   */
 
   /*
    * Email is optional for every payment method, including card.
@@ -826,7 +799,7 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
       currency: totals.currency,
       orderCode: order.code,
       trackingToken,
-      baseUrl: publicBaseUrl(),
+      baseUrl: (process.env.HB_PUBLIC_URL?.trim() || 'https://heritagebites.co.za').replace(/\/+$/, ''),
       description: `Heritage Bites order ${order.code}`,
     });
     if (!started.ok) {
@@ -861,15 +834,6 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   void notifyOwnerDevices(order).catch((error) => {
     console.error(`[push] owner alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
   });
-
-  try {
-    /* The one-time tracking token lets the customer receipt deep-link into the
-       private order page; the saved order still keeps only its digest. */
-    enqueueOrderAlert(order, { trackingToken });
-  } catch (error) {
-    // The order remains valid even if its email-alert job cannot be recorded.
-    console.error(`[order-notifications] could not queue order ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
-  }
 
   // Loyalty-card stamps are tracked per phone number.
   const stamps = get('stamps');
@@ -962,11 +926,6 @@ app.post('/api/payments/yoco/webhook', (req, res) => {
 
   /* The kitchen already has the ticket; this is the “and it is paid” follow-up. */
   void notifyOwnerDevices(order).catch(() => {});
-  try {
-    enqueueOrderAlert(order, {});
-  } catch (error) {
-    console.error(`[payments] paid order ${order.code} could not be emailed: ${String(error?.message ?? error).slice(0, 200)}`);
-  }
 
   res.json({ ok: true, matched: true });
 });
@@ -1320,7 +1279,6 @@ if (existsSync(DIST)) {
 export { app };
 
 if (process.env.NODE_ENV !== 'test') {
-  startOrderNotificationWorker();
   // Bound to 0.0.0.0 so the sandbox preview host can reach this process.
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[heritagebites api] listening on http://0.0.0.0:${PORT} (payments: ${paymentDriver()})`);

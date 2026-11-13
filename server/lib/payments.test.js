@@ -53,9 +53,9 @@ describe('configuration', () => {
     assert.equal(config.mode, 'off');
     assert.equal(paymentDriver(), 'off');
     assert.equal(yocoMode(), null);
-    /* Cash on collection is a business fact, not a payment setting. */
+    /* Cash is a business fact, not a payment setting — taken at the door too. */
     assert.equal(config.cashOnCollection, true);
-    assert.equal(config.cashOnDelivery, false);
+    assert.equal(config.cashOnDelivery, true);
   });
 
   test('a payment link is enough to take money', () => {

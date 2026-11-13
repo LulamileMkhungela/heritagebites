@@ -83,16 +83,16 @@ export async function checkPush(): Promise<PushState> {
     return { status: 'unconfigured', message: 'This is a preview build, so alerts are switched off.' };
   }
   if (!pushSupported()) {
-    return { status: 'unsupported', message: 'This browser cannot receive order alerts. We will email you instead.' };
+    return { status: 'unsupported', message: 'This browser cannot receive order alerts. Keep this order page — it is the record.' };
   }
   const config = await getConfig();
   if (!config?.enabled || !config.vapidPublicKey) {
-    return { status: 'unconfigured', message: 'Order alerts are not switched on for this site yet. We will email you instead.' };
+    return { status: 'unconfigured', message: 'Order alerts are not switched on for this site yet. Keep this order page — it is the record.' };
   }
   if (Notification.permission === 'denied') {
     return {
       status: 'blocked',
-      message: 'Notifications are blocked for this site in your browser settings. Allow them, or we will email you instead.',
+      message: 'Notifications are blocked for this site in your browser settings. Allow them, or keep this page — it is the record either way.',
     };
   }
   if (isIosWithoutInstall()) {
@@ -122,7 +122,7 @@ export async function subscribeToOrder(code: string, token: string): Promise<Pus
   if (!config?.vapidPublicKey) return { status: 'unconfigured', message: 'Order alerts are not switched on yet.' };
 
   if (!(await askPermission())) {
-    return { status: 'blocked', message: 'Without permission we cannot send an alert. We will email your receipt instead.' };
+    return { status: 'blocked', message: 'Without permission we cannot send an alert. Keep this page — it always shows the latest state.' };
   }
 
   const registration = await registerWorker();

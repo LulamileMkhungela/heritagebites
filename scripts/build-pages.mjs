@@ -102,7 +102,6 @@ const child = spawn('node', ['server/index.js'], {
     HB_DATA_DIR: dataDir,
     // Never forward anything from a build machine, even by accident.
     HB_CONTACT_FORMSPREE_URL: '',
-    HB_ORDER_EMAIL_ENABLED: 'false',
   },
 });
 

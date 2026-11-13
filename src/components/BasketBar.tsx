@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cartCount, cartSubtotal, useCart } from '../store/cart';
 import { useCatalog } from '../store/catalog';
+import { HeritageBand } from './ui';
 import { zar } from '../lib/format';
 
 /**
@@ -62,7 +63,8 @@ export function BasketBar() {
     <>
       {/* Keeps the bar from covering the last line of the footer. */}
       <div aria-hidden="true" className="h-24" />
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-ink/15 bg-bone/95 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-40 bg-bone/95 backdrop-blur">
+        <HeritageBand className="h-1.5 w-full text-ink" />
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
           <button
             type="button"

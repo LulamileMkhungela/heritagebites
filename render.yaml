@@ -12,22 +12,21 @@
 #
 #   dashboard.render.com → New + → Blueprint → pick this repository
 #
-# Render asks for the three values a public repository must never hold — copy
+# Render asks for the two values a public repository must never hold — copy
 # them from the server's .env (or regenerate with `npm run push:keys`):
 #
-#   HB_SMTP_PASS            the 16-character Gmail App Password
 #   HB_VAPID_PRIVATE_KEY    signs every Web Push notification
 #   HB_OWNER_PUSH_KEY       the enrolment password for the /alerts page
 #
 # Expectations on the free plan (also in docs/render-deploy.md): the service
 # sleeps after ~15 minutes of inactivity and wakes in about a minute, and the
-# filesystem is wiped on every deploy — orders and the outbox do not survive a
-# redeploy, which is acceptable for testing and is not acceptable for the real
-# service window (add a persistent disk before then).
+# filesystem is wiped on every deploy — orders do not survive a redeploy, which
+# is acceptable for testing and is not acceptable for the real service window
+# (add a persistent disk before then).
 #
 # If the service name "heritagebites" is taken and you choose another, update
 # HB_PUBLIC_URL and HB_SITE_URL in the Environment tab to the address Render
-# actually assigned, so receipt links and canonical URLs stay correct.
+# actually assigned, so tracking links and canonical URLs stay correct.
 # ============================================================================
 services:
   - type: web
@@ -46,23 +45,6 @@ services:
         value: "1"
       - key: NODE_VERSION
         value: "22"
-      # --- owner email (the kitchen ticket) + customer receipts --------------
-      - key: HB_SMTP_HOST
-        value: smtp.gmail.com
-      - key: HB_SMTP_PORT
-        value: "465"
-      - key: HB_SMTP_SECURE
-        value: "true"
-      - key: HB_SMTP_USER
-        value: mkhungela.l@gmail.com
-      - key: HB_SMTP_PASS
-        sync: false
-      - key: HB_SMTP_FROM
-        value: mkhungela.l@gmail.com
-      - key: HB_ORDER_ALERT_EMAIL
-        value: mkhungela.l@gmail.com
-      - key: HB_CUSTOMER_EMAIL_ENABLED
-        value: "true"
       # --- Web Push (the instant buzz on the kitchen phone) -------------------
       - key: HB_VAPID_PUBLIC_KEY
         value: BLBKMk0bL-_1bbKKoznaROWnwRPCNDq5pXGK_YaS_O7tOmldOVlwNQAGAjVSsBXxVtw8dQKGJtJjSDFs6lHupc0
@@ -73,7 +55,7 @@ services:
       - key: HB_OWNER_PUSH_KEY
         sync: false
       # --- the public address of this deployment -------------------------------
-      # Used for the tracking link inside receipts (HB_PUBLIC_URL) and for the
+      # Used for the customer's tracking link (HB_PUBLIC_URL) and for the
       # canonical/og URLs written during the build (HB_SITE_URL).
       - key: HB_PUBLIC_URL
         value: https://heritagebites.onrender.com

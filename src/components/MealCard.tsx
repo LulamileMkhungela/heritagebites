@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CartOptionPick, MenuItem } from '../lib/types';
 import { zar } from '../lib/format';
-import { Button, Qty } from './ui';
+import { Button, HeritageBand, Qty } from './ui';
 import { buildLine, useCart } from '../store/cart';
 import { useOverlay } from '../lib/useOverlay';
 
@@ -19,6 +19,8 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
 
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-3xl border-2 border-ink/10 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-ink/25 hover:shadow-[0_18px_40px_-24px_rgba(0,25,56,0.5)]">
+      {/* Ndebele painted band: the card is framed, not just a photo in a box. */}
+      <HeritageBand className="h-1.5 w-full shrink-0" />
       <button type="button" onClick={onOpen} className="relative block aspect-[4/3] w-full overflow-hidden bg-ink/5 text-left" aria-label={`View ${item.name}`}>
         <img
           src={item.image}

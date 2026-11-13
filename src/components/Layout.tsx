@@ -688,20 +688,21 @@ function CartDrawerPanel() {
                 Checkout
               </Link>
               {/*
-                The basket as a WhatsApp message, one tap from the drawer it is
-                already visible in. Useful on the preview build, where the
-                checkout cannot take an order, and for a customer who would
-                rather chat than fill in the form.
+                This used to open WhatsApp with the basket alone — no name, no
+                number, no address — which is a message the kitchen has to
+                interrogate before it can cook anything. The basket still needs
+                loading, so if this is a live checkout that cannot take payment
+                the honest route is the form that collects the details.
+                The drawer is also shown on the preview build, where the
+                checkout is a preview, so the link there stays a WhatsApp order.
               */}
-              <a
-                href={basketHref(settings?.whatsapp, lines, { fulfilment })}
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                to="/checkout"
                 onClick={() => setOpen(false)}
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
               >
-                Order this on WhatsApp
-              </a>
+                Add your details to order on WhatsApp
+              </Link>
               {/*
                 The way out. A basket that can only be emptied one line at a time
                 is a trap once someone has tried several plates, and the drawer is

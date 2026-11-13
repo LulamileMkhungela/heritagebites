@@ -827,6 +827,38 @@ await step('picking a suggestion moves the delivery area to match the address', 
   return 'address and area autofilled from the picked result';
 });
 
+await step('the WhatsApp order is blocked until the customer details are filled', async () => {
+  /*
+   * The owner's rule: nobody may reach WhatsApp with an empty name or number.
+   * At this point the basket and a delivery address exist, but no name and no
+   * phone, so the control must be a disabled button that says why — not a link.
+   */
+  const waHref = () => [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')]
+    .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+
+  if (waHref()) throw new Error('a WhatsApp link is offered before a name and number are filled');
+
+  const gate = [...s7.doc.querySelectorAll('button[aria-disabled="true"]')]
+    .find((b) => /Complete order on WhatsApp/i.test(b.textContent ?? ''));
+  if (!gate) throw new Error('no disabled WhatsApp control on an incomplete checkout');
+
+  /* The reason has to name the missing detail, not just say "disabled". */
+  const page = s7.text();
+  if (!/Add your full name first/i.test(page)) {
+    throw new Error('the checkout does not say which detail is missing before WhatsApp');
+  }
+
+  /* Fill exactly what it asks for, and nothing else. */
+  const byPh = (re) => [...s7.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
+  s7.setInput(byPh(/Thabo Mahlangu/), 'Delivery Test');
+  s7.setInput(byPh(/\+27 82/), '+27 82 000 4400');
+  await sleep(400);
+
+  const waLink = waHref();
+  if (!waLink) throw new Error('WhatsApp stayed blocked after the name and number were filled');
+  return 'blocked with a reason until name and number were filled';
+});
+
 await step('the WhatsApp order message carries the delivery address and the Yoco payment ask', async () => {
   /*
    * The owner's arrangement for WhatsApp orders: the message has to be the whole
@@ -1362,25 +1394,22 @@ async function orderPage() {
   return s1Order;
 }
 
-await step('the receipt destination is shown masked, or not claimed at all', async () => {
+await step('the order page claims no email receipt and leaks no address', async () => {
   await orderPage();
   /*
-   * Whether a receipt was queued depends on the server having SMTP configured, so
-   * this checks the two honest outcomes rather than assuming one: either the page
-   * names a masked address, or it says nothing about a receipt. What it must never
-   * do is claim a receipt and print the full address.
+   * Email alerts were removed, so there is exactly one honest outcome now: the
+   * page says no receipt email is sent, and it must never print the address the
+   * customer typed.
    */
   const text = s1Order.text();
   if (/interaction@example\.co\.za/.test(text)) throw new Error('the full email address is exposed on the page');
-
   if (/Receipt (emailed to|on its way to)|could not email your receipt/i.test(text)) {
-    if (!/i\*+@example\.co\.za/.test(text)) throw new Error('the masked receipt address is missing');
-    return 'masked receipt address shown';
+    throw new Error('the page still claims an email receipt');
   }
-  if (/receipt/i.test(text) && /emailed to/i.test(text)) {
-    throw new Error('the page claims a receipt was sent without a masked address');
+  if (!/No receipt email is sent/i.test(text)) {
+    throw new Error('the page does not tell the customer plainly that no receipt email is sent');
   }
-  return 'no receipt claimed (no SMTP on this server), and no address leaked';
+  return 'no receipt email claimed, and no address leaked';
 });
 
 await step('the tracking page offers manual WhatsApp updates, an order ticket and a shareable receipt', async () => {
@@ -1517,7 +1546,15 @@ await step('a cash order can be placed with no card details at all', async () =>
    * sends the customer to Yoco instead — so what this checks is that choosing
    * cash leaves no card-like field on the page at all.
    */
-  s6.click(s6.byText('button', /Cash on collection/i)[0]);
+  /*
+   * The two payment options are now plain "Card" and "Cash" — collection no
+   * longer gets its own wording, because both are accepted for either
+   * fulfilment and the blurbs say when the money changes hands.
+   */
+  const cashButton = [...s6.doc.querySelectorAll('button')]
+    .find((b) => (b.textContent ?? '').trim().startsWith('Cash'));
+  if (!cashButton) throw new Error('no Cash payment option on the checkout');
+  s6.click(cashButton);
   await sleep(200);
   const suspicious = [...s6.doc.querySelectorAll('input')].filter((f) => /4242 4242|MM\/YY|^123$|T MAHLANGU/.test(f.placeholder ?? ''));
   if (suspicious.length) throw new Error(`card fields are still present: ${suspicious.map((f) => f.placeholder).join(', ')}`);

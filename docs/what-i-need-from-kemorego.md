@@ -15,7 +15,7 @@ Your answers are in and the site has been updated to match them. The full respon
 
 ## From the account owner (secrets — never send them to me)
 
-7. **Gmail App Password** for `heritagebitesfood@gmail.com`, entered directly in the host's secret settings as `HB_SMTP_PASS`. This is what makes order emails start sending.
+7. *(Removed.)* A Gmail App Password is no longer needed: order email alerts were dropped, because making them work meant setting an SMTP host, a port and an app password on the server. The kitchen is alerted by Web Push instead, which needs no email account at all.
 8. **Yoco live keys** (`sk_live_…` and `pk_live_…`), entered directly in the host's secret settings. This is what turns the test card form into real card payments.
 9. **Hosting decision.** Tell me the host/account (for example Afrihost Cloud/VPS) once it is chosen. I need Node.js 20+, HTTPS and a persistent data folder; there is no database to buy at this stage.
 
@@ -27,17 +27,16 @@ your phone and your domain — I have no way to test them from here.
 
 1. **A place for the site to run, with HTTPS.** This is the first blocker and
    most things wait on it. The GitHub Pages link is a static preview: it can show
-   the menu, but it cannot take an order, send email or wake a phone. Anything
+   the menu, but it cannot take an order or wake a phone. Anything
    with Node.js 20+, HTTPS and a persistent folder works — Render, Railway and
    Fly all have free tiers, and Afrihost Cloud/VPS is fine too. Tell me which one
    you want and I will prepare the exact settings for it.
 
-2. **The email password.** For `heritagebitesfood@gmail.com`: turn on 2-step
-   verification, create an **App Password**, and paste the 16 characters into the
-   host's secret settings as `HB_SMTP_PASS`. Not in this chat, not in an email,
-   not in a document — straight into the host. Also tell me: **who watches that
-   inbox during the Thursday/Friday window**, and whether a second person needs
-   the kitchen alert too (it currently goes to one address).
+2. **A phone or tablet in the kitchen.** No email password is needed any more —
+   that channel was removed. Instead, open `/alerts` on the kitchen device, paste
+   the owner key once, and allow notifications: every order then buzzes that
+   device. Tell me **who holds that device during the Thursday/Friday window**, and
+   whether a second device (the counter tablet) should be enrolled too.
 
 3. **Push keys, created on the host.** Run `npm run push:keys` there once and put
    the two values in as `HB_VAPID_PUBLIC_KEY` and `HB_VAPID_PRIVATE_KEY`. Then
@@ -83,8 +82,8 @@ your inbox and your phone can.
 
 - Load the two photos and publish them.
 - Add drinks and any confirmed add-ons to the menu with their prices.
-- Switch order emails and live card payments on, and run a real R100 test order plus a refund.
+- Switch live card payments on, and run a real R100 test order plus a refund.
 - Enrol your phone for order alerts, place a live test order, and confirm with you
-  that the email, the push and the customer receipt all arrived.
+  that the push and the WhatsApp order both arrived.
 - Publish the exact collection point.
 - Enable the delivery-partner buttons when real store links exist.

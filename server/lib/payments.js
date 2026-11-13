@@ -161,8 +161,8 @@ export function paymentConfig() {
     /** Whether the order code is attached automatically (api mode) or by hand. */
     exactAmount: mode === 'api',
     cashOnCollection: true,
-    /* The business confirmed cash on collection only. */
-    cashOnDelivery: false,
+    /* The kitchen takes cash at the door as well as at the collection point. */
+    cashOnDelivery: true,
   };
 }
 

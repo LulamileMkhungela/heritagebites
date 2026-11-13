@@ -14,6 +14,46 @@ import type { AddressSuggestion } from '../lib/address';
 
 type PayMethod = 'card' | 'cash-on-collection';
 
+type CheckoutCustomer = { name: string; phone: string; email: string; address: string; suburb: string; notes: string };
+
+/**
+ * The one rule for "is this order placeable?".
+ *
+ * Both submit paths ask this — the paid order and the WhatsApp hand-off — so a
+ * basket can never reach the kitchen by one route while the other says it is
+ * incomplete. It returns the first thing missing in the customer's own words,
+ * or `null` when the order is ready.
+ *
+ * Kept outside the component because it is pure: same input, same answer, which
+ * is what makes it testable and what stops the two buttons drifting apart.
+ */
+export function waValidationProblem(
+  customer: CheckoutCustomer,
+  fulfilment: 'collection' | 'delivery',
+  settings: { deliveryAreas?: string[]; minDeliveryOrder?: number } | undefined,
+  addressArea: string | null,
+): string | null {
+  if (!customer.name.trim()) return 'Add your full name first';
+  if (!customer.phone.trim()) return 'Add your cell number first';
+  if (normalisePhone(customer.phone).length < 11) return 'That cell number looks too short — check it';
+  if (customer.email.trim() && !/^\S+@\S+\.\S+$/.test(customer.email.trim())) {
+    return 'That email address does not look right';
+  }
+  if (fulfilment === 'delivery') {
+    if (!customer.suburb.trim()) return 'Choose a delivery area first';
+    if (!customer.address.trim()) return 'Add a delivery address first';
+    /*
+     * The address has to belong to the area the customer picked, and the order
+     * has to clear the delivery minimum. Both are rules the server enforces on
+     * a paid order, so they are checked here too rather than letting WhatsApp
+     * carry an order the kitchen would have to refuse.
+     */
+    const problem = deliveryAddressProblem(customer.address, customer.suburb, settings, addressArea);
+    if (problem?.level === 'error') return problem.message;
+  }
+  return null;
+}
+
 /**
  * Where the tracking token for an order is parked before the customer leaves for
  * Yoco.
@@ -99,40 +139,54 @@ function LiveCheckout() {
   }, []);
 
   /*
-   * Cash is only accepted on collection (the business confirmed cash on
-   * collection, not cash on delivery), so switching to delivery moves the
-   * payment method back to card rather than letting the choice linger.
+   * Card and cash are both accepted on collection *and* on delivery.
+   *
+   * The kitchen takes card either way — there is a Yoco card machine at the
+   * collection point, and the driver brings one to a delivery — so restricting
+   * cash to collection only forced a delivery customer into an online payment
+   * they may not have been able to make. The choice on screen is now simply the
+   * customer's, and it is honoured.
    */
-  const cashAllowed = fulfilment === 'collection' && payments?.cashOnCollection !== false;
-  /*
-   * The method on screen is always one the customer can actually use. Cash is
-   * only for collection, and "pay online" is only offered once the business has
-   * connected Yoco — so with payments off, a collection order simply lands on
-   * cash, and the customer never meets a dead "not switched on yet" card.
-   */
-  const method2: PayMethod =
-    method === 'cash-on-collection' && !cashAllowed
-      ? 'card'
-      : method === 'card' && !online && cashAllowed
-        ? 'cash-on-collection'
-        : method;
-  /*
-   * What the WhatsApp order message says about payment: cash only when the
-   * customer deliberately chose it and it still applies (a delivery order cannot
-   * be cash). Every other WhatsApp order asks Heritage Bites to send the Yoco
-   * payment link — that is how payment is taken in that chat.
-   */
-  const waPayment = method === 'cash-on-collection' && method2 === 'cash-on-collection' ? 'cash' : 'yoco';
+  const method2: PayMethod = method;
 
   /*
-   * The details a WhatsApp order must carry, and whether the customer has
-   * actually given them. The message is built from the same state the form
-   * edits, so what is typed above is what arrives in the chat — but the button
-   * should not sit there looking ready when the message would open half empty,
-   * so the copy below it says which of the two is true.
+   * What the WhatsApp order message says about payment, in the customer's own
+   * terms. Cash orders say cash; card orders ask for the Yoco link, which is how
+   * the kitchen takes a card payment when the order came in through the chat.
    */
-  const detailsComplete = Boolean(customer.name.trim() && customer.phone.trim());
+  const waPayment = method2 === 'cash-on-collection' ? 'cash' : 'yoco';
+
+  /*
+   * The message is built from the same state the form edits, so what is typed
+   * above is exactly what arrives in the chat.
+   */
   const waOrderHref = basketHref(settings?.whatsapp, lines, { fulfilment, customer, payment: waPayment });
+
+  /*
+   * The WhatsApp order is gated on exactly the same rules as the paid one.
+   *
+   * It used to be possible to tap straight through to WhatsApp with an empty
+   * form, which produced a message with no name, no number and — on a delivery —
+   * no address, i.e. an order the kitchen had to interrogate before it could
+   * cook. The button is now disabled with a reason, and the fields it needs are
+   * marked, until the order is actually placeable. Validation lives in one
+   * place so the two buttons can never disagree about what "complete" means.
+   */
+  const waBlocked = waValidationProblem(customer, fulfilment, settings, addressArea);
+  const waReady = waBlocked === null;
+  /* Point at the fields themselves, not only the message under the button. */
+  const waProblems = (() => {
+    const e: Record<string, string> = {};
+    if (!customer.name.trim()) e.name = 'We need a name for the order.';
+    if (!customer.phone.trim()) e.phone = 'We need a number to reach you on.';
+    else if (normalisePhone(customer.phone).length < 11) e.phone = 'Please enter a valid South African cell number.';
+    if (customer.email.trim() && !/^\S+@\S+\.\S+$/.test(customer.email.trim())) e.email = 'That email does not look right.';
+    if (fulfilment === 'delivery') {
+      if (!customer.suburb.trim()) e.suburb = 'Which delivery area are you in?';
+      if (!customer.address.trim()) e.address = 'Where should we deliver?';
+    }
+    return e;
+  })();
 
   /*
    * Nothing on the page persists the form, so a customer who taps through to
@@ -404,24 +458,27 @@ function LiveCheckout() {
                 {([
                   {
                     id: 'card' as PayMethod,
-                    label: 'Pay online',
+                    label: 'Card',
                     /*
-                     * Named for what the customer does, not for the rails under it.
-                     * Yoco takes card and instant EFT on its own page, so promising
-                     * "Visa & Mastercard" here would understate it. Only offered
-                     * when Yoco is actually connected — an option that fails at
-                     * the last step is worse than no option.
+                     * Card is always offered, because the business can always
+                     * take it: on collection there is a Yoco card machine at the
+                     * counter, and on delivery the kitchen brings one. When the
+                     * online checkout is wired up the customer pays before the
+                     * food is cooked instead; that is a difference in *when*, not
+                     * in whether card is accepted.
                      */
-                    blurb: "Card or instant EFT on Yoco's secure page",
-                    show: online,
+                    blurb: online
+                      ? "Card or instant EFT on Yoco's secure page"
+                      : 'Pay by card — machine at collection, or at your door',
+                    show: true,
                   },
                   {
                     id: 'cash-on-collection' as PayMethod,
-                    label: 'Cash on collection',
-                    blurb: 'Pay when you collect',
-                    show: cashAllowed,
+                    label: 'Cash',
+                    blurb: fulfilment === 'delivery' ? 'Pay the driver on delivery' : 'Pay when you collect',
+                    show: true,
                   },
-                ].filter((m) => m.show)).map((m) => (
+                ]).map((m) => (
                   <button
                     key={m.id}
                     type="button"
@@ -480,7 +537,7 @@ function LiveCheckout() {
               <Field label="Cell number" hint="so we can contact you" error={errors.phone}>
                 <input className={inputCls} value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="tel" placeholder="+27 82 000 0000" />
               </Field>
-              <Field label="Email" hint="optional" error={errors.email}>
+              <Field label="Email" hint="optional — for a written reply" error={errors.email}>
                 <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
               </Field>
               {fulfilment === 'delivery' && (
@@ -647,22 +704,36 @@ function LiveCheckout() {
                     : `Place order · ${zar(shown.total)}`}
               </Button>
 
-              <a
-                href={waOrderHref}
-                target="_blank"
-                rel="noreferrer"
-                onClick={rememberWhatsAppDetails}
-                className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-white px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
-              >
-                Complete order on WhatsApp
-              </a>
+              {waReady ? (
+                <a
+                  href={waOrderHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={rememberWhatsAppDetails}
+                  className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-white px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+                >
+                  Complete order on WhatsApp
+                </a>
+              ) : (
+                /*
+                 * A disabled anchor cannot be a link at all: pointing it at
+                 * wa.me would still let a click through, so it renders as a
+                 * button that refuses and says what is missing.
+                 */
+                <button
+                  type="button"
+                  onClick={() => setErrors(waProblems)}
+                  aria-disabled="true"
+                  className="mt-2 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border-2 border-ink/25 bg-ink/5 px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink/40"
+                >
+                  Complete order on WhatsApp
+                </button>
+              )}
 
-              <p className="mt-3 text-xs leading-relaxed text-ink/55">
-                Your order goes to WhatsApp with every detail already filled in —{' '}
-                {detailsComplete
-                  ? 'name, number, order and delivery address if you chose delivery'
-                  : 'add your name and number above and they are carried across'}
-                . Send it and we confirm, then pay by secure Yoco link or cash.
+              <p className={`mt-3 text-xs leading-relaxed ${waReady ? 'text-ink/55' : 'font-medium text-chili'}`}>
+                {waReady
+                  ? 'Your order goes to WhatsApp with every detail already filled in — name, number, the basket, the delivery address if you chose delivery, and your notes. Send it and we confirm, then pay by secure Yoco link or cash.'
+                  : `${waBlocked}. Fill that in above and this button opens WhatsApp with the whole order.`}
               </p>
               <p className="mt-2 text-xs leading-relaxed text-ink/45">
                 By ordering you agree to our{' '}

@@ -29,7 +29,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.NODE_ENV = 'test';
-process.env.HB_ORDER_EMAIL_ENABLED = 'false';
 process.env.HB_PUSH_DRY_RUN = 'true';
 process.env.HB_RATE_LIMIT_MULTIPLIER = '50';
 process.env.HB_CONTACT_FORMSPREE_URL = '';

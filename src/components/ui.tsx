@@ -176,18 +176,45 @@ export function Toast({ message, onDone }: { message: string | null; onDone: () 
   );
 }
 
-/* ------------------------------ Pattern ------------------------------- */
+/* --------------------------- SA motifs -------------------------------- */
 
-/** Setswana/Ndebele-inspired geometric band. Pure SVG, scales cleanly. */
+/*
+ * Heritage graphics, drawn rather than photographed.
+ *
+ * The reference is Dr Esther Mahlangu's Ndebele wall painting: flat, bold
+ * geometry — chevrons, triangles, stepped bands — in saturated earth and sky
+ * colour, held inside crisp black outlines. Her palette is the source of the
+ * four accents below (ochre, clay red, sky blue, leaf green) and they sit on
+ * the brand's existing midnight navy and bone paper, which is what keeps the
+ * page looking like Heritage Bites rather than a pastiche.
+ *
+ * Colour is used structurally, not decoratively: a band anchors a section, a
+ * chevron ticks a list, the pot marks the kitchen. Every motif is decorative,
+ * so each is aria-hidden and points nowhere.
+ */
+
+/** Ndebele earth-and-sky accents, layered on the brand palette. */
+const MHALANGU = {
+  ochre: 'var(--color-ochre)',      /* #b77e23 — the brand gold */
+  red: '#a33b26',                    /* clay red, as on a painted wall */
+  blue: '#1f4e79',                   /* sky blue, darker than the navy ink */
+  green: '#2f6b4f',                  /* leaf green */
+  ink: 'var(--color-ink)',
+};
+
+/**
+ * Ndebele painted band: stepped chevrons in the Mahlangu palette.
+ * Used to close a section or crown a card.
+ */
 export function HeritageBand({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 120 12" className={className} preserveAspectRatio="none" aria-hidden="true">
+    <svg viewBox="0 0 120 12" className={className} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <defs>
-        <pattern id="hb-band" width="24" height="12" patternUnits="userSpaceOnUse">
-          <path d="M0 6 L6 0 L12 6 L6 12 Z" fill="var(--color-ochre)" />
-          <path d="M12 6 L18 0 L24 6 L18 12 Z" fill="var(--color-ink)" opacity="0.85" />
-          <circle cx="6" cy="6" r="1.4" fill="var(--color-ink)" />
-          <circle cx="18" cy="6" r="1.4" fill="var(--color-ink)" />
+        <pattern id="hb-band" width="30" height="12" patternUnits="userSpaceOnUse">
+          <rect width="30" height="12" fill={MHALANGU.ink} />
+          <path d="M0 6 L5 1 L10 6 L5 11 Z" fill={MHALANGU.ochre} />
+          <path d="M10 6 L15 1 L20 6 L15 11 Z" fill={MHALANGU.red} />
+          <path d="M20 6 L25 1 L30 6 L25 11 Z" fill={MHALANGU.blue} />
         </pattern>
       </defs>
       <rect width="120" height="12" fill="url(#hb-band)" />
@@ -195,29 +222,18 @@ export function HeritageBand({ className = '' }: { className?: string }) {
   );
 }
 
-/* --------------------------- SA motifs -------------------------------- */
-
-/*
- * Heritage graphics, drawn rather than photographed.
- *
- * The brand palette is already South African — midnight navy, bone paper and
- * antique gold — but the page surfaces were mostly white cards on cream. These
- * are small, cheap vector motifs that carry the same two heritage references
- * the rest of the site already claims: Ndebele house geometry (the band on the
- * section rules) and the Shweshwe cloth triangle print. They are decorative
- * only, so every one of them is aria-hidden and points nowhere.
+/**
+ * Ndebele triangle print — the wall-painting motif at small scale.
+ * Three rows, each a different accent, all outlined in ink.
  */
-
-/** Shweshwe triangle print: three rows of indigo-and-gold triangles. */
 export function ShweshwePanel({ className = '' }: { className?: string }) {
   return (
     <svg viewBox="0 0 96 24" className={className} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <defs>
         <pattern id="hb-shweshwe" width="16" height="24" patternUnits="userSpaceOnUse">
-          <rect width="16" height="24" fill="none" />
-          <path d="M0 0 L8 8 L16 0 Z" fill="var(--color-ochre)" opacity="0.9" />
-          <path d="M0 8 L8 16 L16 8 Z" fill="var(--color-ink)" opacity="0.75" />
-          <path d="M0 16 L8 24 L16 16 Z" fill="var(--color-ochre)" opacity="0.55" />
+          <path d="M0 0 L8 8 L16 0 Z" fill={MHALANGU.ochre} stroke={MHALANGU.ink} strokeWidth="0.75" />
+          <path d="M0 8 L8 16 L16 8 Z" fill={MHALANGU.blue} stroke={MHALANGU.ink} strokeWidth="0.75" />
+          <path d="M0 16 L8 24 L16 16 Z" fill={MHALANGU.red} stroke={MHALANGU.ink} strokeWidth="0.75" />
         </pattern>
       </defs>
       <rect width="96" height="24" fill="url(#hb-shweshwe)" />
@@ -225,35 +241,38 @@ export function ShweshwePanel({ className = '' }: { className?: string }) {
   );
 }
 
-/** A single Ndebele-style chevron mark, for corner accents and list bullets. */
+/** A pair of Ndebele chevrons: the mark used beside headings and in lists. */
 export function HeritageMark({ className = '' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false">
-      <path d="M2 14 L8 6 L14 14" fill="none" stroke="var(--color-ochre)" strokeWidth="2.5" strokeLinecap="square" />
-      <path d="M9 18 L15 10 L21 18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" opacity="0.55" />
+      <path d="M2 14 L8 6 L14 14" fill="none" stroke={MHALANGU.ochre} strokeWidth="2.5" strokeLinecap="square" />
+      <path d="M9 18 L15 10 L21 18" fill="none" stroke={MHALANGU.blue} strokeWidth="2.5" strokeLinecap="square" />
     </svg>
   );
 }
 
-/** The kitchen's pot mark, used where a section needs a stamp rather than a photo. */
+/** The three-legged pot, in the same flat painted style, with painted flames. */
 export function PotMark({ className = '' }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden="true" focusable="false">
       <path d="M6 13h20l-2 11a4 4 0 0 1-4 3.4H12A4 4 0 0 1 8 24Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M11 9c0-2 2-2 2-4M16 9c0-2 2-2 2-4M21 9c0-2 2-2 2-4" fill="none" stroke="var(--color-ochre)" strokeWidth="2" strokeLinecap="round" />
-      <path d="M3 15h3M26 15h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M11 9c0-2 2-2 2-4M16 9c0-2 2-2 2-4M21 9c0-2 2-2 2-4" fill="none" stroke={MHALANGU.red} strokeWidth="2" strokeLinecap="round" />
+      <path d="M3 15h3M26 15h3" stroke={MHALANGU.green} strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
 
-/** Woven-mat rule: alternating ochre and ink ticks, used to close a section. */
+/**
+ * Ndebele stepped rule: alternating colour, ink-outlined blocks.
+ * The section-closing device, where a plain hairline used to be.
+ */
 export function WovenRule({ className = '' }: { className?: string }) {
   return (
     <svg viewBox="0 0 120 8" className={className} preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <defs>
-        <pattern id="hb-woven" width="12" height="8" patternUnits="userSpaceOnUse">
-          <rect x="0" y="2" width="6" height="4" fill="var(--color-ochre)" opacity="0.85" />
-          <rect x="6" y="4" width="6" height="4" fill="currentColor" opacity="0.35" />
+        <pattern id="hb-woven" width="16" height="8" patternUnits="userSpaceOnUse">
+          <rect x="0" y="2" width="8" height="4" fill={MHALANGU.ochre} stroke={MHALANGU.ink} strokeWidth=".5" />
+          <rect x="8" y="4" width="8" height="4" fill={MHALANGU.blue} stroke={MHALANGU.ink} strokeWidth=".5" />
         </pattern>
       </defs>
       <rect width="120" height="8" fill="url(#hb-woven)" />

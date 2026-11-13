@@ -15,7 +15,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.NODE_ENV = 'test';
-process.env.HB_ORDER_EMAIL_ENABLED = 'false';
 
 /*
  * Web Push is configured for the whole integration run so its routes can be
@@ -58,7 +57,6 @@ const TMP = mkdtempSync(join(tmpdir(), 'hb-test-'));
 process.env.HB_DATA_DIR = TMP;
 
 const { app } = await import('./index.js');
-const { processNextOrderAlert } = await import('./lib/order-notifications.js');
 
 let server;
 let base;
@@ -211,7 +209,7 @@ describe('catalogue + search', () => {
     assert.equal(c.payments.mode, 'link');
     assert.equal(c.payments.exactAmount, false, 'a payment link cannot fix the amount');
     assert.equal(c.payments.cashOnCollection, true);
-    assert.equal(c.payments.cashOnDelivery, false);
+    assert.equal(c.payments.cashOnDelivery, true, 'the kitchen brings a card machine and takes cash');
     assert.equal(c.contact.inboxConfigured, false, 'the endpoint is disabled in tests');
   });
 
@@ -423,7 +421,6 @@ describe('cross-origin API access', () => {
         HB_DATA_DIR: dir,
         HB_ALLOWED_ORIGINS: 'https://lulamilemkhungela.github.io/',
         HB_CONTACT_FORMSPREE_URL: '',
-        HB_ORDER_EMAIL_ENABLED: 'false',
       },
       stdio: 'ignore',
     });
@@ -491,65 +488,9 @@ describe('checkout', () => {
     assert.equal(typeof body.order.serviceWindow.isPreOrder, 'boolean', 'every order carries a service window');
     assert.ok(body.order.serviceWindow.label);
 
-    /* Nothing is promised to the customer while SMTP is unconfigured. */
-    assert.equal(body.order.receiptEmail, null, 'no receipt is promised without SMTP');
+    /* No email receipt is promised: that channel is gone, not merely unconfigured. */
+    assert.equal(body.order.receiptEmail, null);
     assert.equal(body.order.receiptState, 'none');
-
-    const jobs = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'));
-    const alert = jobs.find((job) => job.orderCode === body.order.code && (job.channel ?? 'owner-email') === 'owner-email');
-    assert.ok(alert, 'a saved order should enqueue a background owner email alert');
-    assert.equal(alert.status, 'waiting_config', 'missing SMTP credentials must not block checkout');
-    assert.equal(alert.attempts, 0);
-
-    const sentEmails = [];
-    await processNextOrderAlert({
-      sendMail: async (email) => {
-        sentEmails.push(email);
-        return { messageId: 'mock-message-id' };
-      },
-    }, { from: 'alerts@example.co.za', to: 'heritagebitesfood@gmail.com' });
-    assert.equal(sentEmails.length, 1);
-    assert.equal(sentEmails[0].to, 'heritagebitesfood@gmail.com');
-    assert.match(sentEmails[0].text, new RegExp(body.order.code));
-    assert.match(sentEmails[0].text, /Chicken Wings Plate/);
-    assert.doesNotMatch(sentEmails[0].text, new RegExp(body.trackingToken));
-
-    const sentJob = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'))
-      .find((job) => job.orderCode === body.order.code && (job.channel ?? 'owner-email') === 'owner-email');
-    assert.equal(sentJob.status, 'sent');
-    assert.equal(sentJob.messageId, 'mock-message-id');
-  });
-
-  test('with SMTP configured the customer receipt is queued and the address stays masked', async () => {
-    Object.assign(process.env, {
-      HB_ORDER_EMAIL_ENABLED: 'true',
-      HB_SMTP_HOST: 'smtp.example.com',
-      HB_SMTP_PORT: '465',
-      HB_SMTP_USER: 'alerts@example.com',
-      HB_SMTP_PASS: 'app-password',
-      HB_SMTP_FROM: 'alerts@example.com',
-      HB_ORDER_ALERT_EMAIL: 'kitchen@example.com',
-    });
-
-    try {
-      const { res, body } = await placeOrder();
-      assert.equal(res.status, 201);
-      assert.equal(body.order.receiptState, 'queued', 'the receipt job exists as soon as the order lands');
-      assert.equal(body.order.receiptEmail, 'i*@e.co.za', 'the page shows a masked address');
-      assert.doesNotMatch(JSON.stringify(body.order), /"i@e\.co\.za"/, 'the full address is never returned');
-
-      const jobs = JSON.parse(readFileSync(join(TMP, 'orderNotificationJobs.json'), 'utf8'))
-        .filter((job) => job.orderCode === body.order.code);
-      assert.deepEqual(jobs.map((job) => job.channel).sort(), ['customer-email', 'owner-email']);
-      const receipt = jobs.find((job) => job.channel === 'customer-email');
-      assert.ok(receipt.trackingToken, 'the receipt holds the one-time link until it is sent');
-      assert.doesNotMatch(JSON.stringify(body.order), new RegExp(receipt.trackingToken), 'the token never appears in the order payload');
-    } finally {
-      for (const key of ['HB_SMTP_HOST', 'HB_SMTP_PORT', 'HB_SMTP_USER', 'HB_SMTP_PASS', 'HB_SMTP_FROM', 'HB_ORDER_ALERT_EMAIL']) {
-        delete process.env[key];
-      }
-      process.env.HB_ORDER_EMAIL_ENABLED = 'false';
-    }
   });
 
   test('card details posted to this API are refused, and no order is created', async () => {
@@ -702,7 +643,7 @@ describe('checkout', () => {
     assert.match(body.errors[0], /collection or delivery/i);
   });
 
-  test('only card and cash on collection are accepted payment methods', async () => {
+  test('card and cash are both accepted, on collection and on delivery', async () => {
     const tap = await placeOrder({ payment: { method: 'yoco-tap' } });
     assert.equal(tap.res.status, 422);
     assert.match(tap.body.errors[0], /unknown payment method/i);
@@ -710,12 +651,23 @@ describe('checkout', () => {
     const eft = await placeOrder({ payment: { method: 'eft' } });
     assert.equal(eft.res.status, 422);
 
+    /*
+     * The kitchen carries a card machine and a cash float, so a delivered order
+     * can be paid either way. Cash on delivery used to be refused; it is not.
+     */
     const cashOnDelivery = await placeOrder({
       fulfilment: 'delivery',
       customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Sandton Drive', suburb: 'Sandton' },
-      payment: { method: 'cash-on-delivery' },
+      payment: { method: 'cash-on-collection' },
     });
-    assert.equal(cashOnDelivery.res.status, 422, 'cash on delivery was not confirmed by the business');
+    assert.equal(cashOnDelivery.res.status, 201, 'cash is accepted at the door');
+
+    const cardOnCollection = await placeOrder({
+      fulfilment: 'collection',
+      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999' },
+      payment: { method: 'cash-on-collection' },
+    });
+    assert.equal(cardOnCollection.res.status, 201);
   });
 
   test('delivery adds the flat fee in Rosebank and Sandton and enforces the minimum', async () => {
@@ -784,14 +736,20 @@ describe('checkout', () => {
     assert.equal(body.order.deliveryArea, 'Rosebank', 'the typed address decides where the food goes');
   });
 
-  test('cash on collection cannot be used for a delivery order', async () => {
+  test('cash is accepted for a delivery order too', async () => {
+    /*
+     * The driver carries a card machine and takes cash, so the method is a real
+     * choice rather than a constraint. This used to be refused outright.
+     */
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
       customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
       payment: { method: 'cash-on-collection' },
     });
-    assert.equal(res.status, 422);
-    assert.match(body.errors[0], /cash is only accepted on collection/i);
+    assert.equal(res.status, 201);
+    assert.equal(body.order.payment.reference, 'CASH');
+    /* WINGS is a contemporary plate at R130, plus the R55 run. */
+    assert.equal(body.order.totals.total, 185, 'plate plus the delivery fee');
   });
 
   test('cash on collection still works', async () => {

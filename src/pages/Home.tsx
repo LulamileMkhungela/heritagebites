@@ -275,8 +275,8 @@ function PlateMenuCTA() {
         <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">One protein, one starch, one side</h2>
         <p className="mt-3 max-w-2xl text-ink/65">
           Choose from the traditional kitchen at {zar(traditional?.price ?? 100)} a plate, or the contemporary kitchen at{' '}
-          {zar(contemporary?.price ?? 130)}. The price is the price — starch and vegetable side are included, and so is
-          delivery.
+          {zar(contemporary?.price ?? 130)}. Starch and vegetable side are included; delivery is the only extra, and it is
+          priced at checkout.
         </p>
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           {catalog.plateMenus.map((plate) => (
@@ -364,9 +364,16 @@ function ServiceRules() {
     ['Service days', settings.hours.filter((h) => !h.closed).map((h) => h.label).join(' and ')],
     ['Service window', `${settings.serviceWindow.open}–${settings.serviceWindow.close}`],
     ['Delivery areas', settings.deliveryAreas.join(' and ')],
-    ['Minimum order', `${zar(settings.minDeliveryOrder)} for plated meals`],
-    ['Delivery fee', 'Included in the plate price'],
-    ['Collection', settings.collectionPoint],
+    ['Minimum order', `${zar(settings.minDeliveryOrder)} for delivery`],
+    [
+      'Delivery fee',
+      settings.deliveryIncluded
+        ? 'Included in the plate price'
+        : settings.freeDeliveryAbove > 0
+          ? `${zar(settings.deliveryFlat)}, free over ${zar(settings.freeDeliveryAbove)}`
+          : zar(settings.deliveryFlat),
+    ],
+    ['Collection', 'Price excludes delivery — confirm the point on WhatsApp'],
   ];
 
   return (
