@@ -204,7 +204,7 @@ console.log(`
 ✔ Static preview built into ${dir}/
 
   Site base   ${base} (relative — works at any mount point)
-  Preview     ordering, payments, loyalty lookup and messages are off
+  Static      no server: orders go to WhatsApp, loyalty lookup is off
   Snapshot    ${dir}/api/catalog.json
   Fallbacks   ${dir}/404.html and 404.html at the repository root
   Publish     commit ${dir}/ and push.
