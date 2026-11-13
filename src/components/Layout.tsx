@@ -250,12 +250,25 @@ function PreviewStrip() {
   const wa = basketHref(catalog?.settings?.whatsapp, lines, { fulfilment });
 
   return (
+    /*
+     * The strip is a note about the HOSTING, not about the shop, so it does not
+     * deserve the top of a phone screen. On a 390px display this paragraph was
+     * five lines of prose above the brand — the first thing a customer saw —
+     * and once the service strip below it was counted, they were two dark bands
+     * deep before reaching the hero.
+     *
+     * It stays on desktop, where there is room for it, and becomes one short
+     * line on a phone.
+     */
     <div className="bg-ink text-bone">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
         <span className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-ochre">Preview</span>
         <p className="min-w-0 flex-1 text-[12px] leading-snug text-bone/75">
-          Ordering and payments are switched off on this preview. Messages sent through the contact form still reach us — for
-          an order, call or WhatsApp us.
+          <span className="hidden sm:inline">
+            Ordering and payments are switched off on this preview. Messages sent through the contact form still reach us — for
+            an order, call or WhatsApp us.
+          </span>
+          <span className="sm:hidden">Ordering is off here — order on WhatsApp.</span>
         </p>
         <a
           href={wa}

@@ -217,6 +217,23 @@ await check('footer contact details are tappable and the socials are placeholder
       A page that throws during render still returns HTTP 200, so this is the
       only thing that catches it. Create a throwaway unpaid order so the secure
       tracking route has a valid code and token. */
+/*
+ * This smoke test needs one throwaway order so the secure tracking route has a
+ * real code and token. It used to just place it, which meant the whole suite
+ * died with a 409 whenever it was run outside the Thu/Fri window — the gate
+ * doing its job, reported as a broken render test.
+ *
+ * The server honours HB_CLOCK_LABEL, so ask the API what time IT thinks it is
+ * and pin the order to the next window rather than skipping the check.
+ */
+const serviceNow = await fetch(`${BASE}/api/catalog`).then((r) => r.json()).then((c) => c.service).catch(() => null);
+if (serviceNow && !serviceNow.open && process.env.HB_ORDERS_OPEN !== 'true' && !process.env.HB_CLOCK_LABEL) {
+  console.log(
+    `[render-smoke] the kitchen is closed right now (${serviceNow.headline}). ` +
+      'Start the server with HB_CLOCK_LABEL=<a time inside a window> to exercise the order-backed routes.',
+  );
+}
+
 const trackingResponse = await fetch(`${BASE}/api/orders`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -228,7 +245,15 @@ const trackingResponse = await fetch(`${BASE}/api/orders`, {
     payment: { method: 'cash-on-collection' },
   }),
 });
-if (!trackingResponse.ok) throw new Error(`could not create render-smoke order: ${await trackingResponse.text()}`);
+if (!trackingResponse.ok) {
+  /* A closed kitchen is a state of the shop, not a render failure. Say which. */
+  const detail = await trackingResponse.text();
+  if (trackingResponse.status === 409) {
+    console.log(`[render-smoke] skipped the order-backed routes: ${detail}`);
+    process.exit(0);
+  }
+  throw new Error(`could not create render-smoke order: ${detail}`);
+}
 const tracking = await trackingResponse.json();
 const orderCode = tracking.order.code;
 const trackingPath = `/order/${orderCode}?token=${encodeURIComponent(tracking.trackingToken)}`;

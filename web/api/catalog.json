@@ -20,12 +20,12 @@
       "id": "heritage-pots",
       "name": "Heritage Pots",
       "tagline": "Slow-cooked the way grandmothers taught us",
-      "blurb": "Samp, beans and grains \u2014 the pots that carry memory.",
+      "blurb": "Samp, beans and grains — the pots that carry memory.",
       "accent": "chili",
       "items": [
         {
           "id": "archive-isistambu",
-          "name": "Isistambu \u2014 Samp & Beans",
+          "name": "Isistambu — Samp & Beans",
           "price": 100,
           "image": "/img/samp-beans.jpg",
           "description": "Samp and sugar beans slow-cooked until creamy, finished with a little butter.",
@@ -53,7 +53,7 @@
       "id": "kasi-fast-food",
       "name": "Kasi Fast Food",
       "tagline": "Quick, loaded, properly filling",
-      "blurb": "Kota, russians, chips and magwinya \u2014 South African street classics.",
+      "blurb": "Kota, russians, chips and magwinya — South African street classics.",
       "accent": "ochre",
       "items": [
         {
@@ -111,7 +111,7 @@
       "id": "sides-relishes",
       "name": "Sides & Relishes",
       "tagline": "The things that make the plate",
-      "blurb": "Chakalaka, atchaar and stywe pap \u2014 the supporting cast that steals the show.",
+      "blurb": "Chakalaka, atchaar and stywe pap — the supporting cast that steals the show.",
       "accent": "sky",
       "items": [
         {
@@ -544,7 +544,7 @@
       "category": "contemporary",
       "price": 130,
       "image": "/img/plate-wings.jpg",
-      "description": "Chicken wings basted to order \u2014 honey soy or chilli sriracha \u2014 with one starch and one vegetable side.",
+      "description": "Chicken wings basted to order — honey soy or chilli sriracha — with one starch and one vegetable side.",
       "story": "",
       "tags": [
         "chicken",
@@ -839,7 +839,7 @@
       "id": "traditional",
       "name": "Traditional Plate",
       "price": 100,
-      "blurb": "One protein, one starch and one vegetable side, from the traditional kitchen. Delivery is included in the plate price.",
+      "blurb": "One protein, one starch and one vegetable side, from the traditional kitchen.",
       "image": "/img/plate-mogodu.jpg",
       "groups": [
         {
@@ -937,7 +937,7 @@
       "id": "contemporary",
       "name": "Contemporary Plate",
       "price": 130,
-      "blurb": "One protein, one starch and one vegetable side, from the contemporary kitchen. Delivery is included in the plate price.",
+      "blurb": "One protein, one starch and one vegetable side, from the contemporary kitchen.",
       "image": "/img/plate-short-rib.jpg",
       "groups": [
         {
@@ -1058,7 +1058,7 @@
         },
         {
           "heading": "Address suggestions",
-          "body": "When you type a delivery address at checkout, the text you have typed so far is sent to the OpenStreetMap address service (photon.komoot.io) to suggest matching addresses. Only that address text is sent \u2014 never your name, phone number, email address or payment details \u2014 and we do not store the suggestions. You can ignore the suggestions and type your address in full; nothing else changes."
+          "body": "When you type a delivery address at checkout, the text you have typed so far is sent to the OpenStreetMap address service (photon.komoot.io) to suggest matching addresses. Only that address text is sent — never your name, phone number, email address or payment details — and we do not store the suggestions. You can ignore the suggestions and type your address in full; nothing else changes."
         },
         {
           "heading": "Your rights",
@@ -1110,7 +1110,7 @@
         },
         {
           "heading": "Minimum order and delivery fee",
-          "body": "The minimum order is R100 for plated meals. Delivery is included in the plate price \u2014 Traditional plates are R100 and Contemporary plates are R130 \u2014 so no separate delivery fee is added at checkout."
+          "body": "The minimum order is R100 for plated meals. Collect and you pay the plate price exactly — R100 traditional, R130 contemporary. Delivery adds R55 for the Rosebank and Sandton run, and is free on orders of R300 or more."
         },
         {
           "heading": "Collection",
@@ -1181,7 +1181,7 @@
       "Sandton"
     ],
     "collectionArea": "Rosebank & Sandton",
-    "collectionPoint": "Standard Bank, Rosebank and Sandton \u2014 exact collection point to be confirmed",
+    "collectionPoint": "Standard Bank, Rosebank and Sandton — exact collection point to be confirmed",
     "collectionNote": "We will confirm the exact collection point by WhatsApp when your order is placed.",
     "serviceWindow": {
       "open": "12:00",
@@ -1251,17 +1251,18 @@
     ]
   },
   "service": {
-    "open": true,
+    "open": false,
+    "orderingClosed": true,
     "isServiceDay": true,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Thursday",
-    "timeLabel": "12:37",
-    "windowLabel": "12:00\u201313:30",
-    "todayLabel": "Thursday 12:00\u201313:30",
-    "nextWindowLabel": "Friday 12:00\u201313:30",
-    "headline": "Serving now",
-    "message": "We are serving now \u2014 delivery and collection until 13:30.",
-    "shortMessage": "Serving now until 13:30.",
+    "dayLabel": "Friday",
+    "timeLabel": "16:24",
+    "windowLabel": "12:00–13:30",
+    "todayLabel": "Friday 12:00–13:30",
+    "nextWindowLabel": "Thursday 12:00–13:30",
+    "headline": "Today's window has closed",
+    "message": "Today's 12:00–13:30 window has closed. The next one is Thursday 12:00–13:30 — ordering opens again shortly before it. If you need food today, message us and we will tell you whether the kitchen can still help.",
+    "shortMessage": "Next cooking day: Thursday 12:00–13:30. Ordering opens again shortly before it.",
     "serviceDays": [
       "Thursday",
       "Friday"
@@ -1279,7 +1280,7 @@
     "inboxConfigured": false
   },
   "notifications": {
-    "push": true
+    "push": false
   },
-  "today": 4
+  "today": 5
 }
