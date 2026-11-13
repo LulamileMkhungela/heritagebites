@@ -118,6 +118,13 @@ export function serviceStatus(settings, now = new Date()) {
    * warm without promising a date the business has not given us.
    */
   const isServiceDay = Boolean(today);
+  /*
+   * The one closed state that must stop taking orders outright: we are on a
+   * cooking day and the window has already gone by. Before the pots go on
+   * (early morning) and on a rest day the site deliberately takes pre-orders
+   * for the next window and says so, so neither of those is `orderingClosed`.
+   */
+  const orderingClosed = Boolean(today && at.minutes > today.closeMinutes);
   let headline;
   let message;
   let shortMessage;
@@ -129,27 +136,36 @@ export function serviceStatus(settings, now = new Date()) {
   } else if (isServiceDay && at.minutes < today.openMinutes) {
     headline = 'Not cooking yet';
     message = `The pots go on at ${today.open}. Place your order now and it goes in first — today's window is ${today.open}–${today.close}.`;
-    shortMessage = `Pots go on at ${today.open} today — order now and you are first in the queue.`;
+    shortMessage = `Pots go on at ${today.open} — order now and you are first in the queue.`;
   } else if (isServiceDay) {
     headline = "Today's window has closed";
     message = nextWindowLabel
-      ? `Today's ${today.open}–${today.close} window has closed, but the next one is ${nextWindowLabel}. Place your order now and it will be cooked then.`
+      ? `Today's ${today.open}–${today.close} window has closed. The next one is ${nextWindowLabel} — ordering opens again shortly before it. If you need food today, message us and we will tell you whether the kitchen can still help.`
       : `Today's ${today.open}–${today.close} window has closed. Please contact us on WhatsApp to arrange an order.`;
-    shortMessage = `Today's window has closed${nextWindowLabel ? ` — next up ${nextWindowLabel.replace(' 12:00–13:30', '')}` : ''}.`;
+    /*
+     * The strip prints `headline` and then this line, so this one carries only
+     * what the headline does not already say. It used to open with "Today's
+     * window has closed" directly beside a headline reading exactly that.
+     */
+    shortMessage = nextWindowLabel
+      ? `Next cooking day: ${nextWindowLabel}. Ordering opens again shortly before it.`
+      : 'Please message us to arrange the next one.';
   } else {
     headline = `${at.dayLabel} is a rest day`;
     message = [
       `The pots are resting today — and honestly, so are we.`,
       dayList ? `We cook on ${dayList}, ${window},` : 'We cook on selected days,',
       `and we are working towards being open every day.`,
-      nextWindowLabel ? `Your order will go in first for ${nextWindowLabel}.` : '',
+      nextWindowLabel ? `We are back ${nextWindowLabel}.` : '',
     ].filter(Boolean).join(' ');
     const nextDay = next ? next.dayLabel : null;
-    shortMessage = `Rest day — we cook ${dayList}, ${window}. ${nextDay ? `Your order goes in first on ${nextDay}.` : 'Please message us to arrange a day.'}`;
+    shortMessage = `We cook ${dayList}, ${window}. ${nextDay ? `Your order goes in first on ${nextDay}.` : 'Please message us to arrange a day.'}`;
   }
 
   return {
     open,
+    /** True only once today's window has passed — ordering is refused. */
+    orderingClosed,
     isServiceDay,
     timeZone: SERVICE_TZ,
     dayLabel: at.dayLabel,

@@ -29,6 +29,12 @@ process.env.HB_VAPID_SUBJECT = 'mailto:kitchen@example.com';
 process.env.HB_OWNER_PUSH_KEY = 'integration-owner-key-1234';
 /* Nothing in the suite may reach a real push service. */
 process.env.HB_PUSH_DRY_RUN = 'true';
+/*
+ * The checkout refuses orders outside the Thu/Fri 12:00-13:30 window. CI runs at
+ * all hours, so the suite opens the shop explicitly rather than pretending to be
+ * Thursday lunchtime — the closed path has its own test which clears this.
+ */
+process.env.HB_ORDERS_OPEN = 'true';
 // Keep the contact endpoint offline: the Formspree call is exercised by its own
 // unit test with a stub, never against the real inbox from a test run.
 process.env.HB_CONTACT_FORMSPREE_URL = '';
@@ -463,6 +469,72 @@ describe('cross-origin API access', () => {
     } finally {
       child.kill();
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('the service window gate', () => {
+  /*
+   * The gate exists because the site used to advertise "You can still place the
+   * order now" after the window closed, and then take the order. This clears the
+   * test override so the closed path is exercised for real, and restores it
+   * afterwards so the rest of the suite can still order.
+   */
+  test('an order outside the service window is refused and points at WhatsApp', async () => {
+    const previous = process.env.HB_ORDERS_OPEN;
+    delete process.env.HB_ORDERS_OPEN;
+    try {
+      /*
+       * 2026-11-13 is a Friday and the kitchen serves 12:00–13:30, so 15:09 is
+       * exactly the moment the owner reported the bug at.
+       */
+      process.env.HB_CLOCK_LABEL = '2026-11-13T15:09:00+02:00';
+      try {
+        const { res, body } = await placeOrder();
+        assert.equal(res.status, 409, 'a window that has gone by must not accept an order');
+        assert.equal(body.closed, true);
+        assert.match(body.errors[0], /WhatsApp/i, 'the refusal must offer a way through');
+      } finally {
+        delete process.env.HB_CLOCK_LABEL;
+      }
+    } finally {
+      if (previous === undefined) delete process.env.HB_ORDERS_OPEN;
+      else process.env.HB_ORDERS_OPEN = previous;
+    }
+  });
+
+  /*
+   * The narrow reading matters. Before the pots go on the site deliberately
+   * takes the order early — every line of copy says so — so only a window that
+   * has already passed may be refused.
+   */
+  test('an early-morning pre-order is still taken', async () => {
+    const previous = process.env.HB_ORDERS_OPEN;
+    delete process.env.HB_ORDERS_OPEN;
+    try {
+      process.env.HB_CLOCK_LABEL = '2026-11-13T08:00:00+02:00';
+      try {
+        const { res } = await placeOrder();
+        assert.equal(res.status, 201, 'a pre-order before opening must not be refused');
+      } finally {
+        delete process.env.HB_CLOCK_LABEL;
+      }
+    } finally {
+      if (previous === undefined) delete process.env.HB_ORDERS_OPEN;
+      else process.env.HB_ORDERS_OPEN = previous;
+    }
+  });
+
+  test('the same order is accepted once the window is open', async () => {
+    /* The override stands in for "it is Thursday lunchtime". */
+    const previous = process.env.HB_ORDERS_OPEN;
+    process.env.HB_ORDERS_OPEN = 'true';
+    try {
+      const { res } = await placeOrder();
+      assert.equal(res.status, 201);
+    } finally {
+      if (previous === undefined) delete process.env.HB_ORDERS_OPEN;
+      else process.env.HB_ORDERS_OPEN = previous;
     }
   });
 });

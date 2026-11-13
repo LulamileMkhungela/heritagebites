@@ -78,7 +78,10 @@ describe('service window', () => {
     // that daily trading is the plan — without inventing a launch date.
     assert.match(wednesday.message, /pots are resting/i);
     assert.match(wednesday.message, /Thursdays and Fridays/);
-    assert.match(wednesday.shortMessage, /^Rest day/, 'the strip gets a one-liner without the full speech');
+    // The strip prints the headline first, so the one-liner must add to it
+    // rather than repeat the word "Rest day" back to the reader.
+    assert.match(wednesday.shortMessage, /^We cook/, 'the strip gets a one-liner without the full speech');
+    assert.doesNotMatch(wednesday.shortMessage, /^Rest day/);
     assert.match(wednesday.message, /every day/i);
     assert.match(wednesday.message, /Thursday 12:00–13:30/);
     assert.doesNotMatch(wednesday.message, /closed right now/i);

@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { zar } from '../lib/format';
 import { useOverlay } from '../lib/useOverlay';
 import { asset } from '../lib/assets';
-import { HeritageBand } from './ui';
+import { HeritageBand, WhatsAppIcon } from './ui';
 import { BasketBar } from './BasketBar';
 import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 
@@ -581,6 +581,16 @@ function CartDrawerPanel() {
 
   const subtotal = lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
   const settings = catalog?.settings;
+  /*
+   * After the window has passed the drawer must not offer a checkout that will
+   * refuse the basket. It offers the conversation instead, with the same basket
+   * in the message.
+   */
+  const shut = Boolean(catalog?.service?.orderingClosed);
+  const askHref = basketHref(settings?.whatsapp, lines, {
+    fulfilment,
+    ...(shut ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
+  });
   // Collection is the plate price; delivery adds one flat fee at checkout, so
   // the drawer shows the plates and only warns about the minimum order.
   const belowMinimum = fulfilment === 'delivery' && subtotal < (settings?.minDeliveryOrder ?? 100);
@@ -685,13 +695,26 @@ function CartDrawerPanel() {
                     : `Delivery ${zar(settings?.deliveryFlat ?? 0)} is added at checkout.`
                   : 'Collection — nothing is added at checkout.'}
               </p>
-              <Link
-                to="/checkout"
-                onClick={() => setOpen(false)}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] transition-colors hover:bg-ochre-deep hover:text-bone"
-              >
-                Checkout
-              </Link>
+              {shut ? (
+                <a
+                  href={askHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setOpen(false)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] transition-colors hover:bg-ochre-deep hover:text-bone"
+                >
+                  <WhatsAppIcon className="h-4 w-4" />
+                  Ask if we can cook it
+                </a>
+              ) : (
+                <Link
+                  to="/checkout"
+                  onClick={() => setOpen(false)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] transition-colors hover:bg-ochre-deep hover:text-bone"
+                >
+                  Checkout
+                </Link>
+              )}
               {/*
                 This used to open WhatsApp with the basket alone — no name, no
                 number, no address — which is a message the kitchen has to
@@ -701,6 +724,9 @@ function CartDrawerPanel() {
                 The drawer is also shown on the preview build, where the
                 checkout is a preview, so the link there stays a WhatsApp order.
               */}
+              {/* When the window has closed this would be a second, weaker copy
+                  of the same WhatsApp link directly above it. */}
+              {!shut && (
               <Link
                 to="/checkout"
                 onClick={() => setOpen(false)}
@@ -708,6 +734,7 @@ function CartDrawerPanel() {
               >
                 Add your details to order on WhatsApp
               </Link>
+              )}
               {/*
                 The way out. A basket that can only be emptied one line at a time
                 is a trap once someone has tried several plates, and the drawer is

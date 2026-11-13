@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cartCount, cartSubtotal, useCart } from '../store/cart';
 import { useCatalog } from '../store/catalog';
-import { HeritageBand } from './ui';
+import { HeritageBand, WhatsAppIcon } from './ui';
 import { zar } from '../lib/format';
+import { basketHref } from '../lib/whatsapp';
 
 /**
  * The running basket total, pinned to the bottom of the screen.
@@ -33,6 +34,14 @@ export function BasketBar() {
 
   const count = cartCount(lines);
   const subtotal = cartSubtotal(lines);
+
+  /*
+   * Once today's window has gone by there is no checkout to send this basket
+   * to, so the bar's one action becomes the only one that still works: asking
+   * the kitchen on WhatsApp whether it can cook the order anyway. It carries
+   * the basket, so the customer still does not have to retype anything.
+   */
+  const shut = Boolean(catalog?.service?.orderingClosed);
 
   /*
    * Adding no longer opens the drawer, so the bar is the only feedback that the
@@ -124,15 +133,31 @@ export function BasketBar() {
           >
             Basket
           </button>
-          <Link
-            to="/checkout"
-            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-ochre px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
-          >
-            Checkout
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m9 6 6 6-6 6" />
-            </svg>
-          </Link>
+          {shut ? (
+            <a
+              href={basketHref(settings?.whatsapp, lines, {
+                fulfilment,
+                intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?',
+              })}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-ochre px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
+            >
+              <WhatsAppIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Can you cook it?</span>
+              <span className="sm:hidden">Ask</span>
+            </a>
+          ) : (
+            <Link
+              to="/checkout"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-ochre px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
+            >
+              Checkout
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+            </Link>
+          )}
         </div>
       </div>
     </>

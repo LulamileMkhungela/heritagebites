@@ -164,10 +164,32 @@ function LiveCheckout() {
   const waPayment = method2 === 'cash-on-collection' ? 'cash' : 'yoco';
 
   /*
+   * Is the kitchen taking automated orders right now? The window comes from the
+   * server clock, not the browser's, so a laptop set to the wrong time cannot
+   * open the shop.
+   *
+   * Only *today's window having gone by* stops the shop. Early in the morning
+   * and on a rest day the site takes pre-orders for the next window on purpose
+   * — the copy above promises exactly that — so those are not `closed`.
+   */
+  const closed = Boolean(service?.orderingClosed);
+
+
+  /*
    * The message is built from the same state the form edits, so what is typed
    * above is exactly what arrives in the chat.
    */
-  const waOrderHref = basketHref(settings?.whatsapp, lines, { fulfilment, customer, payment: waPayment });
+  /*
+   * While the window is closed the same basket link has to stop being an order
+   * and become a question. The message body still carries the basket, so the
+   * kitchen can answer without asking the customer to repeat themselves.
+   */
+  const waOrderHref = basketHref(settings?.whatsapp, lines, {
+    fulfilment,
+    customer,
+    payment: waPayment,
+    ...(closed ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
+  });
 
   /*
    * The WhatsApp order is gated on exactly the same rules as the paid one.
@@ -408,13 +430,32 @@ function LiveCheckout() {
       </div>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Almost there</h1>
 
-      {service && !service.open && (
+      {/*
+        Outside the service window the checkout stops taking orders. It used to
+        say "you can still place the order now", which contradicted the banner
+        directly above it and left the kitchen taking orders at 15:00 for a
+        window that had closed at 13:30.
+
+        The way out is a person, not a dead end: the kitchen may still cook for
+        you, but that is a conversation. The button carries the basket, so the
+        customer does not have to retype what the site already knows.
+      */}
+      {closed && service && (
         <div className="mt-4 rounded-2xl border-2 border-ochre bg-ochre/10 p-4">
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">{service.headline}</p>
           <p className="mt-1 text-[13px] font-medium text-ink">{service.message}</p>
-          <p className="mt-1 text-[12px] text-ink/60">
-            You can still place the order now — we just cannot cook or deliver it until then.
+          <p className="mt-2 text-[13px] leading-relaxed text-ink/70">
+            We have stopped taking orders for today. If you need food sooner, message us — the kitchen will tell you whether
+            it can prepare your order anyway.
           </p>
+          <a
+            href={waOrderHref}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-bold uppercase tracking-wide text-bone hover:bg-ink-2"
+          >
+            Ask on WhatsApp if we can cook it
+          </a>
         </div>
       )}
 
@@ -722,13 +763,15 @@ function LiveCheckout() {
                 size="lg"
                 block
                 className="mt-4"
-                disabled={state === 'paying' || (method2 === 'card' && !online)}
+                disabled={state === 'paying' || (method2 === 'card' && !online) || closed}
               >
-                {state === 'paying'
-                  ? 'Saving your order…'
-                  : method2 === 'card' && !online
-                    ? 'Online payment coming soon'
-                    : `Place order · ${zar(shown.total)}`}
+                {closed
+                  ? 'Ordering closed for today'
+                  : state === 'paying'
+                    ? 'Saving your order…'
+                    : method2 === 'card' && !online
+                      ? 'Online payment coming soon'
+                      : `Place order · ${zar(shown.total)}`}
               </Button>
 
               {waReady ? (
@@ -739,7 +782,7 @@ function LiveCheckout() {
                   onClick={rememberWhatsAppDetails}
                   className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-white px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
                 >
-                  Complete order on WhatsApp
+                  {closed ? 'Ask on WhatsApp if we can cook it' : 'Complete order on WhatsApp'}
                 </a>
               ) : (
                 /*
@@ -758,9 +801,11 @@ function LiveCheckout() {
               )}
 
               <p className={`mt-3 text-xs leading-relaxed ${waReady ? 'text-ink/55' : 'font-medium text-chili'}`}>
-                {waReady
-                  ? `Your order goes to WhatsApp with every detail already filled in — name, number, the basket, ${fulfilment === 'delivery' ? 'the delivery address' : 'the collection plan'}, and your notes. Send it and we confirm, then pay ${method2 === 'cash-on-collection' ? (fulfilment === 'delivery' ? 'cash to the driver' : 'cash at the counter') : 'by secure Yoco link or card'}.`
-                  : `${waBlocked}. Fill that in above and this button opens WhatsApp with the whole order.`}
+                {closed
+                  ? 'The window has closed, so this sends your basket as a question rather than an order. If the kitchen can still prepare it, someone will reply and arrange payment with you.'
+                  : waReady
+                    ? `Your order goes to WhatsApp with every detail already filled in — name, number, the basket, ${fulfilment === 'delivery' ? 'the delivery address' : 'the collection plan'}, and your notes. Send it and we confirm, then pay ${method2 === 'cash-on-collection' ? (fulfilment === 'delivery' ? 'cash to the driver' : 'cash at the counter') : 'by secure Yoco link or card'}.`
+                    : `${waBlocked}. Fill that in above and this button opens WhatsApp with the whole order.`}
               </p>
               <p className="mt-2 text-xs leading-relaxed text-ink/45">
                 By ordering you agree to our{' '}

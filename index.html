@@ -61,6 +61,44 @@
     <link rel="preload" href="/fonts/manrope-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
+    <!--
+      Boot loader.
+
+      It is inline SVG and costs zero network requests: the badge PNG would have
+      put 21 KB on the critical path, and the one thing this screen must do is
+      get out of the way quickly. The mark is the pot from the badge inside the
+      two rings, so the wait looks like the brand rather than a generic spinner.
+
+      It paints on the first HTML byte, before the CSS or the JS bundle have
+      arrived, and src/main.tsx fades it out once React has rendered the real
+      page. If JS never loads, `noscript` below removes it so the site is not a
+      permanent splash screen.
+    -->
+    <div id="hb-boot" aria-hidden="true" style="position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#f8f4ec;transition:opacity .28s ease">
+      <svg viewBox="0 0 96 96" width="104" height="104" style="animation:hb-boot-spin 2.5s linear infinite">
+        <circle cx="48" cy="48" r="45" fill="none" stroke="#001938" stroke-width="3.5" />
+        <circle cx="48" cy="48" r="38.5" fill="none" stroke="#b77e23" stroke-width="2" />
+        <!-- The pot from the badge, drawn to the same silhouette. -->
+        <g fill="#001938">
+          <rect x="25" y="32" width="42" height="7" rx="3.5" />
+          <path d="M29 40h34v13c0 7-7.5 12-17 12s-17-5-17-12z" />
+          <path d="M25 43h-3.5a6 6 0 0 0 0 12H25" fill="none" stroke="#001938" stroke-width="4" stroke-linecap="round" />
+          <path d="M67 43h3.5a6 6 0 0 1 0 12H67" fill="none" stroke="#001938" stroke-width="4" stroke-linecap="round" />
+        </g>
+        <g fill="#f8f4ec">
+          <circle cx="38" cy="35.5" r="2" />
+          <circle cx="46" cy="34.5" r="2" />
+          <circle cx="54" cy="35.5" r="2" />
+        </g>
+      </svg>
+    </div>
+    <noscript>
+      <style>#hb-boot { display: none !important }</style>
+    </noscript>
+    <style>
+      @keyframes hb-boot-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+      @media (prefers-reduced-motion: reduce) { #hb-boot svg { animation: none !important } }
+    </style>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <!--

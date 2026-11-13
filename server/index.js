@@ -41,6 +41,16 @@ import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
 import { HEAD_END, HEAD_START, headHtml, normaliseSiteUrl } from '../shared/seo.js';
 
+/*
+ * The clock the shop runs on.
+ *
+ * `serviceStatus` accepts a moment so it can be asked "what happens at 15:09 on
+ * a Friday?". Production never sets HB_CLOCK_LABEL, so this is simply now; the
+ * test suites pin it so they can run the shop both open and shut without
+ * depending on when CI happens to start.
+ */
+const clockNow = () => (process.env.HB_CLOCK_LABEL ? new Date(process.env.HB_CLOCK_LABEL) : new Date());
+
 const PORT = Number(process.env.PORT || 4000);
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -566,7 +576,17 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
     plateMenus: get('plateMenus') ?? seed.plateMenus,
     policies: get('policies') ?? seed.policies,
     settings,
-    service: serviceStatus(settings),
+    /*
+     * HB_CLOCK_LABEL lets the interaction suite ask "what would this page look
+     * like at Thursday lunchtime?". Without it the suite runs whenever CI
+     * happens to run — usually outside the Thu/Fri window — and the checkout
+     * correctly refuses every order it tries to place, so fifty behavioural
+     * tests report a failure that is really the calendar.
+     *
+     * Read here as well as at the order gate so the banner and the button can
+     * never disagree with the server about whether the shop is open.
+     */
+    service: serviceStatus(settings, clockNow()),
     payments: paymentConfig(),
     contact: { inboxConfigured: contactEndpoint() !== null },
     /*
@@ -647,6 +667,34 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
    */
   if (errors.length) return res.status(422).json({ errors });
   if (!lines.length) return res.status(422).json({ errors: ['Your basket is empty.'] });
+
+  /*
+   * The service window is enforced here, not only described in the UI.
+   *
+   * Until now `serviceStatus().open` drove a banner and nothing else: the site
+   * told the customer the window had closed and then happily took the order.
+   * Anyone who reloaded at 15:00 could still check out, which is exactly the
+   * thing the owner reported. The check lives on the server so a stale tab, a
+   * cached bundle or a hand-made request cannot get past it.
+   *
+   * The refusal is worded as a redirect to WhatsApp rather than a dead end: the
+   * kitchen may well still cook for you, but that is a conversation, not an
+   * automated order.
+   */
+  /*
+   * HB_ORDERS_OPEN is a test-only override. The suite places orders at whatever
+   * time CI happens to run, which is outside the Thu/Fri window most of the day;
+   * without a switch every order test would fail for a reason that has nothing
+   * to do with what it is testing. It is never set by the app itself, and the
+   * gate below stays wired so its own test can exercise the closed path.
+   */
+  const ordersForcedOpen = process.env.HB_ORDERS_OPEN === 'true';
+  if (!ordersForcedOpen && serviceStatus(get('settings'), clockNow()).orderingClosed) {
+    return res.status(409).json({
+      errors: ["Today's window has closed, so we are not taking orders. Message us on WhatsApp and we will tell you if the kitchen can still prepare it."],
+      closed: true,
+    });
+  }
 
   if (!customer.name?.trim() || !customer.phone?.trim()) {
     return res.status(422).json({ errors: ['Please add your name and a contact number.'] });

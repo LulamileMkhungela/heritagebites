@@ -30,6 +30,8 @@ import { join } from 'node:path';
 
 process.env.NODE_ENV = 'test';
 process.env.HB_PUSH_DRY_RUN = 'true';
+// Orders are refused outside the Thu/Fri window; this flow has to place several.
+process.env.HB_ORDERS_OPEN = 'true';
 process.env.HB_RATE_LIMIT_MULTIPLIER = '50';
 process.env.HB_CONTACT_FORMSPREE_URL = '';
 

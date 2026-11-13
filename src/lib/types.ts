@@ -122,6 +122,12 @@ export interface Settings {
 /** Where the kitchen is in its weekly Thursday/Friday rhythm. */
 export interface ServiceStatus {
   open: boolean;
+  /**
+   * True only once today's window has already closed — the one state where the
+   * checkout refuses an order outright. Before opening and on rest days the
+   * site takes a pre-order for the next window instead.
+   */
+  orderingClosed: boolean;
   /** True when today is one of the days the kitchen cooks at all. */
   isServiceDay: boolean;
   /** Short, human status: "Serving now", "Wednesday is a rest day", … */

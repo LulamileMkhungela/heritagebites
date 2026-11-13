@@ -485,6 +485,59 @@ export function PotMark({ className = '', style }: { className?: string; style?:
   );
 }
 
+/* ---------------------------- Channel icons ---------------------------- */
+
+/*
+ * The delivery partners, drawn rather than lettered.
+ *
+ * These used to be two-letter text ("UE", "MD", "WA") inside a plate. That is a
+ * placeholder that shipped: a customer looking for the app they already have on
+ * their phone recognises a mark, not an abbreviation. Each icon below is the
+ * partner's own silhouette in a single path, so it costs one inline node and no
+ * network request.
+ *
+ * They are decorative — the card beside each one carries the name in text — so
+ * every icon is aria-hidden.
+ */
+export function UberEatsIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false" fill="currentColor">
+      {/*
+        The Eats mark: a rounded takeaway box seen head-on, with a lid line and
+        a dotted band under it. Two plain bars — what was here before — read as a
+        hamburger-menu icon, which is the one glyph a customer has already
+        learned to mean "open the navigation".
+      */}
+      <path d="M4.2 7.4h15.6a1.4 1.4 0 0 1 1.4 1.4v6.4a1.4 1.4 0 0 1-1.4 1.4H4.2a1.4 1.4 0 0 1-1.4-1.4V8.8a1.4 1.4 0 0 1 1.4-1.4Zm0 2.1v3.2h15.6V9.5H4.2Z" />
+      <circle cx="6.4" cy="19.4" r="1.15" />
+      <circle cx="9.9" cy="19.4" r="1.15" />
+      <circle cx="13.4" cy="19.4" r="1.15" />
+      <circle cx="16.9" cy="19.4" r="1.15" />
+    </svg>
+  );
+}
+
+export function MrDIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      {/* A cloche: the delivery-tray shape Mr D uses. */}
+      <path d="M3.5 16.5a8.5 8.5 0 0 1 17 0" />
+      <path d="M2.5 16.5h19" />
+      <path d="M12 8V6" />
+    </svg>
+  );
+}
+
+export function WhatsAppIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false" fill="currentColor">
+      {/* Handset inside a speech bubble — the WhatsApp silhouette. */}
+      <path d="M12 2a9.6 9.6 0 0 0-8.2 14.6L2 22l5.5-1.7A9.6 9.6 0 1 0 12 2Zm0 1.9a7.7 7.7 0 1 1-3.9 14.4l-.5-.3-3 .9.9-2.9-.3-.5A7.7 7.7 0 0 1 12 3.9Z" />
+      <path d="M9.2 7.6c-.3 0-.7.1-1 .4-.4.4-.9 1-.9 2 0 1.1.7 2.1 1.1 2.6.5.6 1.7 2.1 4.2 3 2 .7 2.5.6 2.9.6.5 0 1.5-.5 1.7-1.1.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.5.1l-.6.8c-.1.2-.3.2-.5.1-.4-.2-1.1-.5-1.6-1.1-.4-.5-.6-.9-.7-1.1-.1-.2 0-.3.1-.4l.4-.5c.1-.2.1-.3 0-.5l-.7-1.6c-.2-.4-.4-.4-.5-.4Z" />
+    </svg>
+  );
+}
+
 /* ------------------------------ Field -------------------------------- */
 
 export function Field({

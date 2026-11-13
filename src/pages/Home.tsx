@@ -4,7 +4,7 @@ import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 
 import { zar } from '../lib/format';
-import { Button, HeritageBand, LinkButton, PotMark, Reveal, SectionLabel, ShweshwePanel, WovenRule } from '../components/ui';
+import { Button, HeritageBand, LinkButton, MrDIcon, PotMark, Reveal, SectionLabel, ShweshwePanel, UberEatsIcon, WhatsAppIcon, WovenRule } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
 import { usePageSeo } from '../lib/seo';
@@ -71,8 +71,17 @@ function Hero({ onOrder }: { onOrder: () => void }) {
    * Every WhatsApp link opens a written message. If a customer already has a
    * basket, this row sends it; otherwise it opens as an order enquiry rather
    * than a blank chat box.
+   *
+   * Once today's window has gone by, the same link has to stop reading as an
+   * order and start reading as a question — and the loudest button on the site
+   * becomes that question. It used to stay "Order online" at 15:09, straight
+   * into a checkout whose only working control was this same WhatsApp link.
    */
-  const waHrefOrder = basketHref(s?.whatsapp, lines, { fulfilment });
+  const shut = Boolean(service?.orderingClosed);
+  const waHrefOrder = basketHref(s?.whatsapp, lines, {
+    fulfilment,
+    ...(shut ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
+  });
 
   return (
     <section className="hb-grain relative overflow-hidden bg-ink text-bone">
@@ -97,27 +106,49 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             <span className="text-ochre">made with love.</span>
           </h1>
 
+          {/*
+            The window and the delivery areas used to be written here and then
+            repeated in the stat block immediately below, so the same two facts
+            were stated twice within one screen. The paragraph keeps the story;
+            the figures keep the facts.
+          */}
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-bone/75">
             Mogodu, tshotlo, tlhakwana, wings and short rib — cooked in small batches the way family kitchens have for
-            generations. Thursdays and Fridays, {s?.serviceWindow.open ?? '12:00'}–{s?.serviceWindow.close ?? '13:30'},
-            delivered in {s?.deliveryAreas.join(' & ') ?? 'Rosebank & Sandton'}.
+            generations.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button size="lg" onClick={onOrder}>Order online</Button>
+            {shut ? (
+              <LinkButton href={waHrefOrder} size="lg">
+                Ask on WhatsApp if we can cook it
+              </LinkButton>
+            ) : (
+              <Button size="lg" onClick={onOrder}>Order online</Button>
+            )}
             <LinkButton to="/menu" variant="onDark" size="lg">
               View the menu
             </LinkButton>
           </div>
 
-          <dl className="mt-10 grid max-w-lg grid-cols-3 gap-4 border-t border-bone/15 pt-6">
+          {/*
+            Three figures in a row overflows on a 360px phone: "R100,00" at
+            text-3xl is wider than a third of the screen, so it ran into the
+            service window beside it. The figures scale with the viewport and
+            the row is allowed to wrap to two lines rather than collide.
+          */}
+          <dl className="mt-10 grid max-w-lg grid-cols-2 gap-x-4 gap-y-5 border-t border-bone/15 pt-6 sm:grid-cols-3">
             {[
               [zar(traditional?.price ?? 100), 'traditional plate'],
               [`${s?.serviceWindow.open ?? '12:00'}–${s?.serviceWindow.close ?? '13:30'}`, 'service window'],
               ['2', 'service days a week'],
             ].map(([v, k]) => (
               <div key={k}>
-                <dt className="font-display text-3xl font-bold text-ochre">{v}</dt>
+                {/*
+                  Long values (a price, a "12:00–13:30" range) get a smaller
+                  step than short ones ("2"): at exactly three columns the range
+                  was a couple of pixels wider than its cell.
+                */}
+                <dt className={`font-display font-bold text-ochre ${String(v).length > 3 ? 'text-xl sm:text-2xl lg:text-3xl' : 'text-2xl sm:text-3xl'}`}>{v}</dt>
                 <dd className="text-xs uppercase tracking-wider text-bone/50">{k}</dd>
               </div>
             ))}
@@ -130,13 +161,31 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             {/* Shweshwe triangle print: the cloth reference, in the brand palette. */}
             <ShweshwePanel className="mb-4 h-6 w-full rounded-md opacity-80" />
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">
-              {service?.headline ?? 'Order your way'}
+              {/* The strip above already prints the headline; this card is about
+                  the routes, not the state. */}
+              How to order
             </p>
-            <p className="mt-3 text-sm leading-relaxed text-bone/70">{service?.message}</p>
+            {/*
+              The strip directly above already prints the state and the next
+              window in full. Repeating the same sentence here was the most
+              visible duplication on the page, so the card keeps only what the
+              strip does not say: where the ordering actually happens.
+            */}
+            <p className="mt-3 text-sm leading-relaxed text-bone/70">
+              {shut
+                ? 'We have stopped taking orders for today. The kitchen will tell you on WhatsApp whether it can still prepare one.'
+                : service?.open
+                  ? 'The kitchen is taking orders right now.'
+                  : 'You can place an order ahead and it goes in first for the next window.'}
+            </p>
             <ul className="mt-5 space-y-3">
               {[
-                { t: 'Order online', d: 'Card through Yoco, or cash when you collect or receive', to: '/checkout' },
-                { t: 'WhatsApp', d: 'Message us to place an order', href: waHrefOrder },
+                {
+                  t: shut ? 'Ordering closed' : 'Order online',
+                  d: shut ? 'The window has passed for today' : 'Card through Yoco, or cash when you collect or receive',
+                  to: '/checkout',
+                },
+                { t: 'WhatsApp', d: shut ? 'Ask if we can still cook for you' : 'Message us to place an order', href: waHrefOrder },
                 { t: 'Uber Eats', d: s?.channels?.ubereats?.url ? 'Order through the app' : 'Direct ordering link coming soon', href: s?.channels?.ubereats?.url },
                 { t: 'Mr D Food', d: s?.channels?.mrd?.url ? 'Order through the app' : 'Direct ordering link coming soon', href: s?.channels?.mrd?.url },
               ].map((row) => (
@@ -220,7 +269,7 @@ function ThisWeek() {
   const catalog = useCatalog((s) => s.data);
   const nav = useNavigate();
   if (!catalog) return null;
-  const { settings, service, plateMenus } = catalog;
+  const { settings, plateMenus } = catalog;
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-16">
@@ -228,8 +277,14 @@ function ThisWeek() {
         <div>
           <SectionLabel>This week</SectionLabel>
           <h2 className="font-display text-4xl font-semibold md:text-5xl">Cooked Thursdays &amp; Fridays</h2>
+          {/*
+            This used to append the live `service.message`, which the status
+            strip above already prints word for word. This section is about the
+            weekly schedule, so it states only the schedule.
+          */}
           <p className="mt-3 max-w-2xl text-sm text-ink/60">
-            Service window {settings.serviceWindow.open}–{settings.serviceWindow.close}. {service.message}
+            Two cooking days a week, {settings.serviceWindow.open}–{settings.serviceWindow.close}. Plates go up a few
+            days ahead, so there is always something to plan around.
           </p>
         </div>
         <LinkButton to="/specials" variant="outline">Delivery &amp; service details</LinkButton>
@@ -358,7 +413,7 @@ function HowItWorks() {
 function ServiceRules() {
   const catalog = useCatalog((s) => s.data);
   if (!catalog) return null;
-  const { settings, service } = catalog;
+  const { settings } = catalog;
 
   const rows = [
     ['Service days', settings.hours.filter((h) => !h.closed).map((h) => h.label).join(' and ')],
@@ -382,7 +437,16 @@ function ServiceRules() {
         <div>
           <SectionLabel>The rules, plainly</SectionLabel>
           <h2 className="font-display text-4xl font-semibold">When and where we cook</h2>
-          <p className="mt-3 text-ink/65">{service.message}</p>
+          {/*
+            The live status (open / closed / rest day) belongs to the strip at the
+            top of every page. Here the rule itself is what matters: which days,
+            which window, and what happens if you order outside it.
+          */}
+          <p className="mt-3 text-ink/65">
+            We cook on Thursdays and Fridays, {settings.serviceWindow.open}–{settings.serviceWindow.close}, and we are
+            working towards being open every day. Outside that window you can still send us a basket — the kitchen will
+            confirm whether it can cook it.
+          </p>
           <p className="mt-3 text-sm text-ink/55">
             Collection is from our shadow kitchen — {settings.collectionNote}
           </p>
@@ -406,10 +470,15 @@ function ServiceRules() {
 /* ------------------------------- Channels ------------------------------ */
 
 function Channels({ settings }: { settings: Settings | undefined }) {
+  /*
+   * Each partner is drawn, not lettered. Two-letter placeholders ("UE", "MD",
+   * "WA") were the kind of thing that ships and is never noticed — but a
+   * customer recognises the mark on their home screen, not an abbreviation.
+   */
   const rows = [
-    { key: 'ubereats', name: 'Uber Eats', icon: 'UE' },
-    { key: 'mrd', name: 'Mr D Food', icon: 'MD' },
-    { key: 'whatsapp', name: 'WhatsApp', icon: 'WA' },
+    { key: 'ubereats', name: 'Uber Eats', Icon: UberEatsIcon, brand: 'bg-[#06C167] text-white' },
+    { key: 'mrd', name: 'Mr D Food', Icon: MrDIcon, brand: 'bg-[#E4002B] text-white' },
+    { key: 'whatsapp', name: 'WhatsApp', Icon: WhatsAppIcon, brand: 'bg-[#25D366] text-white' },
   ];
 
   return (
@@ -433,7 +502,9 @@ function Channels({ settings }: { settings: Settings | undefined }) {
               : 'Direct ordering link coming soon.';
           const content = (
             <>
-              <span className="grid h-12 w-12 place-items-center rounded-xl bg-ink font-mono text-sm font-bold text-ochre">{r.icon}</span>
+              <span className={`grid h-12 w-12 place-items-center rounded-xl ${r.brand}`}>
+                <r.Icon className="h-7 w-7" />
+              </span>
               <h3 className="mt-4 font-display text-xl font-semibold">{r.name}</h3>
               <p className="mt-1 text-[13px] text-ink/60">{description}</p>
               <span className="mt-auto pt-4 text-sm font-semibold text-ochre-deep">
