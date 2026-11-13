@@ -143,7 +143,7 @@ export function SectionLabel({ children, onDark = false }: { children: ReactNode
   return (
     <div className="mb-4 flex items-center gap-3">
       <DiamondMark className="h-3 w-3 shrink-0" pigment="ochre" />
-      <MicroRule onDark={onDark} />
+      <span className="h-px w-8 bg-ochre" />
       <span className={`font-mono text-xs font-semibold uppercase tracking-[0.22em] ${onDark ? 'text-ochre' : 'text-ochre-deep'}`}>{children}</span>
     </div>
   );
@@ -326,45 +326,6 @@ export function WovenRule({ className = '' }: { className?: string }) {
         </pattern>
       </defs>
       <rect width="120" height="8" fill="url(#hb-woven)" />
-    </svg>
-  );
-}
-
-/**
- * The micro rule: a hairline replaced by a row of painted teeth.
- *
- * The problem this solves is specific. A section label used to be marked by a
- * 1px gold dash, and a 1px dash cannot be Ndebele — the painting has no
- * hairlines in it, everything is a filled register. The obvious answer, a
- * triangle band, is too tall to sit beside 11px caps without pushing the line
- * apart.
- *
- * So the teeth are 6px tall and 8px wide, filled rather than stroked (a 1px
- * stroke at this size disappears), and they are pitched at half their width so
- * the row reads as a continuous zigzag rather than separate arrows. Gold and
- * ink alternate: on paper that is the painted contrast, and on navy the ink
- * teeth become chalk so the pattern survives the darker ground.
- */
-export function MicroRule({
-  className = '',
-  onDark = false,
-  teeth = 6,
-}: {
-  className?: string;
-  onDark?: boolean;
-  teeth?: number;
-}) {
-  const a = onDark ? ACCENT.chalk : ACCENT.ochre;
-  const b = onDark ? ACCENT.ochre : ACCENT.ink;
-  const pitch = 8;
-  const w = teeth * pitch;
-  return (
-    <svg viewBox={`0 0 ${w} 7`} width={w} height={7} className={className} aria-hidden="true" focusable="false">
-      {/* The rail the teeth stand on, so the row has a plinth like a painted band. */}
-      <rect x="0" y="6" width={w} height="1" fill={a} />
-      {Array.from({ length: teeth }, (_, i) => (
-        <path key={i} d={`M${i * pitch} 6 L${i * pitch + 3} 1 L${i * pitch + 6} 6 Z`} fill={i % 2 === 0 ? a : b} />
-      ))}
     </svg>
   );
 }
