@@ -206,7 +206,7 @@ export default function Layout() {
             </div>
           </nav>
         )}
-        <HeritageBand className="h-2 w-full" on="ink" />
+        <HeritageBand className="h-1.5 w-full" />
       </header>
 
       <PreviewStrip />
@@ -341,7 +341,7 @@ function Footer() {
 
   return (
     <footer className="mt-24 bg-ink text-bone">
-      <HeritageBand className="h-2.5 w-full" on="ink" />
+      <HeritageBand className="h-2 w-full" />
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-4">
         <div className="md:col-span-2">
           {/*

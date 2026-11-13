@@ -10,7 +10,7 @@ export default function About() {
 
   return (
     <>
-      <header className="hb-grain hb-painted-dark relative overflow-hidden bg-ink py-20 text-bone">
+      <header className="hb-grain relative overflow-hidden bg-ink py-20 text-bone">
         <img src={asset('/img/hero-feast.jpg')} alt="" className="absolute inset-0 h-full w-full object-cover opacity-30" />
         <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/40" />
         <div className="relative mx-auto max-w-4xl px-4">
@@ -58,8 +58,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* This band is the navy block's kerb, so it is painted on ink. */}
-      <HeritageBand className="h-3 w-full" on="ink" />
+      <HeritageBand className="h-2 w-full" />
 
       {/* Vision + Mission */}
       <section className="border-b-2 border-ink/10 bg-ink py-20 text-bone">

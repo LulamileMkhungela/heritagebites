@@ -116,33 +116,17 @@
   }
 
   /*
-   * The painted ground.
+   * Painted ground. A crosshatch wash, the way a plaster wall catches the light
+   * under a painted band: two sets of hairlines crossed at 45°, one in ink and
+   * one in gold, both faint enough to read as texture rather than pattern.
    *
-   * A Ndebele wall is not one flat colour: the shapes sit on a plaster wash, and
-   * the wash is what makes the black contour read as paint. These three give a
-   * section the same quiet texture, at an opacity low enough that body copy
-   * still passes contrast.
+   * Kept for the loyalty card only — the card face and the call-to-action that
+   * advertises it. Everywhere else the site uses the plain brand grounds.
    */
-  .hb-painted {
-    background-image:
-      repeating-linear-gradient(135deg, rgba(0, 25, 56, 0.035) 0 1px, transparent 1px 9px),
-      repeating-linear-gradient(45deg, rgba(183, 126, 35, 0.05) 0 1px, transparent 1px 9px);
-  }
-
   .hb-painted-dark {
     background-image:
       repeating-linear-gradient(135deg, rgba(247, 242, 230, 0.06) 0 1px, transparent 1px 10px),
       repeating-linear-gradient(45deg, rgba(183, 126, 35, 0.1) 0 1px, transparent 1px 10px);
-  }
-
-  /* A painted rule under a heading: ink, gold, ink — the pinstripe kerb at 3px. */
-  .hb-kerb {
-    background-image: linear-gradient(
-      to bottom,
-      var(--color-ink) 0 1px,
-      var(--color-ochre) 1px 2.4px,
-      var(--color-ink) 2.4px 3.4px
-    );
   }
 
   .hb-dots {

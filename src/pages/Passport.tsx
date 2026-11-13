@@ -97,7 +97,7 @@ export default function Passport() {
 
       {result && (
         <Reveal>
-          <div className="mt-8 overflow-hidden rounded-[2rem] border-2 border-ink bg-ink text-bone">
+          <div className="hb-painted-dark mt-8 overflow-hidden rounded-[2rem] border-2 border-ink bg-ink text-bone">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-bone/15 px-6 py-4">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Heritage Bites</p>

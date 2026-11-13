@@ -397,7 +397,7 @@ function LiveCheckout() {
     <section className="mx-auto max-w-7xl px-4 py-12">
       <div className="flex items-center justify-between gap-4">
         <SectionLabel>Checkout</SectionLabel>
-        <HeritageMark className="h-8 w-8" />
+        <HeritageMark className="h-7 w-7 text-ink/70" />
       </div>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Almost there</h1>
 
@@ -739,7 +739,7 @@ function LiveCheckout() {
                 By ordering you agree to our{' '}
                 <Link to="/policies" className="font-semibold text-ochre-deep underline">terms, delivery and refund policies</Link>.
               </p>
-              <WovenRule className="mt-4 h-2 w-28" />
+              <WovenRule className="mt-4 h-1.5 w-24 text-ink/60" />
             </div>
           </div>
 
