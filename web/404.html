@@ -55,10 +55,37 @@
     -->
     <link rel="preload" href="./fonts/fraunces-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./fonts/manrope-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <script type="module" crossorigin src="./assets/index-BQV5KeGc.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DQdJggos.css">
+    <script type="module" crossorigin src="./assets/index-DfjLx90R.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BsRbsmVd.css">
   </head>
   <body>
+    <!--
+      Boot loader.
+
+      It is inline SVG and costs zero network requests: the badge PNG would have
+      put 21 KB on the critical path, and the one thing this screen must do is
+      get out of the way quickly. The mark is the pot from the badge inside the
+      two rings, so the wait looks like the brand rather than a generic spinner.
+
+      It paints on the first HTML byte, before the CSS or the JS bundle have
+      arrived, and src/main.tsx fades it out once React has rendered the real
+      page. If JS never loads, `noscript` below removes it so the site is not a
+      permanent splash screen.
+    -->
+    <div id="hb-boot" aria-hidden="true" style="position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#f8f4ec;transition:opacity .28s ease">
+      <img
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAAABlBMVEX///8WEAwOHVLGAAAAAXRSTlMAQObYZgAAAz5JREFUaN7lWNtyxSAIhP//6Z5pGl2QBTTpTGeah3NR3BWQixH5N4+651fB3yXR9HkTvTN+Cg8Dnw86fQg//5iZVeYM/+dXPD/lDuGvX6kU7uQEv1o4VNxiaMNf0tsUt3R3xdRiA78Pb5T4JfxLuslw4+/A/yjRYkjxU3f2GGJ8GxEDQ/cZQnyIOYO7QDUYYvuMiDAEAZSytMLwYeOLBp+pFapgcPhDMjTRILB5NmX4nsL9eycAAaZadIcmBBe+2gFnf0MO6aqjgjHQvUv4Fy2R8ESwQEEHgHeryFmckxUodQRONCpA0wXzJIQMUwEFYXNkry34TAiVDxliBWRIBm2K3Yy64zaJNTSS8bCvZlFQRY2S8TNVYJ1ViQ+FGKXghAResDHmNseOqXozwYqAQCQWt46msGY4tGBSZFbSdDBQgVexpLoE1twnIPBzKCufDQupSQIO3RXQVYUWgd2svRQkqdDZiFkIEHR55uLaRpTAlhyNWVRbBNxCOht0tcqIzynMCYTA3ZzcXQcynhYEzMe2KACBGCZiI8x+PI5JK2VvVo8IEAr3bpzYIOCn9G7MJ+6qWFQgcQeEAC+RcG7WSNgj+DaW8R2JAGhzph0VgpMS3FLYumSBZpuvDoH4ZWT//hiZvrPjA+EEYdbbdTK6O2U4j4Mi18lTgmEj5gK5PwsCmk2pjQS/4xW9dI3dLHdCL13nFS3zQnmIsqaiiDV+m1kI6qJPvUxd4Pvx2LtIZGqACbXcBamNSG+SEyzNqXIVpGLoWChtfoPCZZqLFkGWjryzjD9aZ6hQQYoobylQvSQhZZ2Jq6xwiY0isEI6JojTIu4KhXOFg/lcBblbxauwp+8XQgVuL9TuLCWUeTQ7SDsPTVBdFU4VyP2sZi2/FuTv1JKMNPq9Ac3CPgupxEhjxjfBOwokDFYDdrct8TnDYiINM0WJPzopOXpq/JyhWPro9fs03/3zFD9hmKtDmC7+ZIjSoTJ87eMXDHEqVdnAn8WWpMRgLCvQmRLRy8xlTDe3b5VwbxPtfdzCbwaPAoUiGI4owO8HJ6zTxBun8LAWcJz9nsEDAy9Qj+Adh+8gX4H3YOvzGD7leAc9ZnkX+08/X1aICIi4SbQuAAAAAElFTkSuQmCC"
+        width="104" height="104" alt=""
+        style="animation:hb-boot-spin 2.5s linear infinite"
+      />
+    </div>
+    <noscript>
+      <style>#hb-boot { display: none !important }</style>
+    </noscript>
+    <style>
+      @keyframes hb-boot-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+      @media (prefers-reduced-motion: reduce) { #hb-boot svg { animation: none !important } }
+    </style>
     <div id="root"></div>
     <!--
       This file is the *source* entry: it points at /src/main.tsx, which only
