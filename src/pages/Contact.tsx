@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
-import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
+import { api, ApiError, DEFAULT_INBOX_ENDPOINT, STATIC_PREVIEW } from '../lib/api';
 import { isValidCellNumber, isValidEmail } from '../lib/format';
 import { Button, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../components/ui';
 import { usePageSeo } from '../lib/seo';
@@ -26,8 +26,13 @@ export default function Contact() {
    * answer is the endpoint being present, not the server's flag (the exported
    * snapshot always reports false there).
    */
+  /*
+   * The static build always has somewhere to send an enquiry: the endpoint is
+   * either declared by the catalogue or compiled into the bundle. Only the live
+   * server can genuinely lack an inbox, and it says so itself.
+   */
   const inboxReady = STATIC_PREVIEW
-    ? Boolean(s?.contactFormspreeUrl)
+    ? Boolean(s?.contactFormspreeUrl) || Boolean(DEFAULT_INBOX_ENDPOINT)
     : Boolean(catalog?.contact?.inboxConfigured);
 
   const [form, setForm] = useState({ name: '', phone: '', email: '', subject: SUBJECTS[0], message: '' });

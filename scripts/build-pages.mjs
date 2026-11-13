@@ -15,10 +15,22 @@
  *      and `.nojekyll` so the assets are served as-is.
  *
  * Usage:
- *   VITE_BASE=/heritagebites/ npm run build:pages
+ *   npm run build:pages
  *
- * The base defaults to /heritagebites/; set it to "/" for a user/organisation
- * site (https://<user>.github.io) or whenever the repository name differs.
+ * Leave VITE_BASE alone. The default "./" is deliberate: it makes the built
+ * HTML reference its assets relatively, and the app then reads its own mount
+ * point back off the bundle URL at runtime (`runtimeBase()` in src/lib/api.ts).
+ * That is what lets one build work at /web/, at the branch root, and on a
+ * domain root without being rebuilt per host.
+ *
+ * Setting VITE_BASE to an absolute base ("/", "/heritagebites/") breaks that:
+ *   - "/" is what shipped a broken logo and a 404 home page — every asset
+ *     resolved against the domain root instead of /heritagebites/web/;
+ *   - "/heritagebites/" is doubled, because web/ is already served AS
+ *     /heritagebites/ (assets became ./heritagebites/assets/...).
+ *
+ * This note used to say the opposite in both directions. It has been corrected
+ * rather than deleted so the next person does not repeat it.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';

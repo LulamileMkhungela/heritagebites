@@ -30,8 +30,25 @@ const env = import.meta.env ?? {};
  *     worked out at runtime — from the bundle's own resolved URL.
  */
 function runtimeBase(): string {
+  /*
+   * A root base ("/") is treated as "not configured" on purpose.
+   *
+   * GitHub Pages serves this site from a sub-path (/heritagebites/web/), and
+   * Vite bakes whatever base it was built with into `import.meta.env.BASE_URL`.
+   * Built with base "/", the value arrives as "/" — truthy, so this used to
+   * return it immediately and never run the detection below. The consequence
+   * was every asset resolving against the domain root:
+   *
+   *     /img/logo-badge.png        → the 404 page, so the logo was broken
+   *     router basename "/"        → no route matched, so the app rendered its
+   *                                  own 404 on the home page
+   *
+   * Falling through lets the bundle's own request URL answer the question,
+   * which is correct on Express ("/") and on Pages ("/heritagebites/web/")
+   * without the build needing to know which host it will land on.
+   */
   const configured = String(env.BASE_URL ?? '');
-  if (configured && configured !== './' && configured !== '.') return configured;
+  if (configured && configured !== './' && configured !== '.' && configured !== '/') return configured;
   if (typeof window === 'undefined') return '/';
 
   /*
@@ -54,9 +71,28 @@ function runtimeBase(): string {
     }
   }
 
-  /* Last resort: the document's own directory. */
-  const path = window.location.pathname.replace(/\/[^/]*\.[a-z0-9]+$/i, '/').replace(/\/?$/, '/');
-  return path;
+  /*
+   * Last resort.
+   *
+   * Only reached when neither a configured base nor a script URL answered.
+   * Deciding the mount point from `location.pathname` here was a trap: on a
+   * deep link such as /menu the pathname is the ROUTE, and treating it as a
+   * base made basename "/menu" — the router then stripped "/menu" from every
+   * URL and matched nothing, which is the 404 this was meant to prevent.
+   *
+   * The honest signal is whether this document actually loads from /assets/.
+   * If it does, the site is mounted at the directory holding that folder, and
+   * the pathname really is a directory. If it does not — Express serving the
+   * built index from any route — the mount point is the domain root.
+   */
+  const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script[src]'));
+  const ours = scripts.find((el) => el.src.includes('/assets/'));
+  if (ours) {
+    const { pathname } = new URL(ours.src);
+    const cut = pathname.indexOf('/assets/');
+    if (cut >= 0) return `${pathname.slice(0, cut)}/`;
+  }
+  return '/';
 }
 
 export const BASE_URL: string = runtimeBase();
@@ -89,6 +125,22 @@ export const PREVIEW_NOTICE =
  */
 export const NO_INBOX_NOTICE =
   'We could not send that message from this preview. Please call or WhatsApp us on +27 67 013 7587 and we will take it from there.';
+
+/**
+ * The business's inbox, compiled into the bundle.
+ *
+ * The endpoint normally arrives with the catalogue (`settings.contactFormspreeUrl`),
+ * but that is a network fetch: if it is slow, blocked, or the snapshot is stale, the
+ * contact form would refuse a message the inbox could have accepted. An enquiry is
+ * the one thing on this site that must never depend on something else loading first,
+ * so the address is also a build-time constant. `VITE_CONTACT_FORMSPREE_URL` overrides
+ * it; the catalogue still wins when it declares a different endpoint.
+ */
+const FORMSPREE_URL: string = String(env.VITE_CONTACT_FORMSPREE_URL ?? '').trim();
+export const DEFAULT_INBOX_ENDPOINT = FORMSPREE_URL || 'https://formspree.io/f/xvkkkwve';
+
+/** Prefer a declared endpoint, but never end up with no inbox at all. */
+const inboxEndpoint = (declared?: string) => String(declared ?? '').trim() || DEFAULT_INBOX_ENDPOINT;
 
 /** Public paths stay relative; `/api` calls can be pointed at another origin. */
 const resolve = (path: string) => (path.startsWith('/api') ? `${API_ORIGIN}${path}` : path);
@@ -240,13 +292,14 @@ export const api = {
 
   /**
    * A contact enquiry. On the static build this goes straight to the monitored
-   * inbox (`endpoint` comes from settings.contactFormspreeUrl) so the form
-   * really submits instead of being refused for want of a server.
+   * inbox so the form really submits instead of being refused for want of a
+   * server. The declared endpoint wins; otherwise the one compiled into the
+   * bundle is used, so a failed catalogue fetch cannot strand a message.
    */
   contact: (payload: unknown, endpoint?: string) => {
     const entry = (payload ?? {}) as Record<string, string>;
     if (STATIC_PREVIEW) {
-      return postToInbox(endpoint, {
+      return postToInbox(inboxEndpoint(endpoint), {
         name: entry.name ?? '',
         phone: entry.phone ?? '',
         email: entry.email ?? '',
@@ -277,7 +330,7 @@ export const api = {
         .filter(Boolean)
         .join('\n');
 
-      return postToInbox(endpoint, {
+      return postToInbox(inboxEndpoint(endpoint), {
         name: entry.name ?? '',
         phone: entry.phone ?? '',
         email: entry.email ?? '',
