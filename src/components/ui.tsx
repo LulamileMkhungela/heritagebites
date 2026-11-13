@@ -503,27 +503,40 @@ export function UberEatsIcon({ className = '' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false" fill="currentColor">
       {/*
-        The Eats mark: a rounded takeaway box seen head-on, with a lid line and
-        a dotted band under it. Two plain bars — what was here before — read as a
-        hamburger-menu icon, which is the one glyph a customer has already
-        learned to mean "open the navigation".
+        The Uber Eats wordmark, "Uber" stacked over "Eats", from the official
+        brand path — the same mark that sits on the customer's home screen.
+
+        What was here before was drawn from memory and wrong twice over: first
+        two plain bars (which read as a hamburger-menu button), then a takeaway
+        box with a dotted band, which is not the Uber Eats logo at all.
       */}
-      <path d="M4.2 7.4h15.6a1.4 1.4 0 0 1 1.4 1.4v6.4a1.4 1.4 0 0 1-1.4 1.4H4.2a1.4 1.4 0 0 1-1.4-1.4V8.8a1.4 1.4 0 0 1 1.4-1.4Zm0 2.1v3.2h15.6V9.5H4.2Z" />
-      <circle cx="6.4" cy="19.4" r="1.15" />
-      <circle cx="9.9" cy="19.4" r="1.15" />
-      <circle cx="13.4" cy="19.4" r="1.15" />
-      <circle cx="16.9" cy="19.4" r="1.15" />
+      <path d="M0 2.8645v4.9972c0 1.8834 1.3315 3.1297 3.0835 3.1297a2.9652 2.9652 0 0 0 2.1502-.876v.7425H6.445V2.8645H5.223v4.9339c0 1.2642-.8696 2.1198-1.9954 2.122-1.1386-.0023-1.997-.834-1.997-2.122V2.8645zm7.3625 0v7.9934h1.163v-.7318a2.9915 2.9915 0 0 0 2.1177.876c1.714.048 3.1295-1.3283 3.1295-3.0429s-1.4155-3.091-3.1295-3.0429a2.9674 2.9674 0 0 0-2.107.876V2.8645zm9.8857 2.0561c-1.6752-.0074-3.0369 1.3492-3.0356 3.0245 0 1.7366 1.3732 3.0373 3.1537 3.0373a3.123 3.123 0 0 0 2.5578-1.2438l-.8495-.6177a2.0498 2.0498 0 0 1-1.7083.8585c-.9763.0126-1.8147-.6915-1.971-1.6553h4.818v-.379c0-1.734-1.254-3.0238-2.9638-3.0245zm6.1632.0667a1.5943 1.5943 0 0 0-1.376.7657v-.7186h-1.163v5.8235h1.1741V7.5465c0-.9023.5581-1.4847 1.3268-1.4847h.4949V4.9886c-.1576.0013-.3186-.0009-.4568-.0013zm-6.2034.944a1.844 1.844 0 0 1 1.8337 1.486H15.424a1.844 1.844 0 0 1 1.784-1.486zm-6.6589.0056c1.1223-.0084 2.0365.8992 2.0364 2.0215-.0026 1.1203-.914 2.0258-2.0343 2.021a2.0151 2.0151 0 0 1-1.4159-.5987A2.0152 2.0152 0 0 1 8.55 7.9592a2.0152 2.0152 0 0 1 .5838-1.422 2.0152 2.0152 0 0 1 1.4153-.6003zM0 12.9864v7.9716h5.7222v-1.3666H1.5458v-1.971h4.0647v-1.314H1.5458v-1.9556h4.1764v-1.3644zm14.5608.4097v1.6861h-1.1519v1.338h1.1545v3.143c0 .7927.5712 1.4209 1.6005 1.4209h1.6425L17.8 19.646h-1.1412c-.3482 0-.5714-.1509-.5714-.464v-2.7683H17.8v-1.3316h-1.7062v-1.686zm-5.2974 1.5275c-1.7348-.0103-3.141 1.4035-3.1214 3.1382.0196 1.7346 1.4575 3.1163 3.1915 3.0668a2.9915 2.9915 0 0 0 1.912-.6655v.532h1.5175v-5.9129h-1.509v.5257a3.0047 3.0047 0 0 0-1.9205-.6835c-.0244-.0007-.0492-.0006-.0701-.0008zm11.771.0077c-1.5855 0-2.7002.6437-2.7002 1.8854 0 .8607.6132 1.4213 1.936 1.695l1.4478.3286c.5694.1095.7224.2585.7224.4906 0 .3701-.438.6022-1.1279.6022-.876 0-1.3774-.1907-1.5723-.8477h-1.533c.219 1.2307 1.1563 2.05 3.0484 2.05h.0022c1.752 0 2.7422-.819 2.7422-1.9534 0-.8059-.5847-1.4084-1.8089-1.6668l-1.2943-.2605c-.7511-.1358-.988-.2738-.988-.5454 0-.357.3616-.5757 1.0295-.5757.7227 0 1.2527.1925 1.406.8473h1.5175c-.0854-1.2286-.9899-2.0497-2.8273-2.0497zM9.467 16.1815c1.0092.0096 1.8188.8369 1.8067 1.8461.0014 1.0046-.8198 1.816-1.8243 1.8025-1.0075-.0048-1.8203-.8256-1.8155-1.833.0048-1.0076.8255-1.8204 1.833-1.8156z" />
     </svg>
   );
 }
 
 export function MrDIcon({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      {/* A cloche: the delivery-tray shape Mr D uses. */}
-      <path d="M3.5 16.5a8.5 8.5 0 0 1 17 0" />
-      <path d="M2.5 16.5h19" />
-      <path d="M12 8V6" />
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true" focusable="false">
+      {/*
+        Mr D Food: "MR" set small above the great D, with the two strides that
+        make the D look like it is running. That is the mark on the South
+        African app icon — not a cloche, which is what used to be here and reads
+        as "restaurant" rather than as the partner the owner named.
+      */}
+      <g fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="square" strokeLinejoin="miter">
+        <path d="M10.6 13.6V7.6l1.85 2.65L14.3 7.6v6" />
+        <path d="M16.85 13.6V7.6h1.9a1.5 1.5 0 0 1 0 3h-1.9m2.15 0.05 1.7 2.95" />
+      </g>
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M12.4 18.4h10.9a12.6 12.6 0 0 1 0 25.2H12.4zm6.2 6.6v12h4.5a6 6 0 0 0 0-12z"
+      />
+      <g fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <path d="M31.4 38 35.2 41.8 40 43" />
+        <path d="M20.2 41.2 16.4 43 12 43.4" />
+      </g>
     </svg>
   );
 }

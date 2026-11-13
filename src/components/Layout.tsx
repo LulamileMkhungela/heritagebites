@@ -506,18 +506,18 @@ function Footer() {
                 <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
               </ul>
             </li>
-            {/* The two pages that are not part of ordering a plate. */}
-            <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
+            {/* The pages that are not part of ordering a plate. "Loyalty card"
+                used to appear here and again inside the Meals group above. */}
             <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer quest</Link></li>
             <li>
               {s?.channels?.ubereats?.url
                 ? <a href={s.channels.ubereats.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Uber Eats</a>
-                : <span className="text-bone/40">Uber Eats · link coming soon</span>}
+                : <span className="text-bone/40">Uber Eats · order on WhatsApp</span>}
             </li>
             <li>
               {s?.channels?.mrd?.url
                 ? <a href={s.channels.mrd.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Mr D Food</a>
-                : <span className="text-bone/40">Mr D Food · link coming soon</span>}
+                : <span className="text-bone/40">Mr D Food · order on WhatsApp</span>}
             </li>
           </ul>
         </div>
