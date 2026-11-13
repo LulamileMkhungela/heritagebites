@@ -30,8 +30,25 @@ const env = import.meta.env ?? {};
  *     worked out at runtime — from the bundle's own resolved URL.
  */
 function runtimeBase(): string {
+  /*
+   * A root base ("/") is treated as "not configured" on purpose.
+   *
+   * GitHub Pages serves this site from a sub-path (/heritagebites/web/), and
+   * Vite bakes whatever base it was built with into `import.meta.env.BASE_URL`.
+   * Built with base "/", the value arrives as "/" — truthy, so this used to
+   * return it immediately and never run the detection below. The consequence
+   * was every asset resolving against the domain root:
+   *
+   *     /img/logo-badge.png        → the 404 page, so the logo was broken
+   *     router basename "/"        → no route matched, so the app rendered its
+   *                                  own 404 on the home page
+   *
+   * Falling through lets the bundle's own request URL answer the question,
+   * which is correct on Express ("/") and on Pages ("/heritagebites/web/")
+   * without the build needing to know which host it will land on.
+   */
   const configured = String(env.BASE_URL ?? '');
-  if (configured && configured !== './' && configured !== '.') return configured;
+  if (configured && configured !== './' && configured !== '.' && configured !== '/') return configured;
   if (typeof window === 'undefined') return '/';
 
   /*
@@ -54,9 +71,28 @@ function runtimeBase(): string {
     }
   }
 
-  /* Last resort: the document's own directory. */
-  const path = window.location.pathname.replace(/\/[^/]*\.[a-z0-9]+$/i, '/').replace(/\/?$/, '/');
-  return path;
+  /*
+   * Last resort.
+   *
+   * Only reached when neither a configured base nor a script URL answered.
+   * Deciding the mount point from `location.pathname` here was a trap: on a
+   * deep link such as /menu the pathname is the ROUTE, and treating it as a
+   * base made basename "/menu" — the router then stripped "/menu" from every
+   * URL and matched nothing, which is the 404 this was meant to prevent.
+   *
+   * The honest signal is whether this document actually loads from /assets/.
+   * If it does, the site is mounted at the directory holding that folder, and
+   * the pathname really is a directory. If it does not — Express serving the
+   * built index from any route — the mount point is the domain root.
+   */
+  const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script[src]'));
+  const ours = scripts.find((el) => el.src.includes('/assets/'));
+  if (ours) {
+    const { pathname } = new URL(ours.src);
+    const cut = pathname.indexOf('/assets/');
+    if (cut >= 0) return `${pathname.slice(0, cut)}/`;
+  }
+  return '/';
 }
 
 export const BASE_URL: string = runtimeBase();
