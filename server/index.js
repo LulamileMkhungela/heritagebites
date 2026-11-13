@@ -324,9 +324,11 @@ function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
   const disc = applyDiscountCode(code, subtotalCents, get('discountCodes'));
 
   /*
-   * Delivery is included in the plate price (R100 / R130), so there is no
-   * separate delivery fee. The rules that still apply are the R100 minimum and
-   * the two approved delivery areas, both confirmed by the business.
+   * Collection is the plate price exactly; delivery adds the one flat fee for
+   * the Rosebank/Sandton run. It is charged on top of the plates rather than
+   * folded into them, so a customer who collects is never paying for a
+   * delivery they did not ask for. The R100 minimum and the two approved
+   * delivery areas still apply.
    */
   let deliveryCents = 0;
   if (fulfilment === 'delivery') {
@@ -723,26 +725,18 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   }
 
   /*
-   * A card order needs an email address.
+   * Email is optional for every payment method, including card.
    *
-   * That address is the only place a receipt can go: card orders are the ones
-   * where the customer has no other record of what they paid for. Cash on
-   * collection stays optional — the customer is standing in front of us, and
-   * forcing an address there would only add friction to a completed sale.
-   *
-   * Checked before the card is charged, so a refusal never costs the customer a
-   * payment and never creates an order that cannot be receipted.
+   * It used to be mandatory for card orders because email was the only place a
+   * receipt could go. Email receipts need SMTP configured on the host before a
+   * single message can be sent, and the order now completes in a WhatsApp chat
+   * that is itself the record — so demanding an address only added a step that
+   * blocked a paying customer. An address that is given is still validated.
    */
   const customerEmail = String(customer.email ?? '').trim();
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(customerEmail);
   if (customerEmail && !emailLooksValid) {
     return res.status(422).json({ errors: ['That email address does not look right.'] });
-  }
-  if (payment.method === 'card' && !customerEmail) {
-    return res.status(422).json({
-      errors: ['Please add an email address — it is where your receipt for a card order goes.'],
-      code: 'email_required',
-    });
   }
 
   /*

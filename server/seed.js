@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 6;
+export const SEED_VERSION = 7;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -79,7 +79,7 @@ export const plateMenus = [
     name: 'Traditional Plate',
     price: 100,
     blurb:
-      'One protein, one starch and one vegetable side, from the traditional kitchen. Delivery is included in the plate price.',
+      'One protein, one starch and one vegetable side, from the traditional kitchen.',
     image: img('plate-mogodu'),
     groups: [
       {
@@ -101,7 +101,7 @@ export const plateMenus = [
     name: 'Contemporary Plate',
     price: 130,
     blurb:
-      'One protein, one starch and one vegetable side, from the contemporary kitchen. Delivery is included in the plate price.',
+      'One protein, one starch and one vegetable side, from the contemporary kitchen.',
     image: img('plate-short-rib'),
     groups: [
       {
@@ -518,10 +518,18 @@ export const settings = {
   email: 'heritagebitesfood@gmail.com',
   established: 2025,
 
-  /* Delivery: included in the plate price, Rosebank and Sandton only. */
-  deliveryIncluded: true,
-  deliveryFlat: 0,
-  freeDeliveryAbove: 0,
+  /*
+   * Delivery: a real, charged fee now, Rosebank and Sandton only.
+   *
+   * It used to be folded into the plate price, which meant a customer who
+   * collected paid for a delivery they never used. Collection is now the plate
+   * price exactly; delivery adds one flat fee for the run between Rosebank and
+   * Sandton — roughly 8km — at R55, and it is free from R300 so a family order
+   * is not penalised for being big.
+   */
+  deliveryIncluded: false,
+  deliveryFlat: 55,
+  freeDeliveryAbove: 300,
   minDeliveryOrder: 100,
   deliveryAreas: ['Rosebank', 'Sandton'],
 
@@ -652,7 +660,7 @@ export const policies = [
       },
       {
         heading: 'Minimum order and delivery fee',
-        body: 'The minimum order is R100 for plated meals. Delivery is included in the plate price — Traditional plates are R100 and Contemporary plates are R130 — so no separate delivery fee is added at checkout.',
+        body: 'The minimum order is R100 for plated meals. Collect and you pay the plate price exactly — R100 traditional, R130 contemporary. Delivery adds R55 for the Rosebank and Sandton run, and is free on orders of R300 or more.',
       },
       {
         heading: 'Collection',

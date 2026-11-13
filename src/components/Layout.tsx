@@ -576,8 +576,8 @@ function CartDrawerPanel() {
 
   const subtotal = lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
   const settings = catalog?.settings;
-  // Delivery is included in the plate price (confirmed by the business), so the
-  // basket never adds a delivery charge — only a minimum-order check applies.
+  // Collection is the plate price; delivery adds one flat fee at checkout, so
+  // the drawer shows the plates and only warns about the minimum order.
   const belowMinimum = fulfilment === 'delivery' && subtotal < (settings?.minDeliveryOrder ?? 100);
 
   return (
@@ -677,7 +677,7 @@ function CartDrawerPanel() {
                 {fulfilment === 'delivery'
                   ? belowMinimum
                     ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
-                    : 'Delivery is included — nothing is added at checkout.'
+                    : `Delivery ${zar(settings?.deliveryFlat ?? 0)} is added at checkout.`
                   : 'Collection — nothing is added at checkout.'}
               </p>
               <Link

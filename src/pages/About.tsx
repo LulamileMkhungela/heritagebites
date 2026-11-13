@@ -114,7 +114,7 @@ export default function About() {
             { t: 'Authentic flavours', d: 'Recipes that have not been softened for a mainstream palate.', img: '/img/plate-mogodu.jpg' },
             { t: 'Cooked to order', d: 'Two service days a week, cooked in small batches — never held over.', img: '/img/plate-tshotlo.jpg' },
             { t: 'Order your way', d: 'Order online, choose collection or delivery in Rosebank and Sandton, or message us on WhatsApp.', img: '/img/plate-chicken.jpg' },
-            { t: 'Real value', d: 'One price a plate — starch, vegetable side and delivery included.', img: '/img/plate-lamb-stew.jpg' },
+            { t: 'Real value', d: 'One honest price a plate — protein, starch and vegetable side, nothing padded on.', img: '/img/plate-lamb-stew.jpg' },
           ].map((v, i) => (
             <Reveal key={v.t} delay={i * 80}>
               <div className="h-full overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">

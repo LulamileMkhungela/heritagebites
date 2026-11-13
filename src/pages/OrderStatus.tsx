@@ -289,7 +289,7 @@ export default function OrderStatus() {
             <h2 className="font-display text-xl font-semibold">{order.fulfilment === 'delivery' ? 'Delivery details' : 'Collection details'}</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink/70">
               {order.fulfilment === 'delivery'
-                ? `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout. Delivery is included in the plate price.`
+                ? `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout.`
                 : 'Collection is from our shadow kitchen at Standard Bank, Rosebank and Sandton. We confirm the exact collection point by WhatsApp.'}
             </p>
             {order.fulfilment === 'collection' && (

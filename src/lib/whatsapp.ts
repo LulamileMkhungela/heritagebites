@@ -65,7 +65,16 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
   parts.push('');
   parts.push(rows.join('\n'));
   parts.push('');
-  parts.push(`Total: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'}, delivery included)`);
+  /*
+   * Delivery is charged on top of the plates now, so the message must not claim
+   * it is included. The fee is added by the kitchen on the quote it confirms in
+   * this chat; the basket line stays the plate subtotal.
+   */
+  parts.push(
+    fulfilment === 'delivery'
+      ? `Plates: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'}) + delivery`
+      : `Total: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'}, collection)`,
+  );
   parts.push(
     fulfilment === 'delivery'
       ? `I would like it delivered${opts.customer?.suburb ? ` in ${opts.customer.suburb}` : ''}.`

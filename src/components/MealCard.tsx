@@ -33,14 +33,13 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
           </span>
         )}
         <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">
-          {zar(item.price)} <span className="font-sans text-xs font-normal uppercase tracking-wider text-bone/70">incl. delivery</span>
+          {zar(item.price)} <span className="font-sans text-xs font-normal uppercase tracking-wider text-bone/70">plate</span>
         </span>
         {item.imagePending && (
           <span className="absolute right-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-ink">
             Photo coming soon
           </span>
         )}
-        {item.spice > 0 && <span className="absolute bottom-3 right-3 text-sm">{'🌶️'.repeat(item.spice)}</span>}
       </button>
 
       <div className="flex flex-1 flex-col p-4">
@@ -56,7 +55,7 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
         {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>}
         {!compact && (
           <p className="mt-2 font-mono text-xs uppercase tracking-wider text-ink/40">
-            {zar(item.price)} · starch & veg included
+            {zar(item.price)} · collect price, no extras
           </p>
         )}
 

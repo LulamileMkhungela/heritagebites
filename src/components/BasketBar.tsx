@@ -17,7 +17,7 @@ import { zar } from '../lib/format';
  * inside the order tracking page (that basket is already an order), or while
  * the basket drawer is open (the drawer is showing the same numbers).
  *
- * Delivery is included in the plate price (confirmed by the business), so there
+ * Collection is the plate price; delivery adds one flat fee, so there
  * is no extra delivery line to add — the bar says so rather than leaving the
  * customer to wonder what will be added at the next step.
  */
@@ -55,6 +55,8 @@ export function BasketBar() {
   const settings = catalog?.settings;
   /* Delivery has a minimum order; collection has none. Say which one applies. */
   const belowMinimum = fulfilment === 'delivery' && subtotal < (settings?.minDeliveryOrder ?? 100);
+  /* The fee itself is added at checkout, where the address is known. */
+  const deliveryFee = Number(settings?.deliveryFlat ?? 0);
 
   return (
     <>
@@ -89,7 +91,7 @@ export function BasketBar() {
                 {fulfilment === 'delivery'
                   ? belowMinimum
                     ? `Add ${zar((settings?.minDeliveryOrder ?? 100) - subtotal)} for delivery`
-                    : 'Delivery included'
+                    : `${deliveryFee > 0 ? `+ ${zar(deliveryFee)} delivery` : 'Delivery included'} at checkout`
                   : 'Collection — nothing extra'}
               </span>
             </span>

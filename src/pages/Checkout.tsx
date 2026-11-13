@@ -4,10 +4,10 @@ import { useCart, toApiItems, cartSubtotal } from '../store/cart';
 import { useCatalog } from '../store/catalog';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
 import { normalisePhone, zar } from '../lib/format';
-import { Button, ContactText, Field, LinkButton, Reveal, SectionLabel, inputCls } from '../components/ui';
+import { Button, ContactText, Field, HeritageMark, LinkButton, SectionLabel, WovenRule, inputCls } from '../components/ui';
 import { asset } from '../lib/assets';
 import { usePageSeo } from '../lib/seo';
-import { basketHref, waChatHref, waHref, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
+import { basketHref, waChatHref } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
 import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
 import type { AddressSuggestion } from '../lib/address';
@@ -54,9 +54,6 @@ function LiveCheckout() {
    * keys — never assumed by the page.
    */
   const online = Boolean(payments?.online);
-  /* Whether a receipt email can actually be sent from this deployment. */
-  const receiptsByEmail = Boolean(catalog?.notifications?.customerEmail);
-
   const [method, setMethodRaw] = useState<PayMethod>('card');
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -88,6 +85,19 @@ function LiveCheckout() {
    */
   const [redirect, setRedirect] = useState<{ orderCode: string; url: string } | null>(null);
 
+  /* Restore details parked before a trip to WhatsApp. */
+  useEffect(() => {
+    try {
+      const saved = window.sessionStorage.getItem('hb.checkout.details');
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as Partial<typeof customer>;
+      setCustomerRaw((current) => ({ ...current, ...parsed }));
+    } catch {
+      /* Unreadable or absent; the empty form is still usable. */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /*
    * Cash is only accepted on collection (the business confirmed cash on
    * collection, not cash on delivery), so switching to delivery moves the
@@ -113,6 +123,34 @@ function LiveCheckout() {
    * payment link — that is how payment is taken in that chat.
    */
   const waPayment = method === 'cash-on-collection' && method2 === 'cash-on-collection' ? 'cash' : 'yoco';
+
+  /*
+   * The details a WhatsApp order must carry, and whether the customer has
+   * actually given them. The message is built from the same state the form
+   * edits, so what is typed above is what arrives in the chat — but the button
+   * should not sit there looking ready when the message would open half empty,
+   * so the copy below it says which of the two is true.
+   */
+  const detailsComplete = Boolean(customer.name.trim() && customer.phone.trim());
+  const waOrderHref = basketHref(settings?.whatsapp, lines, { fulfilment, customer, payment: waPayment });
+
+  /*
+   * Nothing on the page persists the form, so a customer who taps through to
+   * WhatsApp, changes their mind and comes back would find an empty form. The
+   * details are parked on the device so the second attempt starts where the
+   * first one stopped.
+   */
+  const rememberWhatsAppDetails = () => {
+    try {
+      window.sessionStorage.setItem('hb.checkout.details', JSON.stringify(customer));
+    } catch {
+      /* Private mode can refuse storage; the order itself is unaffected. */
+    }
+  };
+
+  /* How the delivery fee reads on the card and in the footer. */
+  const deliveryFee = Number(settings?.deliveryFlat ?? 0);
+  const freeAbove = Number(settings?.freeDeliveryAbove ?? 0);
   const setMethod = (next: PayMethod) => {
     setMethodRaw(next);
     setFatal(null);
@@ -177,8 +215,6 @@ function LiveCheckout() {
     else if (normalisePhone(customer.phone).length < 11) e.phone = 'Please enter a valid South African cell number.';
     const emailGiven = customer.email.trim();
     if (emailGiven && !/^\S+@\S+\.\S+$/.test(emailGiven)) e.email = 'That email does not look right.';
-    /* Card orders need somewhere to send the receipt; cash does not. */
-    else if (!emailGiven && method2 === 'card') e.email = 'We need an email to send your card receipt to.';
     if (fulfilment === 'delivery') {
       if (!customer.suburb.trim()) e.suburb = 'Which delivery area are you in?';
       if (!customer.address.trim()) e.address = 'Where should we deliver?';
@@ -305,7 +341,10 @@ function LiveCheckout() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
-      <SectionLabel>Checkout</SectionLabel>
+      <div className="flex items-center justify-between gap-4">
+        <SectionLabel>Checkout</SectionLabel>
+        <HeritageMark className="h-7 w-7 text-ink/70" />
+      </div>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Almost there</h1>
 
       {service && !service.open && (
@@ -328,12 +367,12 @@ function LiveCheckout() {
                 {
                   id: 'collection',
                   t: 'Collect',
-                  d: `From ${settings?.collectionPoint ?? 'our Standard Bank Rosebank kitchen'}. We confirm the exact point by WhatsApp.`,
+                  d: `Pay the plate price only — nothing added. We send the exact collection point on WhatsApp with your order.`,
                 },
                 {
                   id: 'delivery',
                   t: 'Deliver',
-                  d: `${settings?.deliveryAreas.join(' & ') ?? 'Rosebank & Sandton'} only. Delivery is included in the plate price.`,
+                  d: `${settings?.deliveryAreas.join(' & ') ?? 'Rosebank & Sandton'} only. ${deliveryFee > 0 ? `Flat ${zar(deliveryFee)}${freeAbove > 0 ? `, free from ${zar(freeAbove)}` : ''}` : 'Included'}.`,
                 },
               ] as const).map((f) => (
                 <button
@@ -349,28 +388,11 @@ function LiveCheckout() {
               ))}
             </div>
             {/*
-              A collection order needs somewhere to collect from, and this kitchen
-              has no public street address — it is a shadow kitchen and the exact
-              point is confirmed by a person. So the collection card carries the
-              redirect instead: one tap opens the WhatsApp conversation that
-              answers it.
+              No "get the collection point" button here. The order now finishes
+              on WhatsApp, and the collection address is sent in that same chat,
+              so a button that opens a second conversation only loses the one
+              message the kitchen needs.
             */}
-            {fulfilment === 'collection' && (
-              <a
-                href={waHref(settings?.whatsapp, COLLECTION_POINT_ENQUIRY)}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 flex min-h-11 items-center justify-between gap-3 rounded-2xl border-2 border-ink/12 px-4 py-2.5 text-sm font-semibold hover:border-ochre hover:bg-ochre/10"
-              >
-                <span>
-                  Get the collection point
-                  <span className="mt-0.5 block text-[12px] font-normal text-ink/55">
-                    {settings?.collectionPoint ?? 'Standard Bank, Rosebank and Sandton — confirmed by WhatsApp'}
-                  </span>
-                </span>
-                <span aria-hidden="true">→</span>
-              </a>
-            )}
             {/*
               Payment belongs to the same question — how the food arrives and how
               it is paid for is one decision, made together at the top of the
@@ -418,42 +440,33 @@ function LiveCheckout() {
                 ))}
               </div>
 
-              {method2 === 'card' && online && (
-                <div className="animate-rise mt-5 rounded-2xl border-2 border-ink/10 bg-bone/70 p-5">
-                  <p className="text-[13px] font-semibold text-ink">You will be sent to Yoco to pay.</p>
-                  <p className="mt-2 text-xs leading-relaxed text-ink/60">
-                    Yoco takes the card or instant EFT on its own secure page, then brings you back to your order.
-                    Heritage Bites never sees or stores your card number.
-                  </p>
-                  <p className="mt-2 text-xs leading-relaxed text-ink/60">
-                    Your order is only marked paid once Yoco confirms the payment to us — not when the page reloads.
-                  </p>
-                </div>
-              )}
-
               {/*
-                One line about online payment when it is off — not a dead card,
-                not an explanation box. The WhatsApp card beside the order
-                summary is the single place to act on it.
+                One short line, whatever the payment state. The order finishes on
+                WhatsApp either way, so that chat is where the Yoco link arrives —
+                and card works for delivery too, because the kitchen carries a
+                Yoco card machine. No paragraph about what is not connected.
               */}
-              {!online && (
-                <p className="mt-3 text-xs leading-relaxed text-ink/50">
-                  {fulfilment === 'delivery'
-                    ? 'Delivery orders are paid online before we cook, and online payment is not connected yet — order on WhatsApp and we will arrange it.'
-                    : 'Card payments are coming. Until then, pay cash when you collect — or order on WhatsApp.'}
+              {method2 === 'card' && online && (
+                <p className="mt-3 text-xs leading-relaxed text-ink/55">
+                  You&apos;ll pay on Yoco&apos;s secure page. We send the payment link on WhatsApp.
                 </p>
               )}
-
-              {online && fulfilment === 'delivery' && (
-                <p className="mt-3 text-xs text-ink/50">
-                  Delivery orders are paid online before we cook. Cash is accepted on collection only.
+              {!online && (
+                <p className="mt-3 text-xs leading-relaxed text-ink/55">
+                  Secure Yoco payment — card or instant EFT — is sent as a link in your WhatsApp chat.
+                </p>
+              )}
+              {fulfilment === 'delivery' && (
+                <p className="mt-1.5 text-xs leading-relaxed text-ink/55">
+                  Delivery can be paid by card (we bring a Yoco card machine) or in cash.
                 </p>
               )}
             </div>
 
-            <p className="mt-4 text-xs text-ink/50">
-              Minimum order {zar(settings?.minDeliveryOrder ?? 100)} for delivery; delivery is included in the plate price.
-              Service window {settings?.serviceWindow.open}–{settings?.serviceWindow.close} on Thursdays and Fridays.
+            <p className="mt-4 text-xs leading-relaxed text-ink/50">
+              Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery {deliveryFee > 0 ? zar(deliveryFee) : 'included'} in
+              {' '}{settings?.deliveryAreas?.join(' & ') ?? 'Rosebank & Sandton'}{freeAbove > 0 && deliveryFee > 0 ? `, free from ${zar(freeAbove)}` : ''}.
+              Thursdays and Fridays, {settings?.serviceWindow.open}–{settings?.serviceWindow.close}.
             </p>
           </fieldset>
 
@@ -467,11 +480,7 @@ function LiveCheckout() {
               <Field label="Cell number" hint="so we can contact you" error={errors.phone}>
                 <input className={inputCls} value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="tel" placeholder="+27 82 000 0000" />
               </Field>
-              <Field
-                label="Email"
-                hint={method2 === 'card' ? 'required — your receipt goes here' : 'optional'}
-                error={errors.email}
-              >
+              <Field label="Email" hint="optional" error={errors.email}>
                 <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
               </Field>
               {fulfilment === 'delivery' && (
@@ -546,31 +555,13 @@ function LiveCheckout() {
               </div>
             </div>
             {/*
-              Both free channels explained where the customer is actually
-              entering an address, rather than buried in a policy page: email is
-              automatic, WhatsApp is a tap. No promise of an automated WhatsApp
-              message is made, because one cannot be sent for free.
-            */}
-            {/*
-              Only promise the email when this server can actually send one.
-
-              `notifications.customerEmail` comes from the API and is false when
-              no SMTP account is configured; promising a receipt then leaves the
-              customer waiting for an email that was never going to arrive.
+              One line. Email receipts needed SMTP configured on the host before
+              a single message could go out, and telling a customer about that
+              machinery was noise in the middle of a checkout. The order finishes
+              on WhatsApp, so the record they actually get is that chat.
             */}
             <p className="mt-3 text-xs leading-relaxed text-ink/50">
-              {receiptsByEmail
-                ? customer.email.trim()
-                  ? 'We email your receipt and a private tracking link to that address as soon as the order is placed. '
-                  : method2 === 'card'
-                    ? 'A card order needs an email address — it is the only place your receipt can go. '
-                    : 'Add an email and we will send your receipt and a private tracking link. '
-                : customer.email.trim()
-                  ? 'Email receipts are not switched on for this site yet, so no email will be sent — the tracking page after checkout is your record. '
-                  : method2 === 'card'
-                    ? 'A card order needs an email address so the kitchen can reach you. '
-                    : 'The tracking page after checkout is your record — keep it. '}
-              The kitchen gets the order the moment you place it; WhatsApp replies come from a person, so they are not instant.
+              No email receipts — your WhatsApp chat is the record of this order, and we send updates there.
             </p>
           </fieldset>
         </div>
@@ -612,7 +603,9 @@ function LiveCheckout() {
                 {fulfilment === 'delivery' && (
                   <div className="flex justify-between text-ink/60">
                     <span>Delivery</span>
-                    <span className="font-mono">Included</span>
+                    <span className="font-mono">
+                      {shown.delivery > 0 ? zar(shown.delivery) : 'Free'}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-ink/10 pt-2 text-lg font-bold">
@@ -634,6 +627,12 @@ function LiveCheckout() {
                 a dead button — retrying must stay possible, and the server
                 re-validates and re-charges on every attempt anyway.
               */}
+              {/*
+                One primary action, and a second way out that always works.
+                The order finishes on WhatsApp, so the second button is not a
+                fallback bolted on afterwards — it is the same order, sent to the
+                chat where the Yoco link and the collection address arrive.
+              */}
               <Button
                 type="submit"
                 size="lg"
@@ -644,50 +643,42 @@ function LiveCheckout() {
                 {state === 'paying'
                   ? 'Saving your order…'
                   : method2 === 'card' && !online
-                    ? 'Online payment unavailable'
+                    ? 'Online payment coming soon'
                     : `Place order · ${zar(shown.total)}`}
               </Button>
 
-              <p className="mt-3 text-xs leading-relaxed text-ink/60">
-                By placing this order you agree to our{' '}
+              <a
+                href={waOrderHref}
+                target="_blank"
+                rel="noreferrer"
+                onClick={rememberWhatsAppDetails}
+                className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-white px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+              >
+                Complete order on WhatsApp
+              </a>
+
+              <p className="mt-3 text-xs leading-relaxed text-ink/55">
+                Your order goes to WhatsApp with every detail already filled in —{' '}
+                {detailsComplete
+                  ? 'name, number, order and delivery address if you chose delivery'
+                  : 'add your name and number above and they are carried across'}
+                . Send it and we confirm, then pay by secure Yoco link or cash.
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-ink/45">
+                By ordering you agree to our{' '}
                 <Link to="/policies" className="font-semibold text-ochre-deep underline">terms, delivery and refund policies</Link>.
               </p>
+              <WovenRule className="mt-4 h-1.5 w-24 text-ink/60" />
             </div>
           </div>
 
           {/*
-            The one WhatsApp button on this page. Every other route to WhatsApp
-            that used to appear alongside it was a duplicate of this card.
+            The dark "Rather order on WhatsApp?" card used to sit here, holding a
+            second copy of the same basket link. The order now finishes on
+            WhatsApp from a button under the primary one, so this card only
+            duplicated it and made the page read as if WhatsApp were somewhere
+            else to go and shop.
           */}
-          <Reveal delay={100}>
-            <div className="mt-4 rounded-3xl border-2 border-ink/10 bg-ink p-5 text-bone">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">
-                {online ? 'Prefer not to pay online?' : 'Rather order on WhatsApp?'}
-              </p>
-              <p className="mt-2 text-sm text-bone/70">
-                {waPayment === 'cash'
-                  ? 'Send the same basket to us on WhatsApp and pay cash when you collect.'
-                  : 'Send the same basket to us on WhatsApp — we will confirm the order and send you a Yoco payment link.'}
-              </p>
-              {/*
-                The message is built from the basket itself — dishes, choices,
-                quantities, line totals, the delivery or collection choice, the
-                customer's details and, for delivery, the address exactly as it
-                was entered — so WhatsApp opens with the whole order already
-                typed and the customer only has to press send. It closes by
-                asking for the Yoco payment link, unless the customer picked
-                cash on collection.
-              */}
-              <a
-                href={basketHref(settings?.whatsapp, lines, { fulfilment, customer, payment: waPayment })}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full bg-ochre px-4 py-2 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"
-              >
-                Order this on WhatsApp
-              </a>
-            </div>
-          </Reveal>
         </aside>
       </form>
     </section>

@@ -181,7 +181,8 @@ describe('catalogue + search', () => {
     // Business rules confirmed by the owner.
     assert.equal(c.settings.minDeliveryOrder, 100);
     assert.deepEqual(c.settings.deliveryAreas, ['Rosebank', 'Sandton']);
-    assert.equal(c.settings.deliveryFlat, 0, 'delivery is included in the plate price');
+    assert.equal(c.settings.deliveryFlat, 55, 'delivery is a flat fee charged on top of the plates');
+    assert.equal(c.settings.freeDeliveryAbove, 300, 'delivery is free from R300');
     assert.equal(c.settings.serviceWindow.open, '12:00');
     assert.equal(c.settings.serviceWindow.close, '13:30');
     assert.equal(c.settings.contactFormspreeUrl, 'https://formspree.io/f/xvkkkwve');
@@ -485,7 +486,7 @@ describe('checkout', () => {
     assert.ok(body.payment.redirectUrl.startsWith(YOCO_LINK), 'the customer is sent to the configured Yoco page');
     assert.match(body.payment.redirectUrl, new RegExp(`reference=${body.order.code}`), 'the payment carries the order code');
     assert.equal(body.payment.provider, 'yoco');
-    assert.equal(body.order.totals.total, 130, 'a contemporary plate is R130, delivery included');
+    assert.equal(body.order.totals.total, 130, 'a collected contemporary plate is R130');
     assert.ok(body.order.whatsapp.includes('wa.me/27670137587'));
     assert.equal(typeof body.order.serviceWindow.isPreOrder, 'boolean', 'every order carries a service window');
     assert.ok(body.order.serviceWindow.label);
@@ -717,15 +718,15 @@ describe('checkout', () => {
     assert.equal(cashOnDelivery.res.status, 422, 'cash on delivery was not confirmed by the business');
   });
 
-  test('delivery is free in Rosebank and Sandton and enforces the minimum', async () => {
+  test('delivery adds the flat fee in Rosebank and Sandton and enforces the minimum', async () => {
     const sandton = await placeOrder({
       fulfilment: 'delivery',
       customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
       items: [MOGODU],
     });
     assert.equal(sandton.res.status, 201);
-    assert.equal(sandton.body.order.totals.delivery, 0, 'delivery is included in the plate price');
-    assert.equal(sandton.body.order.totals.total, 100);
+    assert.equal(sandton.body.order.totals.delivery, 55, 'the run is charged on top of the plate');
+    assert.equal(sandton.body.order.totals.total, 155, 'plate price plus the delivery fee');
     assert.equal(sandton.body.order.deliveryArea, 'Sandton');
 
     const rosebank = await placeOrder({
@@ -801,20 +802,19 @@ describe('checkout', () => {
   });
 
   /*
-   * The email rule, both halves. A card order without an address is refused
-   * before the charge, because the receipt is the customer's only record of what
-   * they paid for. Cash is different: they are collecting in person.
+   * Email is optional for card orders now.
+   *
+   * It used to be mandatory, and that was the only way a card customer could get
+   * a record. Email needs SMTP set up on the host, and the order finishes in a
+   * WhatsApp chat that is its own record — so an address is no longer a gate in
+   * front of a paying customer.
    */
-  test('a card order without an email is refused before any charge', async () => {
-    const ordersBefore = (await fetch(`${base}/api/health`).then(json)).orders;
+  test('a card order without an email is accepted', async () => {
     const { res, body } = await placeOrder({
       customer: { name: 'No Email', phone: '+27 82 000 1111' },
     });
-    assert.equal(res.status, 422);
-    assert.equal(body.code, 'email_required');
-    assert.match(body.errors[0], /email address/i);
-    const ordersAfter = (await fetch(`${base}/api/health`).then(json)).orders;
-    assert.equal(ordersAfter, ordersBefore, 'a refused order must not be saved');
+    assert.equal(res.status, 201);
+    assert.equal(body.order.receiptEmail, null, 'nothing is promised without an address');
   });
 
   test('a cash order does not need an email', async () => {

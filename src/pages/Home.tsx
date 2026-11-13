@@ -4,7 +4,7 @@ import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 
 import { zar } from '../lib/format';
-import { Button, HeritageBand, LinkButton, Reveal, SectionLabel } from '../components/ui';
+import { Button, HeritageBand, LinkButton, PotMark, Reveal, SectionLabel, ShweshwePanel, WovenRule } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
 import { usePageSeo } from '../lib/seo';
@@ -82,7 +82,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
       <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-20 md:grid-cols-[1.15fr_.85fr] md:py-28 lg:py-32">
         <div>
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-bone/25 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ochre">
-            <span className="h-1.5 w-1.5 rounded-full bg-ochre" />
+            <PotMark className="h-4 w-4" />
             Est. {s?.established ?? 2025} · Every Bite Tells a Story
           </div>
 
@@ -122,10 +122,13 @@ function Hero({ onOrder }: { onOrder: () => void }) {
               </div>
             ))}
           </dl>
+          <WovenRule className="mt-6 h-2 w-40 text-bone" />
         </div>
 
         <Reveal delay={150}>
           <div className="rounded-3xl border border-bone/20 bg-bone/5 p-6 backdrop-blur">
+            {/* Shweshwe triangle print: the cloth reference, in the brand palette. */}
+            <ShweshwePanel className="mb-4 h-6 w-full rounded-md opacity-80" />
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">
               {service?.headline ?? 'Order your way'}
             </p>
@@ -171,7 +174,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
               ))}
             </ul>
             <p className="mt-4 text-xs leading-relaxed text-bone/45">
-              Delivery is included in the plate price. Direct app links will appear here when the restaurant provides them.
+              Collect and you pay the plate price. Delivery adds a flat fee in Rosebank and Sandton.
             </p>
           </div>
         </Reveal>
@@ -315,7 +318,7 @@ function HowItWorks() {
   const steps = [
     { n: '01', t: 'Pick your plate', d: 'Choose a protein, then a starch and a vegetable side. The plate price includes everything.' },
     { n: '02', t: 'Pay your way', d: 'Pay by card through Yoco, or pay cash when you collect. Delivery is paid by card.' },
-    { n: '03', t: 'Choose collection or delivery', d: 'Delivery in Rosebank and Sandton, included in the plate price. Collection from our Standard Bank kitchen point.' },
+    { n: '03', t: 'Choose collection or delivery', d: 'Collect at the plate price, or have it delivered in Rosebank and Sandton for a flat fee.' },
     {
       n: '04',
       t: 'Use your loyalty card',
