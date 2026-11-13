@@ -36,15 +36,15 @@ try {
 }
 
 const n = health.notifications ?? {};
-const outbox = n.outbox ?? {};
 
 say(`Heritage Bites notifications — ${BASE}`);
 say(`  orders stored:        ${health.orders}`);
 say('');
-say(`  owner email:          ${n.ownerEmail ? 'configured' : 'NOT CONFIGURED'}`);
-say(`  customer email:       ${n.customerEmail
-  ? `configured (${n.customerEmailDedicated ? 'own verified domain' : "shared with the owner's account"})`
-  : 'NOT CONFIGURED'}`);
+/*
+ * Email alerts are gone. They needed an SMTP host, port and app password
+ * configured on the server — infrastructure work rather than "enter your
+ * address" — so the kitchen is alerted by Web Push only.
+ */
 const PUSH_REASON = {
   ready: () => 'ready',
   'missing-keys': () => 'NOT CONFIGURED (run `npm run push:keys`)',
@@ -57,13 +57,15 @@ const pushLine = (n.push?.reason && PUSH_REASON[n.push.reason]?.()) ?? 'unknown 
 say(`  web push:             ${pushLine}${n.push?.configured
   ? ` — ${n.push.ownerDevices} kitchen device(s), ${n.push.customerDevices} customer device(s)`
   : ''}`);
-say(`  tracking link origin: ${n.publicUrl ?? 'unknown'}`);
 say('');
-say(`  outbox:               ${outbox.pending ?? 0} pending · ${outbox.retrying ?? 0} retrying · `
-  + `${outbox.waitingConfig ?? 0} waiting for config · ${outbox.failed ?? 0} failed · ${outbox.sent ?? 0} sent`);
 
-if (!n.ownerEmail && !n.push?.configured) {
-  problems.push('No channel can reach the kitchen: set HB_SMTP_* (owner email) and/or the Web Push keys plus HB_OWNER_PUSH_KEY.');
+/*
+ * Push is the only channel. The one thing the owner has to do is generate the
+ * VAPID pair, set HB_OWNER_PUSH_KEY, and enrol the kitchen device at /alerts —
+ * no email account, no SMTP host, no password on the server.
+ */
+if (!n.push?.configured) {
+  problems.push('No channel can reach the kitchen: run `npm run push:keys`, set HB_VAPID_* and HB_OWNER_PUSH_KEY, then open /alerts on the kitchen device.');
 }
 if (n.push?.reason === 'invalid-keys' || n.push?.reason === 'invalid-subject') {
   problems.push(`Push keys are present but unusable (${n.push.reason}). Run \`npm run push:keys\` and replace both halves.`);
@@ -78,29 +80,6 @@ if ((n.push?.failingOwnerDevices ?? 0) > 0) {
 if (n.push?.configured && (n.push.ownerDevices ?? 0) === 0) {
   problems.push('Push is configured but no kitchen device has enrolled: open /alerts on the kitchen phone or tablet and enrol it.');
 }
-if (!n.customerEmail) {
-  notes.push('Customers get no receipt email. Set HB_SMTP_* or HB_CUSTOMER_SMTP_* to turn it on.');
-}
-if (n.customerEmail && !n.customerEmailDedicated) {
-  notes.push("Customer receipts are sent from the owner's Gmail account, which lands in spam more often. "
-    + 'For a verified sending domain, add HB_CUSTOMER_SMTP_* (Brevo free plan, 300/day, no card).');
-}
-if ((outbox.waitingConfig ?? 0) > 0) {
-  problems.push(`${outbox.waitingConfig} order(s) were taken before notifications were configured and are still waiting to be sent.`);
-}
-if ((outbox.retrying ?? 0) > 0) {
-  notes.push(`${outbox.retrying} job(s) failed once and are being retried — check the provider is reachable.`);
-}
-if ((outbox.stuck ?? 0) > 0) {
-  problems.push(`${outbox.stuck} notification(s) have been stuck for more than 15 minutes.`);
-}
-if ((outbox.failed ?? 0) > 0) {
-  problems.push(`${outbox.failed} notification job(s) gave up after five attempts. Read data/runtime/orderNotificationJobs.json and resend by hand.`);
-}
-if (!n.push?.vapid && n.ownerEmail) {
-  notes.push('Email alone is not a push notification unless the Gmail app is installed. Web Push puts each order on the kitchen phone for free: npm run push:keys');
-}
-
 if (notes.length) {
   say('');
   for (const note of notes) say(`  note: ${note}`);

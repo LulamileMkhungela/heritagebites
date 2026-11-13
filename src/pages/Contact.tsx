@@ -153,7 +153,7 @@ export default function Contact() {
               <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</p>
               <p className="mt-2 text-sm text-ink/70">
                 {s?.deliveryAreas?.join(' & ') ?? 'Rosebank & Sandton'} only, Thursdays and Fridays between{' '}
-                {s?.serviceWindow.open} and {s?.serviceWindow.close}. Delivery is included in the plate price; the minimum
+                {s?.serviceWindow.open} and {s?.serviceWindow.close}. Collection is the plate price; delivery adds a flat fee; the minimum
                 order is R{Number(s?.minDeliveryOrder ?? 100)}.
               </p>
               <Link to="/policies" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-ochre-deep underline">
@@ -279,7 +279,7 @@ export default function Contact() {
         </div>
       </section>
 
-      <HeritageBand className="h-2 w-full" />
+      <HeritageBand className="h-5 w-full" width={1440} />
     </>
   );
 }

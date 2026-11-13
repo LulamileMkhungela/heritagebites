@@ -134,24 +134,10 @@ export default function OrderStatus() {
   if (!order) return <Spinner label="Fetching your order…" />;
 
   /*
-   * Say what actually happened to the receipt, not what should have. The state
-   * comes from the server's outbox: `sent` has left, `queued` is retrying,
-   * `failed` gave up, `none` means no address was left. Claiming an email that
-   * never arrived is how a customer ends up with no receipt at all.
+   * There is no receipt email any more: email alerts needed SMTP configured on
+   * the host, and the order now finishes in a WhatsApp chat that is its own
+   * record. The page says what is actually true — this page plus that chat.
    */
-  const receiptLine = (() => {
-    switch (order.receiptState) {
-      case 'sent':
-        return `Your receipt was emailed to ${order.receiptEmail ?? 'your inbox'}.`;
-      case 'queued':
-        return `Your receipt is queued for ${order.receiptEmail ?? 'your inbox'} and will arrive shortly.`;
-      case 'failed':
-        return 'The receipt email could not be sent — keep this page, or press “Keep this receipt on WhatsApp” below.';
-      default:
-        return 'No receipt email was sent — keep this page, or press “Keep this receipt on WhatsApp” below.';
-    }
-  })();
-
   const updateRequest = waHref(
     settings?.whatsapp,
     `Hi Heritage Bites, please send me WhatsApp updates for order ${order.code}.`,
@@ -175,17 +161,6 @@ export default function OrderStatus() {
           <p className="mt-2 text-sm text-ink/55">
             Placed {timeAgo(order.createdAt)} · {order.fulfilmentLabel} · {order.items.reduce((n, i) => n + i.qty, 0)} items
           </p>
-          {order.receiptEmail && order.receiptState !== 'none' && (
-            <p className="mt-1 text-[12px] text-ink/45">
-              {order.receiptState === 'sent'
-                ? 'Receipt emailed to '
-                : order.receiptState === 'queued'
-                  ? 'Receipt on its way to '
-                  : 'We could not email your receipt to '}
-              <span className="font-mono">{order.receiptEmail}</span>
-              {order.receiptState === 'failed' && ' — call or WhatsApp us and we will resend it.'}
-            </p>
-          )}
           {order.serviceWindow && (
             <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-full border border-ink/15 bg-white px-3 py-1 text-[12px] font-medium text-ink/70">
               <span className="font-mono text-xs uppercase tracking-wider text-ochre-deep">
@@ -205,7 +180,9 @@ export default function OrderStatus() {
                 : 'Paid'
               : order.payment.status === 'awaiting_payment'
                 ? 'Awaiting payment'
-                : 'Payment on collection'}
+                : order.fulfilment === 'delivery'
+                  ? 'Payment on delivery'
+                  : 'Payment on collection'}
           </p>
         </div>
       </div>
@@ -289,7 +266,7 @@ export default function OrderStatus() {
             <h2 className="font-display text-xl font-semibold">{order.fulfilment === 'delivery' ? 'Delivery details' : 'Collection details'}</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink/70">
               {order.fulfilment === 'delivery'
-                ? `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout. Delivery is included in the plate price.`
+                ? `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout.`
                 : 'Collection is from our shadow kitchen at Standard Bank, Rosebank and Sandton. We confirm the exact collection point by WhatsApp.'}
             </p>
             {order.fulfilment === 'collection' && (
@@ -347,7 +324,7 @@ export default function OrderStatus() {
             no automatic status feed: there is no staff screen that moves an
             order along, so the page cannot promise "you will be told when this
             changes". Instead it says which channel is live for this specific
-            order — a receipt email, or alerts turned on for this device — and is
+            order — this page, or alerts turned on for this device — and is
             explicit that WhatsApp is a person replying, not a bot.
           */}
           <div className="rounded-3xl border-2 border-ink/10 bg-ink p-6 text-bone">
@@ -362,9 +339,8 @@ export default function OrderStatus() {
                 keep the link, or add it to your home screen, and refresh it to check.
               </li>
               <li>
-                <strong className="text-bone">
-                  {receiptLine}
-                </strong>
+                <strong className="text-bone">No receipt email is sent.</strong> Keep this page, or press “Keep this
+                receipt on WhatsApp” below to put a copy in a chat.
               </li>
               <li>
                 <strong className="text-bone">WhatsApp is a person, not a bot.</strong> Replies are written during

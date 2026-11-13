@@ -457,8 +457,8 @@ export default function MenuPage() {
             <p className="max-w-2xl text-sm leading-relaxed text-ink/70">
               Every plate is cooked on a Thursday or a Friday between{' '}
               {catalog?.settings?.serviceWindow.open ?? '12:00'} and{' '}
-              {catalog?.settings?.serviceWindow.close ?? '13:30'}, with delivery included in{' '}
-              {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')}.{' '}
+              {catalog?.settings?.serviceWindow.close ?? '13:30'}. Collect and you pay the plate price; we deliver in{' '}
+              {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} for a flat fee.{' '}
               <Link to="/specials" className="font-semibold text-ochre-deep underline">
                 How delivery and collection work
               </Link>
@@ -586,7 +586,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       <div className="animate-rise relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-bone shadow-2xl sm:rounded-3xl">
         <header className="flex items-start justify-between gap-4 bg-ink p-6 text-bone">
           <div>
-            <SectionLabel onDark>{zar(plate.price)} a plate · delivery included</SectionLabel>
+            <SectionLabel onDark>{zar(plate.price)} a plate · collect price</SectionLabel>
             <h2 className="font-display text-3xl font-semibold">{plate.name}</h2>
             <p className="mt-2 max-w-xl text-sm text-bone/65">{plate.blurb}</p>
           </div>
@@ -626,7 +626,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
 
         <footer className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-ink/10 bg-bone p-5">
           <div>
-            <p className="font-mono text-xs uppercase tracking-wider text-ink/45">Plate price, delivery included</p>
+            <p className="font-mono text-xs uppercase tracking-wider text-ink/45">Plate price · delivery adds a flat fee</p>
             <p className="font-display text-3xl font-bold">{zar(total)}</p>
           </div>
           <div className="flex items-center gap-3">

@@ -6,20 +6,24 @@ Thank you — the menu, prices, hours, delivery rules and policies are now in th
 
 ---
 
-## 1. Order email alert
+## 1. Order alerts
 
-Noted: **Heritage Bites owner/staff** will monitor and process new order emails, and the inbox is `heritagebitesfood@gmail.com`.
+**Changed after review: there is no order email any more.** Email alerts needed an
+SMTP host, a port, a sender address and an App Password held on the server — that
+is server plumbing, not something a restaurant owner should be asked to configure.
+It has been removed rather than left as setup homework.
 
-Nothing for you to send now. At handover, the Google account owner does this **in the Google account itself** (never by email, WhatsApp, chat or PDF):
+Orders now alert the kitchen through **Web Push**, which needs no email account,
+no password and no paid provider. You do it once, on the device itself: open
+`/alerts` on the kitchen phone or counter tablet, paste the owner key, allow
+notifications. From then on every order buzzes that device, even with the site
+closed. Nothing is queued or lost while that is being set up: the order is saved
+first and the page the customer sees is the record.
 
-1. Sign in to `heritagebitesfood@gmail.com`.
-2. Turn on 2-step verification.
-3. Create an App Password (Security → App passwords) and keep it.
-4. Paste it into the host's secret setting `HB_SMTP_PASS` (the rest of the values are in `.env.example`).
-
-Until that step happens, every order is still saved and its alert sits queued as `waiting_config`; no email is lost, and checkout still works.
-
-**WhatsApp notifications:** no. We are keeping the free email route. WhatsApp Business API notifications need a paid Meta Business account and approved message templates, so they are deliberately not enabled. Customers still reach you on 067 013 7587, and every receipt carries a pre-filled WhatsApp link.
+**WhatsApp notifications:** no. WhatsApp Business API notifications need a paid
+Meta Business account and approved message templates, so they are deliberately not
+enabled. Customers still reach you on 067 013 7587, and every order hands off to a
+pre-filled WhatsApp message in their own app.
 
 ## 2. Contact form → inbox
 
@@ -78,12 +82,12 @@ Why it works this way: the customer enters their card **inside Yoco's window**, 
 | Delivery areas | Rosebank and Sandton only — the API refuses an address outside them with a clear message |
 | Minimum order | R100 for plated meals |
 | Delivery fee | None — delivery is included in the plate price |
-| Ordering outside the window | Accepted, but clearly labelled a **pre-order** for the next service window (site, receipt and order email all state the window) |
+| Ordering outside the window | Accepted, but clearly labelled a **pre-order** for the next service window (the order page states the window) |
 | Preparation | About 20 minutes, cooked to order |
 | Delivery time | About 30 minutes inside the window |
 | Collection | Standard Bank, Rosebank and Sandton — **exact point still to be confirmed** |
 
-Still open: **the exact collection point**. Until you send it, the site says "Standard Bank, Rosebank and Sandton — exact collection point to be confirmed" and the order email reminds staff to confirm it with the customer. No street address is published.
+Still open: **the exact collection point**. Until you send it, the order is confirmed by WhatsApp. No street address is published.
 
 ## 5. Content sign-off — applied exactly as you sent it
 
@@ -156,17 +160,17 @@ What that means in practice:
 - **One instance only.** The JSON store is not safe for several servers writing at once. At real volume (roughly more than a few hundred orders a week, or a second server for uptime) we move to a transactional database — Postgres or MySQL on the same host is fine — and I would do that work then.
 - **Backups, monitoring and rate limiting** are still launch tasks; they are listed in [`docs/what-is-needed.md`](what-is-needed.md).
 
-To hand over hosting I need: the host or account name, the domain's DNS access, a Node 20 runtime, a persistent data path, HTTPS enabled, and the ability to set the secret values from `.env.example` in the host's secret settings. I never need the Yoco keys, the Gmail App Password or any customer data sent by message — set them directly on the host.
+To hand over hosting I need: the host or account name, the domain's DNS access, a Node 20 runtime, a persistent data path, HTTPS enabled, and the ability to set the secret values from `.env.example` in the host's secret settings. I never need the Yoco keys, the push keys or any customer data sent by message — set them directly on the host.
 
 ---
 
 ## Where the site stands
 
-Implemented and tested: menu and plate builder, basket, collection/delivery with the delivery boundary, service-window pre-orders, card (sandbox until keys are set) and cash on collection, secure receipts, loyalty lookup, customer quests, contact form to your inbox, and the five policies.
+Implemented and tested: menu and plate builder, basket, collection/delivery with the delivery boundary, service-window pre-orders, card and cash on collection, the private order page, loyalty lookup, customer quests, contact form to your inbox, and the five policies.
 
 Still outstanding before you take live orders:
 
-1. Gmail App Password set on the host (activates order emails).
+1. Push keys set on the host, and the kitchen device enrolled at `/alerts`.
 2. Yoco live keys set on the host (activates real card payments).
 3. Confirm the Formspree delivery address and who replies.
 4. The exact collection point for Rosebank/Sandton.
@@ -174,4 +178,4 @@ Still outstanding before you take live orders:
 6. Uber Eats / Mr D store URLs, if you use them.
 7. The hosting and backup decision above.
 
-There is still no staff console: the order email is a summary, not a queue. Whoever is on the phone should watch that inbox during the 12:00–13:30 window and confirm collection or delivery with the customer.
+There is still no staff console: the push alert is a notification, not a queue. Whoever is on the phone should watch that device and the WhatsApp chat during the 12:00–13:30 window and confirm collection or delivery with the customer.

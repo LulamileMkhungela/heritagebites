@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { zar } from '../lib/format';
 import { useOverlay } from '../lib/useOverlay';
 import { asset } from '../lib/assets';
-import { HeritageBand } from './ui';
+import { HeritageBand, WhatsAppIcon } from './ui';
 import { BasketBar } from './BasketBar';
 import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
 
@@ -80,7 +80,12 @@ export default function Layout() {
       {/* Main navigation */}
       <header ref={headerRef} className="sticky top-0 z-50 border-b border-bone/15 bg-ink text-bone backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-4 sm:px-4 sm:py-3">
-          <Link to="/" onClick={() => setMenuOpen(false)} className="group flex min-h-11 min-w-11 items-center gap-2 sm:gap-3" aria-label="Heritage Bites home">
+          <Link
+            to="/"
+            onClick={() => setMenuOpen(false)}
+            className="logo-spin-host group flex min-h-11 min-w-11 items-center gap-2 sm:gap-3"
+            aria-label="Heritage Bites home"
+          >
             {/*
               The shop's own badge. It replaces a generic pot icon: a customer who
               has met this mark on a WhatsApp message or in a Google result should
@@ -94,7 +99,7 @@ export default function Layout() {
               alt=""
               width={44}
               height={44}
-              className="h-11 w-11 shrink-0 object-contain transition-transform group-hover:rotate-3"
+              className="logo-spin h-11 w-11 shrink-0 object-contain"
             />
             {/*
               The wordmark is the only purely decorative thing in the bar, so it is
@@ -206,7 +211,7 @@ export default function Layout() {
             </div>
           </nav>
         )}
-        <HeritageBand className="h-1.5 w-full" />
+        <HeritageBand className="h-4 w-full" width={1440} />
       </header>
 
       <PreviewStrip />
@@ -341,7 +346,7 @@ function Footer() {
 
   return (
     <footer className="mt-24 bg-ink text-bone">
-      <HeritageBand className="h-2 w-full" />
+      <HeritageBand className="h-5 w-full" width={1440} on="ink" />
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-4">
         <div className="md:col-span-2">
           {/*
@@ -501,18 +506,18 @@ function Footer() {
                 <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
               </ul>
             </li>
-            {/* The two pages that are not part of ordering a plate. */}
-            <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
+            {/* The pages that are not part of ordering a plate. "Loyalty card"
+                used to appear here and again inside the Meals group above. */}
             <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer quest</Link></li>
             <li>
               {s?.channels?.ubereats?.url
                 ? <a href={s.channels.ubereats.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Uber Eats</a>
-                : <span className="text-bone/40">Uber Eats · link coming soon</span>}
+                : <span className="text-bone/40">Uber Eats · order on WhatsApp</span>}
             </li>
             <li>
               {s?.channels?.mrd?.url
                 ? <a href={s.channels.mrd.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Mr D Food</a>
-                : <span className="text-bone/40">Mr D Food · link coming soon</span>}
+                : <span className="text-bone/40">Mr D Food · order on WhatsApp</span>}
             </li>
           </ul>
         </div>
@@ -576,8 +581,18 @@ function CartDrawerPanel() {
 
   const subtotal = lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
   const settings = catalog?.settings;
-  // Delivery is included in the plate price (confirmed by the business), so the
-  // basket never adds a delivery charge — only a minimum-order check applies.
+  /*
+   * After the window has passed the drawer must not offer a checkout that will
+   * refuse the basket. It offers the conversation instead, with the same basket
+   * in the message.
+   */
+  const shut = Boolean(catalog?.service?.orderingClosed);
+  const askHref = basketHref(settings?.whatsapp, lines, {
+    fulfilment,
+    ...(shut ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
+  });
+  // Collection is the plate price; delivery adds one flat fee at checkout, so
+  // the drawer shows the plates and only warns about the minimum order.
   const belowMinimum = fulfilment === 'delivery' && subtotal < (settings?.minDeliveryOrder ?? 100);
 
   return (
@@ -677,31 +692,49 @@ function CartDrawerPanel() {
                 {fulfilment === 'delivery'
                   ? belowMinimum
                     ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
-                    : 'Delivery is included — nothing is added at checkout.'
+                    : `Delivery ${zar(settings?.deliveryFlat ?? 0)} is added at checkout.`
                   : 'Collection — nothing is added at checkout.'}
               </p>
+              {shut ? (
+                <a
+                  href={askHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setOpen(false)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] transition-colors hover:bg-ochre-deep hover:text-bone"
+                >
+                  <WhatsAppIcon className="h-4 w-4" />
+                  Ask if we can cook it
+                </a>
+              ) : (
+                <Link
+                  to="/checkout"
+                  onClick={() => setOpen(false)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] transition-colors hover:bg-ochre-deep hover:text-bone"
+                >
+                  Checkout
+                </Link>
+              )}
+              {/*
+                This used to open WhatsApp with the basket alone — no name, no
+                number, no address — which is a message the kitchen has to
+                interrogate before it can cook anything. The basket still needs
+                loading, so if this is a live checkout that cannot take payment
+                the honest route is the form that collects the details.
+                The drawer is also shown on the preview build, where the
+                checkout is a preview, so the link there stays a WhatsApp order.
+              */}
+              {/* When the window has closed this would be a second, weaker copy
+                  of the same WhatsApp link directly above it. */}
+              {!shut && (
               <Link
                 to="/checkout"
                 onClick={() => setOpen(false)}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] transition-colors hover:bg-ochre-deep hover:text-bone"
-              >
-                Checkout
-              </Link>
-              {/*
-                The basket as a WhatsApp message, one tap from the drawer it is
-                already visible in. Useful on the preview build, where the
-                checkout cannot take an order, and for a customer who would
-                rather chat than fill in the form.
-              */}
-              <a
-                href={basketHref(settings?.whatsapp, lines, { fulfilment })}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => setOpen(false)}
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
               >
-                Order this on WhatsApp
-              </a>
+                Add your details to order on WhatsApp
+              </Link>
+              )}
               {/*
                 The way out. A basket that can only be emptied one line at a time
                 is a trap once someone has tried several plates, and the drawer is

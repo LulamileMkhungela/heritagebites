@@ -122,6 +122,12 @@ export interface Settings {
 /** Where the kitchen is in its weekly Thursday/Friday rhythm. */
 export interface ServiceStatus {
   open: boolean;
+  /**
+   * True only once today's window has already closed — the one state where the
+   * checkout refuses an order outright. Before opening and on rest days the
+   * site takes a pre-order for the next window instead.
+   */
+  orderingClosed: boolean;
   /** True when today is one of the days the kitchen cooks at all. */
   isServiceDay: boolean;
   /** Short, human status: "Serving now", "Wednesday is a rest day", … */
@@ -181,10 +187,10 @@ export interface Catalog {
   payments: PaymentConfig;
   contact: { inboxConfigured: boolean };
   /**
-   * Which automatic channels are live. `customerEmail` false means no receipt
-   * will be sent, so the checkout must not promise one.
+   * Which automatic channels are live. Push is the only one now; email alerts
+   * were removed because they needed SMTP configured on the host.
    */
-  notifications?: { customerEmail: boolean; ownerEmail: boolean };
+  notifications?: { push: boolean };
   today: number;
 }
 
@@ -262,11 +268,11 @@ export interface Order {
   fulfilmentLabel: string;
   customer: { name: string; phone: string };
   /**
-   * Where the receipt was emailed, masked by the server (`t***@example.co.za`).
-   * Null when no address was left or no receipt was ever queued.
+   * Always null. Kept so an older cached client reading this payload cannot
+   * claim a receipt was emailed — no receipt email exists any more.
    */
   receiptEmail: string | null;
-  /** Delivery state of that receipt, so the page never promises an email it did not send. */
+  /** Always 'none', for the same reason as `receiptEmail`. */
   receiptState: 'none' | 'queued' | 'sent' | 'failed';
   items: { itemId: string; name: string; unitPrice: number; qty: number; options: { label: string }[]; lineTotal: number }[];
   totals: Totals;

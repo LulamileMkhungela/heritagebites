@@ -18,16 +18,16 @@ These are implemented, not just described. `server/seed.js` is the source of tru
 | Preparation / delivery | ~20 minutes / ~30 minutes inside the window |
 | Collection | Standard Bank, Rosebank and Sandton (exact point still to be confirmed) |
 | Payments | Card (Yoco) and cash on collection. No cash on delivery. |
-| Customer email | Required for card orders (the only place a receipt can go); optional for cash on collection |
+| Customer email | Optional — used only if the customer wants a written reply; no receipt is emailed |
 | Contact | 067 013 7587 · heritagebitesfood@gmail.com · Formspree inbox |
 
-Outside the window the site still takes orders, but labels them **pre-orders** for the next window on the receipt, in the order email and on the customer's screen.
+Outside the window the site still takes orders, but labels them **pre-orders** for the next window on the order page and on the customer's screen.
 
 ## Current product status
 
-The kitchen/manager console, staff roles, seeded staff logins and admin API have been removed. No staff-facing order workflow remains in this application. Successful orders are saved and alerted on: a Web Push notification to every enrolled kitchen device, an email ticket to `heritagebitesfood@gmail.com`, a Web Push confirmation to a customer who enabled alerts, and an email receipt to the customer (when they left an address). Push and email are independent — nothing is delivered until the VAPID keys and SMTP settings exist on the host, but the order is still saved and still tracked. The alerts do not provide a staff queue or advance order statuses. Order receipts are secure contact points, not live kitchen tracking.
+The kitchen/manager console, staff roles, seeded staff logins and admin API have been removed. No staff-facing order workflow remains in this application. Successful orders are saved and alerted on: a Web Push notification to every enrolled kitchen device, and a Web Push confirmation to a customer who enabled alerts. Nothing is delivered until the VAPID keys exist on the host, but the order is still saved and still tracked. The alerts do not provide a staff queue or advance order statuses. Order receipts are secure contact points, not live kitchen tracking.
 
-The Contact form forwards each enquiry to the business Formspree endpoint **and** keeps a local copy, so a delivery failure never loses a message. WhatsApp remains a tap-to-send channel in both directions: see [Free order notifications](#free-order-notifications-push--email--whatsapp) for why that is deliberate.
+The Contact form forwards each enquiry to the business Formspree endpoint **and** keeps a local copy, so a delivery failure never loses a message. WhatsApp remains a tap-to-send channel in both directions: see [Free order notifications](#free-order-notifications-push--whatsapp) for why that is deliberate.
 
 **Card numbers never reach this server, and there is no card field on the checkout.** The customer places the order, is sent to Yoco's own payment page (card or instant EFT), and returns; a signed webhook from Yoco is the only thing that can mark the order paid. Configure it with `HB_YOCO_PAYMENT_URL` (a Yoco payment link, quickest) or `HB_YOCO_SECRET_KEY` (Checkout API, fixes the amount), plus `HB_YOCO_WEBHOOK_SECRET`. Without any of these the checkout says online payment is not switched on yet and offers WhatsApp or cash on collection instead. The redirect and the paid-by-webhook step are tested end to end against a stand-in gateway (`npm run sandbox:yoco`, see `server/yoco-checkout-flow.test.js`), and test mode with Yoco's own `sk_test_` key is written up in [`docs/production-payments-yoco.md`](docs/production-payments-yoco.md). Run `npm run check:payments` on the server before launch: it fetches the configured payment link and refuses to call a dead one ready.
 
@@ -60,7 +60,7 @@ WhatsApp silently drops over-long `text` parameters, so the basket message lists
 
 Nothing is published that the business has not signed off. Specifically: no drinks, add-ons, discount codes, testimonials or day-of-week promotions are live, because none were approved. Two dishes (Tlhakwana and Smiley) have no photograph yet, so they render a "photo coming soon" panel instead of a picture of a different dish. `SEED_VERSION` in `server/seed.js` re-seeds catalogue content on boot when it changes; orders, messages and loyalty stamps are never touched.
 
-## Free order notifications (push + email + WhatsApp)
+## Free order notifications (push + WhatsApp)
 
 Every channel below costs nothing per message and needs no card on file. There is
 no SMS provider, no WhatsApp Cloud API account, no messaging app to install and no
@@ -69,22 +69,20 @@ message bundle to buy.
 | Who | Channel | Automatic? | Reaches them when the site is closed? | Cost |
 | --- | --- | --- | --- | --- |
 | Owner | **Web Push** to enrolled kitchen devices | Yes, within seconds | Yes | R0 |
-| Owner | Email ticket to `HB_ORDER_ALERT_EMAIL` | Yes, background worker | Yes | R0 |
 | Customer | **Web Push** confirmation + cancellation for their order | Yes, once they tap "Alert me" | Yes | R0 |
-| Customer | Email receipt with private tracking link | Yes, when they left an email | Yes | R0 |
 | Customer / owner | WhatsApp | No — one tap, sent from their own app | — | R0, unlimited |
 
 ### Which alert does who get?
 
 - **Owner, the moment an order lands:** a Web Push notification on every enrolled
-  kitchen device (phone and/or counter tablet), plus the email ticket as the
-  permanent record. The push says the code, plate count, total and
-  collection/delivery; `requireInteraction` keeps it on screen until acknowledged.
+  kitchen device (phone and/or counter tablet). The push says the code, plate
+  count, total and collection/delivery; `requireInteraction` keeps it on screen
+  until acknowledged. The order itself is the permanent record — this page and
+  the WhatsApp chat.
 - **Customer, when they opt in:** a Web Push confirmation the instant they tap
   "alert me" on their receipt — which is also their proof that alerts reach that
-  phone — plus the email receipt with their tracking link. The push deliberately
-  carries no tracking token: a lock-screen message must not hand someone the order
-  page.
+  phone. The push deliberately carries no tracking token: a lock-screen message
+  must not hand someone the order page.
 
   (An earlier design pushed "order placed" at checkout. That could never work: the
   customer opts in *after* checkout returns, so no device was subscribed yet. The
@@ -113,55 +111,29 @@ Two honest limits:
   (iOS 16.4+). Android and desktop work straight away. The pages say this instead
   of failing silently.
 - **It is opt-in.** Nobody is pushed to without tapping. A customer who ignores the
-  offer still gets the email receipt, which is why email is not redundant.
+  offer still has the tracking page and the WhatsApp chat, which is why neither is
+  redundant.
 
 A customer subscription is bound to one order code and capped at five devices, so
 nobody can point a device at someone else's orders; a device's own
 `/api/push/unsubscribe` needs no key, because revoking oneself must always work.
 Dead subscriptions (a browser reporting 404/410) are deleted rather than retried.
 
-### Email: the record that outlives a browser
+### Why there is no email alert
 
-Copy `.env.example` to `.env` locally, or set the same values in the production
-host's secret settings. Turn on 2-step verification for the business Google
-account, create an App Password, set `HB_SMTP_PASS` to those 16 characters without
-spaces, keep it private, and restart the API. `HB_CUSTOMER_EMAIL_ENABLED=false`
-keeps the owner ticket but stops the customer copy; `HB_ORDER_EMAIL_ENABLED=false`
-switches both off. Gmail's normal account sending limits and policies apply.
+Email was removed on purpose. A working alert email means an SMTP host, a port, a
+sender address and a 16-character app password held on the server, plus DNS work
+if receipts are to avoid spam folders. That is infrastructure, not "type your
+address and get alerts", and it failed the test of what the restaurant should have
+to configure.
 
-Placing an order saves it first, then writes one job per email channel into the
-JSON outbox; a single worker delivers them with retries (30s → 2m → 10m → 1h → 6h,
-five attempts). The owner ticket is claimed first, so a broken customer address
-can never delay the kitchen. Web Push does not use the outbox: a phone alert is
-worth seconds, not retries.
+Web Push replaces it with no provider at all. The one-time setup is running
+`npm run push:keys` and pasting the result into the host's secrets; the daily use
+is opening `/alerts` on the kitchen phone and pressing enrol. Nothing else on the
+server holds a credential for sending mail.
 
-The customer receipt is plain text and contains the order, totals, service window,
-collection/delivery details, the private tracking link and a WhatsApp handoff.
-Replying to it reaches the kitchen inbox. `HB_PUBLIC_URL` is the origin used in
-that link; it is never inferred from the request `Host` header. The plaintext
-token lives in the outbox job only until the receipt is sent, then it is cleared —
-the saved order keeps only its SHA-256 digest.
-
-#### Deliverability: two accounts, not one
-
-Gmail is fine for the kitchen ticket — it is mail to yourself. It is a poor
-choice for customer receipts, because a receipt sent *from* `gmail.com` whose
-tracking link points at `heritagebites.co.za` is the classic shape of spoofed
-mail, and a fair share of them land in spam.
-
-So the two channels can use different senders. `HB_SMTP_*` carries the kitchen
-ticket; if `HB_CUSTOMER_SMTP_*` is set, receipts go out through that account
-instead — ideally a provider with a **verified sending domain** for
-`heritagebites.co.za`. Brevo's forever-free plan (300 emails/day, no card) does
-this, with two honest caveats:
-
-- the free plan puts **Brevo's own branding** in the footer of sent mail;
-- a verified domain means adding DNS records (SPF, DKIM) for the domain, which is
-  a one-time job at the domain registrar.
-
-Without `HB_CUSTOMER_SMTP_*` both channels share the owner's account. That still
-works and still costs nothing; it is just more likely to be filtered. The health
-check says which of the two you are running.
+The record of an order is the saved order (a private tracking link, from
+`/api/orders/<code>`), this order page, and the WhatsApp chat the customer used.
 
 ### Checking it without a phone
 
@@ -171,28 +143,27 @@ The test suite sets it.
 
 ### Free tiers fail silently — so make them shout
 
-The real risk with a free stack is not the price, it is the silence: an App
-Password stops working when someone changes the Google password, a provider
-suspends an account over bounce rates, keys are rotated, and a phone is wiped so a
-push subscription dies. Orders keep arriving and nobody is told.
+The real risk with a free stack is not the price, it is the silence: keys are
+rotated, a phone is wiped, a browser subscription dies. Orders keep arriving and
+nobody is told.
 
-Three things guard against that:
+Two things guard against that:
 
-1. **Every channel is visible.** `GET /api/health` reports
-   `notifications.healthy`, the push device counts, and outbox counts (`pending`,
-   `retrying`, `waitingConfig`, `stuck`, `failed`, `sent`).
+1. **The channel is visible.** `GET /api/health` reports `notifications.push`:
+   whether it is ready, why not if not, and how many kitchen and customer devices
+   are enrolled.
 2. **A scheduled check exits non-zero.** `scripts/notification-check.mjs` reads
-   the live API and fails loudly when no channel can reach the kitchen, when push
-   is configured but **no device has enrolled**, when an order is still waiting for
-   configuration, when a job has been stuck for more than 15 minutes, or when any
-   job gave up after five attempts.
+   the live API and fails loudly when push is not configured, when keys are
+   present but unusable, when `HB_OWNER_PUSH_KEY` is missing, when push is
+   configured but **no device has enrolled**, or when a kitchen device has failed
+   three sends in a row.
 
    ```bash
    HB_BASE=https://heritagebites.co.za npm run notify:check
    ```
 
    Run it from cron, a GitHub Action or an uptime monitor pointed at
-   `/api/health` — free-tier failure is only survivable if something notices.
+   `/api/health` — failure is only survivable if something notices.
 3. **The site is the source of truth.** The order is saved before any notification
    is attempted, so a dead channel never loses a sale; `GET /api/orders/<code>`
    with its tracking token always shows the current state.
@@ -278,7 +249,7 @@ npm run test:interaction # exercise storefront, contact, checkout and order flow
 npm run test:a11y        # route-level accessibility audit
 npm run test:pages       # the GitHub Pages preview (needs `npm run build:pages` + `preview:pages`)
 npm run test:mobile      # phone layout: 12 routes × 4 widths, real Chromium
-npm run backup           # gzipped copy of the runtime JSON store (orders, stamps, outbox)
+npm run backup           # gzipped copy of the runtime JSON store (orders, stamps)
 npm run verify           # all of the above
 npm run build            # TypeScript and production build
 ```
@@ -435,7 +406,7 @@ There are no `/api/admin/*` endpoints.
 
 Before relying on this as a live restaurant ordering system, complete the items in `docs/what-is-needed.md`. The most important are:
 
-1. Set the Gmail App Password so order emails actually send, add `HB_CUSTOMER_SMTP_*` for receipt deliverability, run `npm run push:keys` and enrol the kitchen devices at `/alerts`. Then schedule `npm run notify:check`.
+1. Run `npm run push:keys`, set `HB_VAPID_*` and `HB_OWNER_PUSH_KEY`, enrol the kitchen devices at `/alerts`. Then schedule `npm run notify:check`.
 2. Set the live Yoco keys so card payments are real.
 3. Decide who watches the order inbox during the service window, or commission a protected order queue.
 4. Confirm the exact collection point and the Formspree inbox owner.

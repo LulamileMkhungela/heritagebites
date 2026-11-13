@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CartOptionPick, MenuItem } from '../lib/types';
 import { zar } from '../lib/format';
-import { Button, Qty } from './ui';
+import { Button, HeritageBand, Qty } from './ui';
 import { buildLine, useCart } from '../store/cart';
 import { useOverlay } from '../lib/useOverlay';
 
@@ -19,6 +19,8 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
 
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-3xl border-2 border-ink/10 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-ink/25 hover:shadow-[0_18px_40px_-24px_rgba(0,25,56,0.5)]">
+      {/* Ndebele painted band: the card is framed, not just a photo in a box. */}
+      <HeritageBand className="h-4 w-full shrink-0" width={300} tile={40} />
       <button type="button" onClick={onOpen} className="relative block aspect-[4/3] w-full overflow-hidden bg-ink/5 text-left" aria-label={`View ${item.name}`}>
         <img
           src={item.image}
@@ -33,14 +35,13 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
           </span>
         )}
         <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">
-          {zar(item.price)} <span className="font-sans text-xs font-normal uppercase tracking-wider text-bone/70">incl. delivery</span>
+          {zar(item.price)} <span className="font-sans text-xs font-normal uppercase tracking-wider text-bone/70">plate</span>
         </span>
         {item.imagePending && (
           <span className="absolute right-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-ink">
             Photo coming soon
           </span>
         )}
-        {item.spice > 0 && <span className="absolute bottom-3 right-3 text-sm">{'🌶️'.repeat(item.spice)}</span>}
       </button>
 
       <div className="flex flex-1 flex-col p-4">
@@ -56,7 +57,7 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
         {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>}
         {!compact && (
           <p className="mt-2 font-mono text-xs uppercase tracking-wider text-ink/40">
-            {zar(item.price)} · starch & veg included
+            {zar(item.price)} · collect price, no extras
           </p>
         )}
 

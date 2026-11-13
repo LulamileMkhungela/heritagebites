@@ -19,3 +19,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </React.StrictMode>,
 );
+
+/*
+ * Clear the boot loader once React has committed. It is removed rather than
+ * merely hidden so it cannot sit in the tab order or be found by a screen
+ * reader, and it is faded first so the handover is not a blink.
+ *
+ * The 280ms matches the CSS transition; if the element is already gone (a
+ * second mount in development) this is a no-op.
+ */
+const boot = document.getElementById('hb-boot');
+if (boot) {
+  boot.style.opacity = '0';
+  window.setTimeout(() => boot.remove(), 280);
+}

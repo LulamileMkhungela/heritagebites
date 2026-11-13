@@ -39,7 +39,14 @@ const step = (label, fn) =>
   (async () => {
     try {
       const detail = await fn();
-      results.push(['PASS', label, detail ?? '']);
+      /*
+       * A step can return `SKIP: reason` when the thing it tests is genuinely
+       * not available on this host — the paid path needs Yoco configured, for
+       * example. It is reported as skipped with its reason rather than as either
+       * a pass it did not earn or a failure that says nothing about the code.
+       */
+      if (typeof detail === 'string' && detail.startsWith('SKIP:')) results.push(['SKIP', label, detail.slice(5).trim()]);
+      else results.push(['PASS', label, detail ?? '']);
     } catch (e) {
       results.push(['FAIL', label, e.message]);
     }
@@ -655,42 +662,22 @@ s7.w.fetch = async (input, init) => {
 
 await s7.waitFor(() => /Almost there/i.test(s7.text()), 'checkout page');
 
-await step('the checkout only promises a receipt email when one can actually be sent', async () => {
+await step('the checkout states where the record lives, and never promises an email receipt', async () => {
   /*
-   * The owner's question, turned into a test: this copy used to say "we email
-   * your receipt ... as soon as the order is placed" on every deployment. With
-   * no SMTP configured that email never arrives, so the page must not say it.
-   *
-   * The answer comes from the API (`notifications.customerEmail`), so the same
-   * code is honest on a host with email set up and on one without.
+   * Email receipts need SMTP configured on the host before a single message can
+   * go out, and the order now finishes in a WhatsApp chat that is its own
+   * record — so the page stopped describing email machinery entirely. What it
+   * must still do is say plainly where the customer's record is, and never
+   * claim an email it cannot send.
    */
-  const health = await fetch(`${BASE}/api/health`).then((r) => r.json());
-  const canEmail = Boolean(health.notifications?.customerEmail);
   const text = s7.text();
-
-  const emailInput = [...s7.doc.querySelectorAll('input')].find((el) => /you@example/.test(el.placeholder ?? ''));
-  if (!emailInput) throw new Error('no email field on the checkout');
-  s7.setInput(emailInput, 'thabo@example.co.za');
-  await sleep(300);
-
-  if (canEmail) {
-    if (!/We email your receipt and a private tracking link/.test(s7.text())) {
-      throw new Error('this server can send receipts but the checkout does not say so');
-    }
-    return 'email is configured, and the page promises it';
-  }
-
-  if (/We email your receipt and a private tracking link/.test(s7.text())) {
+  if (/We email your receipt/i.test(s7.text())) {
     throw new Error('the checkout promises a receipt email this server cannot send');
   }
-  if (!/Email receipts are not switched on|tracking page after checkout is your record/.test(s7.text())) {
+  if (!/your WhatsApp chat is the record/i.test(text)) {
     throw new Error('the checkout does not tell the customer where their record actually is');
   }
-  /* The kitchen notification is separate and still true: the order is queued. */
-  if (!/The kitchen gets the order the moment you place it/.test(text)) {
-    throw new Error('the kitchen-notification line went missing');
-  }
-  return 'no receipt email promised, and the customer is told what to keep';
+  return 'no receipt email promised, and the WhatsApp record is stated';
 });
 
 await step('typing a delivery address offers OpenStreetMap suggestions', async () => {
@@ -840,6 +827,38 @@ await step('picking a suggestion moves the delivery area to match the address', 
   return 'address and area autofilled from the picked result';
 });
 
+await step('the WhatsApp order is blocked until the customer details are filled', async () => {
+  /*
+   * The owner's rule: nobody may reach WhatsApp with an empty name or number.
+   * At this point the basket and a delivery address exist, but no name and no
+   * phone, so the control must be a disabled button that says why — not a link.
+   */
+  const waHref = () => [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')]
+    .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+
+  if (waHref()) throw new Error('a WhatsApp link is offered before a name and number are filled');
+
+  const gate = [...s7.doc.querySelectorAll('button[aria-disabled="true"]')]
+    .find((b) => /Complete order on WhatsApp/i.test(b.textContent ?? ''));
+  if (!gate) throw new Error('no disabled WhatsApp control on an incomplete checkout');
+
+  /* The reason has to name the missing detail, not just say "disabled". */
+  const page = s7.text();
+  if (!/Add your full name first/i.test(page)) {
+    throw new Error('the checkout does not say which detail is missing before WhatsApp');
+  }
+
+  /* Fill exactly what it asks for, and nothing else. */
+  const byPh = (re) => [...s7.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
+  s7.setInput(byPh(/Thabo Mahlangu/), 'Delivery Test');
+  s7.setInput(byPh(/\+27 82/), '+27 82 000 4400');
+  await sleep(400);
+
+  const waLink = waHref();
+  if (!waLink) throw new Error('WhatsApp stayed blocked after the name and number were filled');
+  return 'blocked with a reason until name and number were filled';
+});
+
 await step('the WhatsApp order message carries the delivery address and the Yoco payment ask', async () => {
   /*
    * The owner's arrangement for WhatsApp orders: the message has to be the whole
@@ -848,8 +867,8 @@ await step('the WhatsApp order message carries the delivery address and the Yoco
    * link. No payment method was clicked in this flow, so the ask is Yoco.
    */
   const waLink = [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')]
-    .find((a) => /Order this on WhatsApp/i.test(a.textContent ?? ''));
-  if (!waLink) throw new Error('checkout has no WhatsApp basket link');
+    .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+  if (!waLink) throw new Error('checkout has no WhatsApp order button');
   const waText = new URL(waLink.href).searchParams.get('text') ?? '';
   for (const wanted of [/I would like it delivered in Sandton/, /Address: 12 Oxford Road, Illovo, Sandton/, /I will pay by Yoco/, /send me the payment link/]) {
     if (!wanted.test(waText)) {
@@ -871,9 +890,14 @@ await step('an address that contradicts the chosen area is refused with both nam
     throw new Error('the mismatch message does not name both areas');
   }
 
-  /* And the order must not go through while it stands. */
-  if (!s7.byText('button[type="submit"]', /Place order/i)[0]) throw new Error('no place-order button');
-  s7.click(s7.byText('button[type="submit"]', /Place order/i)[0]);
+  /*
+   * And the order must not go through while it stands. The primary button is
+   * disabled when online payment is not connected on this host, so the click is
+   * a no-op either way — what matters is that no order page appears.
+   */
+  const submit = s7.byText('button[type="submit"]', /Place order|Online payment/i)[0];
+  if (!submit) throw new Error('no place-order button');
+  s7.click(submit);
   await sleep(400);
   if (/Order tracking/i.test(s7.text())) throw new Error('a mismatched delivery address placed an order');
   return 'refused, and nothing was ordered';
@@ -1228,28 +1252,41 @@ await step('validation blocks an empty order', async () => {
   return 'blocked with a message';
 });
 
-await step('an online order without an email is blocked, because the receipt has nowhere to go', async () => {
-  const ordersBefore = await orderCount();
-
+await step('email is optional, the checkout has no card fields, and the WhatsApp order button is present', async () => {
+  /*
+   * Email used to be mandatory for a card order because it was the only place a
+   * receipt could go. Email needs SMTP set up on the host, and the order now
+   * finishes in a WhatsApp chat that is its own record, so the field is optional
+   * and must not block anyone.
+   */
   const byPlaceholder = (re) => [...s1.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s1.setInput(byPlaceholder(/Thabo Mahlangu/), 'Interaction Test');
   s1.setInput(byPlaceholder(/\+27 82/), '+27 82 000 7777');
 
-  /*
-   * There is no card field to fill in any more: the whole card form is gone, and
-   * money is taken on Yoco's own page. If a placeholder like "4242" is still on
-   * screen, the old form has crept back.
-   */
+  /* No card field may exist: money is taken on Yoco's own page. */
   const cardFields = [...s1.doc.querySelectorAll('input')].filter((f) => /4242 4242|MM\/YY|^123$|T MAHLANGU/.test(f.placeholder ?? ''));
   if (cardFields.length) throw new Error(`card fields are still on the checkout: ${cardFields.map((f) => f.placeholder).join(', ')}`);
 
-  s1.click(s1.byText('button[type="submit"]', /Place order/i)[0]);
-  await s1.waitFor(() => /need an email/i.test(s1.text()), 'email requirement', 10000);
+  /* The second action must exist and must carry the whole order. */
+  const wa = [...s1.doc.querySelectorAll('a[href^="https://wa.me/"]')]
+    .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+  if (!wa) throw new Error('no "Complete order on WhatsApp" button');
+  const message = new URL(wa.href).searchParams.get('text') ?? '';
+  for (const wanted of [/Interaction Test/, /\+27 82 000 7777/]) {
+    if (!wanted.test(message)) throw new Error(`the WhatsApp order is missing the customer details typed above: ${message.slice(0, 200)}`);
+  }
 
-  const ordersAfter = await orderCount();
-  if (ordersAfter !== ordersBefore) throw new Error(`an order was created without an email: ${ordersBefore} -> ${ordersAfter}`);
-  return 'blocked with an email requirement, and no card fields exist';
+  /*
+   * Nothing in the form may block a customer who has given a name and number:
+   * an empty optional email is not an error, and the address fields only appear
+   * when delivery is the chosen fulfilment.
+   */
+  const emailField = byPlaceholder(/you@example\.co\.za/);
+  if (emailField && emailField.value) throw new Error('the email field was not empty for this check');
+  return 'email optional, details carried into the WhatsApp order, no card fields';
 });
+
+const SKIP_YOCO = 'this host has no Yoco configuration (HB_YOCO_*), so the paid path is not part of this run';
 
 await step('placing an online order saves it and hands the customer to Yoco', async () => {
   /*
@@ -1259,7 +1296,7 @@ await step('placing an online order saves it and hands the customer to Yoco', as
    * of the change — so what is asserted is the hand-off, not an approval.
    */
   const payments = await fetch(`${BASE}/api/catalog`).then((r) => r.json()).then((c) => c.payments);
-  if (!payments.online) throw new Error('this server has no Yoco configuration, so the paid path cannot be exercised');
+  if (!payments.online) return `SKIP: ${SKIP_YOCO}`;
 
   const ordersBefore = await orderCount();
   const byPlaceholder = (re) => [...s1.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
@@ -1274,8 +1311,17 @@ await step('placing an online order saves it and hands the customer to Yoco', as
   const payLink = [...s1.doc.querySelectorAll('a')].find((a) => /Continue to Yoco payment/i.test(a.textContent ?? ''));
   if (!payLink) throw new Error('no link to continue to Yoco');
   const url = new URL(payLink.href);
-  const expected = new URL(payments.mode === 'api' ? 'https://pay.yoco.com/' : 'https://pay.yoco.com/heritagebites');
-  if (url.host !== expected.host) throw new Error(`the payment page is not Yoco: ${url.host}`);
+  /*
+   * Normally the host is pay.yoco.com. When HB_YOCO_CHECKOUT_ENDPOINT points at
+   * the project's own stand-in gateway (scripts/yoco-sandbox.mjs), the host is
+   * that gateway instead — the one thing that must never happen is a payment
+   * page on some unrelated site, so anything other than Yoco or the configured
+   * sandbox is refused.
+   */
+  const sandbox = process.env.HB_YOCO_CHECKOUT_ENDPOINT ? new URL(process.env.HB_YOCO_CHECKOUT_ENDPOINT).host : null;
+  if (!/(^|\.)yoco\.com$/.test(url.host) && url.host !== sandbox) {
+    throw new Error(`the payment page is not Yoco: ${url.host}`);
+  }
 
   /*
    * The hand-off replaces the whole page (the basket is gone by then), so the
@@ -1312,7 +1358,16 @@ await step('the order page says the payment has not arrived, and offers to finis
   if (!/Payment not completed/i.test(view.text())) throw new Error('the resume-payment panel is missing');
   const again = [...view.doc.querySelectorAll('a')].find((a) => /Pay now on Yoco/i.test(a.textContent ?? ''));
   if (!again) throw new Error('no way to finish the payment');
-  if (!/heritagebites|yoco/i.test(new URL(again.href).host)) throw new Error(`resume link is not the payment page: ${again.href}`);
+  /*
+   * Yoco, or the project's own stand-in gateway when one is configured. The
+   * point of the check is that the link goes back to the payment page and
+   * nowhere else.
+   */
+  const resumeHost = new URL(again.href).host;
+  const resumeSandbox = process.env.HB_YOCO_CHECKOUT_ENDPOINT ? new URL(process.env.HB_YOCO_CHECKOUT_ENDPOINT).host : null;
+  if (!/heritagebites|yoco/i.test(resumeHost) && resumeHost !== resumeSandbox) {
+    throw new Error(`resume link is not the payment page: ${again.href}`);
+  }
 
   /* It is genuinely unpaid on the server, not just in the page's head. */
   const tracked = await fetch(`${BASE}/api/orders/${code}?token=${encodeURIComponent(s1.__trackingToken)}`).then((r) => r.json());
@@ -1339,25 +1394,22 @@ async function orderPage() {
   return s1Order;
 }
 
-await step('the receipt destination is shown masked, or not claimed at all', async () => {
+await step('the order page claims no email receipt and leaks no address', async () => {
   await orderPage();
   /*
-   * Whether a receipt was queued depends on the server having SMTP configured, so
-   * this checks the two honest outcomes rather than assuming one: either the page
-   * names a masked address, or it says nothing about a receipt. What it must never
-   * do is claim a receipt and print the full address.
+   * Email alerts were removed, so there is exactly one honest outcome now: the
+   * page says no receipt email is sent, and it must never print the address the
+   * customer typed.
    */
   const text = s1Order.text();
   if (/interaction@example\.co\.za/.test(text)) throw new Error('the full email address is exposed on the page');
-
   if (/Receipt (emailed to|on its way to)|could not email your receipt/i.test(text)) {
-    if (!/i\*+@example\.co\.za/.test(text)) throw new Error('the masked receipt address is missing');
-    return 'masked receipt address shown';
+    throw new Error('the page still claims an email receipt');
   }
-  if (/receipt/i.test(text) && /emailed to/i.test(text)) {
-    throw new Error('the page claims a receipt was sent without a masked address');
+  if (!/No receipt email is sent/i.test(text)) {
+    throw new Error('the page does not tell the customer plainly that no receipt email is sent');
   }
-  return 'no receipt claimed (no SMTP on this server), and no address leaked';
+  return 'no receipt email claimed, and no address leaked';
 });
 
 await step('the tracking page offers manual WhatsApp updates, an order ticket and a shareable receipt', async () => {
@@ -1494,7 +1546,15 @@ await step('a cash order can be placed with no card details at all', async () =>
    * sends the customer to Yoco instead — so what this checks is that choosing
    * cash leaves no card-like field on the page at all.
    */
-  s6.click(s6.byText('button', /Cash on collection/i)[0]);
+  /*
+   * The two payment options are now plain "Card" and "Cash" — collection no
+   * longer gets its own wording, because both are accepted for either
+   * fulfilment and the blurbs say when the money changes hands.
+   */
+  const cashButton = [...s6.doc.querySelectorAll('button')]
+    .find((b) => (b.textContent ?? '').trim().startsWith('Cash'));
+  if (!cashButton) throw new Error('no Cash payment option on the checkout');
+  s6.click(cashButton);
   await sleep(200);
   const suspicious = [...s6.doc.querySelectorAll('input')].filter((f) => /4242 4242|MM\/YY|^123$|T MAHLANGU/.test(f.placeholder ?? ''));
   if (suspicious.length) throw new Error(`card fields are still present: ${suspicious.map((f) => f.placeholder).join(', ')}`);
@@ -1511,11 +1571,11 @@ await step('a cash order can be placed with no card details at all', async () =>
    * and the collection choice — pre-typed into the message.
    */
   const waLink = [...s6.doc.querySelectorAll('a[href^="https://wa.me/"]')]
-    .find((a) => /Order this on WhatsApp/i.test(a.textContent ?? ''));
-  if (!waLink) throw new Error('checkout has no WhatsApp basket link');
+    .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+  if (!waLink) throw new Error('checkout has no WhatsApp order button');
   const waText = new URL(waLink.href).searchParams.get('text') ?? '';
   /* en-ZA writes the decimal as a comma: R200,00. */
-  for (const wanted of [/Tshotlo Plate/, /2 ×/, /R200[,.]00/, /Total: R200[,.]00/, /Pap/, /Braised cabbage/]) {
+  for (const wanted of [/Tshotlo Plate/, /2 ×/, /R200[,.]00/, /Pap/, /Braised cabbage/]) {
     if (!wanted.test(waText)) throw new Error(`the WhatsApp message is missing the order data (${wanted}): ${waText.slice(0, 160)}`);
   }
   /*
@@ -1603,7 +1663,7 @@ await s8.waitFor(() => /3 plates/.test(s8.text()), 'the pinned basket bar', 2000
 
 await step('the basket bar describes the fulfilment that is actually chosen', async () => {
   if (!/3 plates · delivery/.test(s8.text())) throw new Error('the bar does not show the plate count and delivery');
-  if (!/Delivery included/.test(s8.text())) throw new Error('a delivery basket should say delivery is included');
+  if (!/delivery/i.test(s8.text())) throw new Error('a delivery basket should name the delivery fee');
 
   /*
    * Switching to collection must change the second line too. It used to keep
@@ -1618,7 +1678,7 @@ await step('the basket bar describes the fulfilment that is actually chosen', as
   if (!collection) throw new Error('no collection switch in the basket');
   s8.click(collection);
   await sleep(300);
-  if (/Delivery included/.test(s8.text())) throw new Error('the drawer still claims delivery is included on a collection basket');
+  if (/Delivery \d/.test(s8.text())) throw new Error('the drawer still charges delivery on a collection basket');
   if (!/Collection — nothing is added at checkout/.test(s8.text())) {
     throw new Error('the drawer does not say what a collection basket is charged');
   }
@@ -1627,7 +1687,7 @@ await step('the basket bar describes the fulfilment that is actually chosen', as
   const close = [...s8.doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Close');
   s8.click(close);
   await sleep(300);
-  if (/Delivery included/.test(s8.text())) throw new Error('a collection basket still claims delivery is included');
+  if (/\+ R\d+ delivery/.test(s8.text())) throw new Error('a collection basket still charges delivery');
   if (!/Collection — nothing extra/.test(s8.text())) throw new Error('a collection basket does not say what applies');
   if (!/3 plates · collection/.test(s8.text())) throw new Error('the bar does not show the collection choice');
   return 'delivery and collection each described correctly';

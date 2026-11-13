@@ -115,6 +115,20 @@
     height: 6px;
   }
 
+  /*
+   * Painted ground. A crosshatch wash, the way a plaster wall catches the light
+   * under a painted band: two sets of hairlines crossed at 45°, one in ink and
+   * one in gold, both faint enough to read as texture rather than pattern.
+   *
+   * Kept for the loyalty card only — the card face and the call-to-action that
+   * advertises it. Everywhere else the site uses the plain brand grounds.
+   */
+  .hb-painted-dark {
+    background-image:
+      repeating-linear-gradient(135deg, rgba(247, 242, 230, 0.06) 0 1px, transparent 1px 10px),
+      repeating-linear-gradient(45deg, rgba(183, 126, 35, 0.1) 0 1px, transparent 1px 10px);
+  }
+
   .hb-dots {
     background-image: radial-gradient(var(--color-bone) 1px, transparent 1px);
     background-size: 14px 14px;
@@ -165,6 +179,20 @@
   .animate-pulse-ring {
     animation: hb-pulse-ring 2s ease-out infinite;
   }
+
+  /*
+   * The logo spins while the pointer is on it and stops the instant the pointer
+   * leaves. Driving it from :hover rather than a class means the stop needs no
+   * JS and cannot get out of step with the cursor: when the rule stops
+   * matching, the animation is removed and the badge returns to rest.
+   *
+   * 2.5s per revolution — slow enough to read the badge as it turns rather than
+   * a blur. It loops for as long as the pointer stays, so a hover held for ten
+   * seconds is four turns, not a stutter at the end of one.
+   */
+  .logo-spin-host:hover .logo-spin {
+    animation: hb-logo-spin 2.5s linear infinite;
+  }
 }
 
 @keyframes hb-rise {
@@ -204,6 +232,15 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes hb-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -272,3 +309,17 @@
  * breaks `position: sticky`. scripts/mobile-audit.mjs measures real element
  * widths, so the layout has to actually fit.
  */
+
+/*
+ * Motion is a preference, not a default. A spinning logo is exactly the sort of
+ * looping movement that triggers discomfort for people who have asked the OS for
+ * less of it, so the effect is dropped entirely rather than shortened.
+ *
+ * This sits outside @layer utilities on purpose: unlayered CSS beats every
+ * layered rule, so the override cannot be outranked by the utility above.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .logo-spin-host:hover .logo-spin {
+    animation: none;
+  }
+}

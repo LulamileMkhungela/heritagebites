@@ -17,7 +17,15 @@ import { paymentConfig, paymentDriver, paymentWarnings, readYocoEvent, startYoco
 import { computeTotals, applyDiscountCode, deliveryFeeCents, fromCents, toCents, orderCode, loyaltyPointsFor } from './lib/pricing.js';
 import { customerCanCancel, STATUS_META, buildTimeline } from './lib/orders.js';
 import { buildWhatsAppMessage, whatsappLink, fulfilmentLabel } from './lib/notify.js';
-import { customerEmailConfig, emailConfig, enqueueOrderAlert, notifyStatus, publicBaseUrl, startOrderNotificationWorker } from './lib/order-notifications.js';
+/*
+ * Order alerts are Web Push only.
+ *
+ * Email alerts needed an SMTP host, port and app password configured on the
+ * server before a single kitchen ticket could be sent — that is infrastructure
+ * work, not "put your address in". Anything the owner cannot switch on by
+ * entering their own email address has been removed, so what remains is the
+ * push channel: generated keys and a device enrolled once at /alerts.
+ */
 import {
   confirmOrderSubscription,
   notifyOrderDevices,
@@ -32,6 +40,16 @@ import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, serviceStatus, servi
 import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
 import { HEAD_END, HEAD_START, headHtml, normaliseSiteUrl } from '../shared/seo.js';
+
+/*
+ * The clock the shop runs on.
+ *
+ * `serviceStatus` accepts a moment so it can be asked "what happens at 15:09 on
+ * a Friday?". Production never sets HB_CLOCK_LABEL, so this is simply now; the
+ * test suites pin it so they can run the shop both open and shut without
+ * depending on when CI happens to start.
+ */
+const clockNow = () => (process.env.HB_CLOCK_LABEL ? new Date(process.env.HB_CLOCK_LABEL) : new Date());
 
 const PORT = Number(process.env.PORT || 4000);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -324,9 +342,11 @@ function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
   const disc = applyDiscountCode(code, subtotalCents, get('discountCodes'));
 
   /*
-   * Delivery is included in the plate price (R100 / R130), so there is no
-   * separate delivery fee. The rules that still apply are the R100 minimum and
-   * the two approved delivery areas, both confirmed by the business.
+   * Collection is the plate price exactly; delivery adds the one flat fee for
+   * the Rosebank/Sandton run. It is charged on top of the plates rather than
+   * folded into them, so a customer who collects is never paying for a
+   * delivery they did not ask for. The R100 minimum and the two approved
+   * delivery areas still apply.
    */
   let deliveryCents = 0;
   if (fulfilment === 'delivery') {
@@ -347,39 +367,7 @@ function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
   return { lines, errors, totals, discount: disc };
 }
 
-/**
- * `t***@example.co.za` — enough to recognise your own inbox, not enough to leak
- * it to anyone who happens to hold a tracking link.
- */
-function maskEmail(value) {
-  const email = String(value ?? '').trim();
-  const at = email.indexOf('@');
-  if (at < 1) return null;
-  const local = email.slice(0, at);
-  return `${local[0]}${'*'.repeat(Math.max(1, Math.min(3, local.length - 1)))}${email.slice(at)}`;
-}
-
-/**
- * What actually happened to the customer's receipt.
- *
- * The page must not promise an email that was never queued: with no SMTP
- * configured no customer-email job exists at all, so the state is `none` and the
- * order page stays quiet instead of claiming a receipt was sent.
- */
-function receiptStatusFor(order) {
-  const jobs = store.load('orderNotificationJobs', []) ?? [];
-  const job = jobs.find((entry) => entry.orderCode === order.code
-    && (entry.channel ?? 'owner-email') === 'customer-email');
-  const state = !job
-    ? 'none'
-    : job.status === 'sent'
-      ? 'sent'
-      : job.status === 'failed' ? 'failed' : 'queued';
-  return { email: maskEmail(order.customer?.email), state };
-}
-
 function publicOrder(order) {
-  const receipt = receiptStatusFor(order);
   const settings = get('settings');
   return {
     id: order.id,
@@ -393,12 +381,13 @@ function publicOrder(order) {
     fulfilmentLabel: fulfilmentLabel(order.fulfilment),
     customer: { name: order.customer.name, phone: order.customer.phone },
     /*
-     * Confirmation of where the receipt was emailed, masked. The full address is
-     * never returned: this payload is also served from the tracking link, and a
-     * masked address is enough for the customer to recognise their own inbox.
+     * No receipt email is sent or promised: email alerts are gone, and the
+     * WhatsApp chat is the customer's record. The fields stay in the payload as
+     * explicit nulls so an older cached client cannot claim a receipt that was
+     * never queued.
      */
-    receiptEmail: receipt.state === 'none' ? null : receipt.email,
-    receiptState: receipt.state,
+    receiptEmail: null,
+    receiptState: 'none',
     items: order.items,
     totals: order.totals,
     payment: {
@@ -568,7 +557,7 @@ app.get('/api/health', (_req, res) => {
     paymentDriver: paymentDriver(),
     orders: get('orders').length,
     /* Which free notification channels are configured — booleans, no secrets. */
-    notifications: { ...notifyStatus(), push: pushStatus() },
+    notifications: { push: pushStatus() },
     time: new Date().toISOString(),
   });
 });
@@ -587,22 +576,25 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
     plateMenus: get('plateMenus') ?? seed.plateMenus,
     policies: get('policies') ?? seed.policies,
     settings,
-    service: serviceStatus(settings),
+    /*
+     * HB_CLOCK_LABEL lets the interaction suite ask "what would this page look
+     * like at Thursday lunchtime?". Without it the suite runs whenever CI
+     * happens to run — usually outside the Thu/Fri window — and the checkout
+     * correctly refuses every order it tries to place, so fifty behavioural
+     * tests report a failure that is really the calendar.
+     *
+     * Read here as well as at the order gate so the banner and the button can
+     * never disagree with the server about whether the shop is open.
+     */
+    service: serviceStatus(settings, clockNow()),
     payments: paymentConfig(),
     contact: { inboxConfigured: contactEndpoint() !== null },
     /*
-     * Which automatic channels are actually live, as booleans.
-     *
-     * The checkout used to promise "we email your receipt as soon as the order
-     * is placed" unconditionally. That is only true when SMTP is configured —
-     * without it no receipt is sent and the customer waits for an email that
-     * never arrives. The page needs to know, so it can say what will really
-     * happen instead of what the copy hopes will happen.
+     * Which automatic channels are actually live. Push is the only one: email
+     * alerts needed SMTP configured on the host, so they are gone rather than
+     * left looking like a feature the owner could switch on with an address.
      */
-    notifications: {
-      customerEmail: Boolean(customerEmailConfig()),
-      ownerEmail: Boolean(emailConfig()),
-    },
+    notifications: { push: Boolean(pushStatus()?.configured) },
     today: todayDay(),
   });
 });
@@ -676,6 +668,34 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   if (errors.length) return res.status(422).json({ errors });
   if (!lines.length) return res.status(422).json({ errors: ['Your basket is empty.'] });
 
+  /*
+   * The service window is enforced here, not only described in the UI.
+   *
+   * Until now `serviceStatus().open` drove a banner and nothing else: the site
+   * told the customer the window had closed and then happily took the order.
+   * Anyone who reloaded at 15:00 could still check out, which is exactly the
+   * thing the owner reported. The check lives on the server so a stale tab, a
+   * cached bundle or a hand-made request cannot get past it.
+   *
+   * The refusal is worded as a redirect to WhatsApp rather than a dead end: the
+   * kitchen may well still cook for you, but that is a conversation, not an
+   * automated order.
+   */
+  /*
+   * HB_ORDERS_OPEN is a test-only override. The suite places orders at whatever
+   * time CI happens to run, which is outside the Thu/Fri window most of the day;
+   * without a switch every order test would fail for a reason that has nothing
+   * to do with what it is testing. It is never set by the app itself, and the
+   * gate below stays wired so its own test can exercise the closed path.
+   */
+  const ordersForcedOpen = process.env.HB_ORDERS_OPEN === 'true';
+  if (!ordersForcedOpen && serviceStatus(get('settings'), clockNow()).orderingClosed) {
+    return res.status(409).json({
+      errors: ["Today's window has closed, so we are not taking orders. Message us on WhatsApp and we will tell you if the kitchen can still prepare it."],
+      closed: true,
+    });
+  }
+
   if (!customer.name?.trim() || !customer.phone?.trim()) {
     return res.status(422).json({ errors: ['Please add your name and a contact number.'] });
   }
@@ -718,31 +738,26 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   if (!PAYMENT_METHODS.includes(payment.method)) {
     return res.status(422).json({ errors: ['Unknown payment method.'] });
   }
-  if (payment.method === 'cash-on-collection' && fulfilment === 'delivery') {
-    return res.status(422).json({ errors: ['Cash is only accepted on collection. Please pay by card, or choose collection.'] });
-  }
+  /*
+   * Cash is accepted on delivery too. The kitchen carries a Yoco card machine
+   * and a cash float, so a delivery customer can choose either — the old rule
+   * that refused cash on delivery only pushed people into a card payment they
+   * may not have wanted to make.
+   */
 
   /*
-   * A card order needs an email address.
+   * Email is optional for every payment method, including card.
    *
-   * That address is the only place a receipt can go: card orders are the ones
-   * where the customer has no other record of what they paid for. Cash on
-   * collection stays optional — the customer is standing in front of us, and
-   * forcing an address there would only add friction to a completed sale.
-   *
-   * Checked before the card is charged, so a refusal never costs the customer a
-   * payment and never creates an order that cannot be receipted.
+   * It used to be mandatory for card orders because email was the only place a
+   * receipt could go. Email receipts need SMTP configured on the host before a
+   * single message can be sent, and the order now completes in a WhatsApp chat
+   * that is itself the record — so demanding an address only added a step that
+   * blocked a paying customer. An address that is given is still validated.
    */
   const customerEmail = String(customer.email ?? '').trim();
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(customerEmail);
   if (customerEmail && !emailLooksValid) {
     return res.status(422).json({ errors: ['That email address does not look right.'] });
-  }
-  if (payment.method === 'card' && !customerEmail) {
-    return res.status(422).json({
-      errors: ['Please add an email address — it is where your receipt for a card order goes.'],
-      code: 'email_required',
-    });
   }
 
   /*
@@ -832,7 +847,7 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
       currency: totals.currency,
       orderCode: order.code,
       trackingToken,
-      baseUrl: publicBaseUrl(),
+      baseUrl: (process.env.HB_PUBLIC_URL?.trim() || 'https://heritagebites.co.za').replace(/\/+$/, ''),
       description: `Heritage Bites order ${order.code}`,
     });
     if (!started.ok) {
@@ -867,15 +882,6 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   void notifyOwnerDevices(order).catch((error) => {
     console.error(`[push] owner alert failed for ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
   });
-
-  try {
-    /* The one-time tracking token lets the customer receipt deep-link into the
-       private order page; the saved order still keeps only its digest. */
-    enqueueOrderAlert(order, { trackingToken });
-  } catch (error) {
-    // The order remains valid even if its email-alert job cannot be recorded.
-    console.error(`[order-notifications] could not queue order ${order.code}: ${String(error?.message ?? error).slice(0, 200)}`);
-  }
 
   // Loyalty-card stamps are tracked per phone number.
   const stamps = get('stamps');
@@ -968,11 +974,6 @@ app.post('/api/payments/yoco/webhook', (req, res) => {
 
   /* The kitchen already has the ticket; this is the “and it is paid” follow-up. */
   void notifyOwnerDevices(order).catch(() => {});
-  try {
-    enqueueOrderAlert(order, {});
-  } catch (error) {
-    console.error(`[payments] paid order ${order.code} could not be emailed: ${String(error?.message ?? error).slice(0, 200)}`);
-  }
 
   res.json({ ok: true, matched: true });
 });
@@ -1326,7 +1327,6 @@ if (existsSync(DIST)) {
 export { app };
 
 if (process.env.NODE_ENV !== 'test') {
-  startOrderNotificationWorker();
   // Bound to 0.0.0.0 so the sandbox preview host can reach this process.
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[heritagebites api] listening on http://0.0.0.0:${PORT} (payments: ${paymentDriver()})`);
