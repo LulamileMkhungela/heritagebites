@@ -104,7 +104,7 @@ export default function Quest() {
 
   return (
     <>
-      <header className="hb-grain relative overflow-hidden bg-ink py-16 text-bone">
+      <header className="hb-grain hb-painted-dark relative overflow-hidden bg-ink py-16 text-bone">
         <img src={asset('/img/mogodu.jpg')} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />
         <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/90 to-ink/40" />
         <div className="relative mx-auto max-w-7xl px-4">
@@ -337,7 +337,7 @@ export default function Quest() {
         </p>
       </section>
 
-      <HeritageBand className="h-2 w-full" />
+      <HeritageBand className="h-3 w-full" />
     </>
   );
 }

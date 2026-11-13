@@ -30,7 +30,7 @@ export default function Policies() {
 
   return (
     <>
-      <header className="hb-grain relative overflow-hidden bg-ink py-16 text-bone">
+      <header className="hb-grain hb-painted-dark relative overflow-hidden bg-ink py-16 text-bone">
         <img src={asset('/img/plate-chicken.jpg')} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />
         <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/30" />
         <div className="relative mx-auto max-w-7xl px-4">

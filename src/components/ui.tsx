@@ -140,15 +140,20 @@ export function Reveal({ children, delay = 0, className = '' }: { children: Reac
 /* ------------------------------ Section ------------------------------- */
 
 export function SectionLabel({ children, onDark = false }: { children: ReactNode; onDark?: boolean }) {
+  /*
+   * The label now opens with the painting's atom rather than a plain rule: an
+   * echoed diamond, then the coloured dash, then the words. It appears above
+   * every section on every page, so this is where the language is stated most
+   * often — a hairline alone said nothing.
+   */
   return (
     <div className="mb-4 flex items-center gap-3">
-      <span className="h-px w-8 bg-ochre" />
+      <DiamondMark className="h-3.5 w-3.5 shrink-0" pigment="ochre" />
+      <span className="h-px w-6 bg-ochre" />
       <span className={`font-mono text-xs font-semibold uppercase tracking-[0.22em] ${onDark ? 'text-ochre' : 'text-ochre-deep'}`}>{children}</span>
     </div>
   );
 }
-
-/* ------------------------------ Spinner ------------------------------- */
 
 export function Spinner({ label = 'Working…' }: { label?: string }) {
   return (
@@ -181,105 +186,408 @@ export function Toast({ message, onDone }: { message: string | null; onDone: () 
 /*
  * Heritage graphics, drawn rather than photographed.
  *
- * The reference is Dr Esther Mahlangu's Ndebele wall painting: flat, bold
- * geometry — chevrons, triangles, stepped bands — in saturated earth and sky
- * colour, held inside crisp black outlines. Her palette is the source of the
- * four accents below (ochre, clay red, sky blue, leaf green) and they sit on
- * the brand's existing midnight navy and bone paper, which is what keeps the
- * page looking like Heritage Bites rather than a pastiche.
+ * The reference is Dr Esther Mahlangu's Ndebele wall painting. Four things in it
+ * look like nothing else, and all four are load-bearing here:
  *
- * Colour is used structurally, not decoratively: a band anchors a section, a
- * chevron ticks a list, the pot marks the kitchen. Every motif is decorative,
- * so each is aria-hidden and points nowhere.
+ *   1. A chalk-white ground. The colour is painted onto lime plaster, so the
+ *      white is not empty space — it is the brightest pigment in the scheme.
+ *   2. Heavy black outlines. Every shape is drawn, not filled to its edge; the
+ *      ink contour is what makes the colour read as painted rather than printed.
+ *   3. Nested "echo" shapes. A diamond inside a diamond inside a diamond, each
+ *      band a different colour, so the eye keeps finding another edge.
+ *   4. Pinstripe kerbs. Thin stacked rules — black, white, colour — run along
+ *      the borders and between the big shapes.
+ *
+ * The palette below is a translation, not a copy: the brand's antique gold stays
+ * the lead accent, and the earth/clay red, sky blue, leaf green and chalk are
+ * pitched to sit beside navy and bone without turning the shopfront into a
+ * gallery wall.
+ *
+ * Everything here is decorative and points nowhere: each motif is aria-hidden
+ * and focusable="false". Repeating tiles are generated as real geometry rather
+ * than <pattern id="…">, because a pattern needs a document-global id and every
+ * meal card would then emit the same one (duplicate ids are invalid, and they
+ * also forced every instance of a motif to be identical).
  */
 
-/** Ndebele earth-and-sky accents, layered on the brand palette. */
-const MHALANGU = {
-  ochre: 'var(--color-ochre)',      /* #b77e23 — the brand gold */
-  red: '#a33b26',                    /* clay red, as on a painted wall */
-  blue: '#1f4e79',                   /* sky blue, darker than the navy ink */
-  green: '#2f6b4f',                  /* leaf green */
-  ink: 'var(--color-ink)',
-};
+/** Ndebele pigments, plus the brand navy used as the painting's outline. */
+export const MHALANGU = {
+  ochre: 'var(--color-ochre)', /* #b77e23 — the brand gold, the lead accent */
+  gold: '#d99b2b', /* the brighter mid-gold of a freshly painted band */
+  red: '#a33b26', /* clay red, as on a painted wall */
+  blue: '#1f4e79', /* sky blue, darker than the navy ink */
+  green: '#2f6b4f', /* leaf green */
+  chalk: '#f7f2e6', /* the lime-plaster white the paint sits on */
+  ink: 'var(--color-ink)', /* #001938 — every contour */
+} as const;
+
+type Pigment = keyof typeof MHALANGU;
+const P = MHALANGU;
+
+/* ---------------------------------------------------------------------- */
+/* Repetition helpers                                                      */
+/* ---------------------------------------------------------------------- */
 
 /**
- * Ndebele painted band: stepped chevrons in the Mahlangu palette.
- * Used to close a section or crown a card.
+ * Repeat an inline group across `count` tiles of `w`.
+ *
+ * This is what a <pattern> would do, without needing an id — so a motif can be
+ * used as many times on a page as it likes.
  */
-export function HeritageBand({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 120 12" className={className} preserveAspectRatio="none" aria-hidden="true" focusable="false">
-      <defs>
-        <pattern id="hb-band" width="30" height="12" patternUnits="userSpaceOnUse">
-          <rect width="30" height="12" fill={MHALANGU.ink} />
-          <path d="M0 6 L5 1 L10 6 L5 11 Z" fill={MHALANGU.ochre} />
-          <path d="M10 6 L15 1 L20 6 L15 11 Z" fill={MHALANGU.red} />
-          <path d="M20 6 L25 1 L30 6 L25 11 Z" fill={MHALANGU.blue} />
-        </pattern>
-      </defs>
-      <rect width="120" height="12" fill="url(#hb-band)" />
-    </svg>
-  );
+function tile(count: number, w: number, draw: (x: number) => React.ReactNode) {
+  return Array.from({ length: count }, (_, i) => (
+    <g key={i} transform={`translate(${i * w} 0)`}>
+      {draw(i)}
+    </g>
+  ));
 }
 
-/**
- * Ndebele triangle print — the wall-painting motif at small scale.
- * Three rows, each a different accent, all outlined in ink.
- */
-export function ShweshwePanel({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 96 24" className={className} preserveAspectRatio="none" aria-hidden="true" focusable="false">
-      <defs>
-        <pattern id="hb-shweshwe" width="16" height="24" patternUnits="userSpaceOnUse">
-          <path d="M0 0 L8 8 L16 0 Z" fill={MHALANGU.ochre} stroke={MHALANGU.ink} strokeWidth="0.75" />
-          <path d="M0 8 L8 16 L16 8 Z" fill={MHALANGU.blue} stroke={MHALANGU.ink} strokeWidth="0.75" />
-          <path d="M0 16 L8 24 L16 16 Z" fill={MHALANGU.red} stroke={MHALANGU.ink} strokeWidth="0.75" />
-        </pattern>
-      </defs>
-      <rect width="96" height="24" fill="url(#hb-shweshwe)" />
-    </svg>
-  );
-}
-
-/** A pair of Ndebele chevrons: the mark used beside headings and in lists. */
-export function HeritageMark({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false">
-      <path d="M2 14 L8 6 L14 14" fill="none" stroke={MHALANGU.ochre} strokeWidth="2.5" strokeLinecap="square" />
-      <path d="M9 18 L15 10 L21 18" fill="none" stroke={MHALANGU.blue} strokeWidth="2.5" strokeLinecap="square" />
-    </svg>
-  );
-}
-
-/** The three-legged pot, in the same flat painted style, with painted flames. */
-export function PotMark({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true" focusable="false">
-      <path d="M6 13h20l-2 11a4 4 0 0 1-4 3.4H12A4 4 0 0 1 8 24Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M11 9c0-2 2-2 2-4M16 9c0-2 2-2 2-4M21 9c0-2 2-2 2-4" fill="none" stroke={MHALANGU.red} strokeWidth="2" strokeLinecap="round" />
-      <path d="M3 15h3M26 15h3" stroke={MHALANGU.green} strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
+/** Echoed diamond: concentric diamonds, each band its own pigment. */
+function diamonds(cx: number, cy: number, radii: number[], pigments: Pigment[]) {
+  return radii.map((r, i) => (
+    <path
+      key={i}
+      d={`M${cx} ${cy - r} L${cx + r} ${cy} L${cx} ${cy + r} L${cx - r} ${cy} Z`}
+      fill={P[pigments[i % pigments.length]]}
+      stroke={P.ink}
+      strokeWidth={i === 0 ? 1.6 : 0.9}
+      strokeLinejoin="miter"
+    />
+  ));
 }
 
 /**
- * Ndebele stepped rule: alternating colour, ink-outlined blocks.
+ * Nested chevron fan, built from filled triangles rather than offset strokes.
+ *
+ * Stroking a path and moving it sideways does not keep the legs parallel — the
+ * bands cross and the motif reads as a wishbone. Drawing each register as a
+ * triangle with its apex pulled down and its base pulled in by the same ratio
+ * keeps every leg on one slope, so the colours sit in true parallel bands. The
+ * ink contour is each triangle's own stroke, which is why the band divisions
+ * are outlined for free.
+ */
+function chevronFan(
+  cx: number,
+  apexY: number,
+  baseY: number,
+  halfW: number,
+  registers: { colour: Pigment; t: number; w?: number }[],
+) {
+  const k = halfW / (baseY - apexY);
+  return registers.map(({ colour, t, w = 0.9 }, i) => {
+    const ay = apexY + t;
+    const hw = halfW - t * k;
+    return (
+      <path
+        key={i}
+        d={`M${cx} ${ay} L${cx + hw} ${baseY} L${cx - hw} ${baseY} Z`}
+        fill={P[colour]}
+        stroke={P.ink}
+        strokeWidth={w}
+        strokeLinejoin="miter"
+      />
+    );
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/* Bands — the section and card edges                                      */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Ndebele painted kerb: a pinstripe rail, a run of echoed diamonds, a second
+ * pinstripe rail. The full grammar of a painted border in 20px of height.
+ *
+ * `on` picks the ground — chalk for paper sections, ink for the navy bars — and
+ * only changes the rail and the kerb colour, never the diamonds.
+ */
+export function HeritageBand({ className = '', on = 'chalk', style }: { className?: string; on?: 'chalk' | 'ink'; style?: React.CSSProperties }) {
+  /*
+   * Drawn at roughly the ratio it is used at.
+   *
+   * The band is stretched across the full page width but is only 10–16 px tall,
+   * so `preserveAspectRatio="none"` squashes it vertically by about 40×. A
+   * viewBox of 128×16 (8:1) against a 1440×10 box (144:1) turned the triangles
+   * into slivers. At 480×12 the two ratios are close enough that a triangle is
+   * still a triangle, and the shape survives the stretch.
+   *
+   * Only two devices are used, because that is all that survives at this size:
+   * a pinstripe kerb and a register of solid triangles.
+   */
+  const ground = on === 'ink' ? P.ink : P.chalk;
+  const rail = on === 'ink' ? P.chalk : P.ink;
+  const wedges: Pigment[] = ['red', 'blue', 'green', 'gold'];
+  return (
+    <svg viewBox="0 0 480 12" className={className} style={style} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <rect width="480" height="12" fill={ground} />
+      <rect y="0" width="480" height="1.6" fill={rail} />
+      <rect y="1.6" width="480" height="1" fill={P.gold} />
+      {tile(60, 8, (i) => (
+        <path
+          d={i % 2 === 0 ? 'M0 10.4 L4 3 L8 10.4 Z' : 'M0 3 L4 10.4 L8 3 Z'}
+          fill={P[wedges[i % 4]]}
+          stroke={P.ink}
+          strokeWidth="1"
+          strokeLinejoin="miter"
+        />
+      ))}
+      <rect y="10.4" width="480" height="1.6" fill={rail} />
+    </svg>
+  );
+}
+
+/**
+ * Bespoke geometric band, the width of a card's head.
+ *
+ * Used where a band needs to read as a designed object rather than a repeat:
+ * a fan of nested chevrons over a stepped plinth, in the palette's order.
+ */
+export function HeritageFrieze({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+  /*
+   * Three bold registers, not six fine ones.
+   *
+   * The first version nested six bands and was legible at 70 px but turned to
+   * noise at 32 px, which is the height a meal card actually gives it. Fewer,
+   * fatter bands survive both sizes, so the fan still reads as a painted
+   * chevron when it is only a thumbnail of one.
+   *
+   * The viewBox is wide (640) because a frieze is stretched to the section
+   * width; a short viewBox shears the chevrons when it is stretched.
+   */
+  return (
+    <svg viewBox="0 0 640 48" className={className} style={style} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <rect width="640" height="48" fill={P.chalk} />
+      {tile(16, 40, (i) => {
+        const lead: Pigment[] = ['red', 'blue', 'green', 'gold'];
+        const accent: Pigment[] = ['blue', 'green', 'gold', 'red'];
+        return (
+          <g>
+            {chevronFan(20, 5, 38, 18, [
+              { colour: 'ink', t: 0, w: 1.2 },
+              { colour: lead[i % 4], t: 5 },
+              { colour: 'chalk', t: 10 },
+              { colour: accent[i % 4], t: 15 },
+              { colour: 'chalk', t: 20 },
+              { colour: 'gold', t: 25 },
+            ])}
+          </g>
+        );
+      })}
+      {/* A single plinth rule, not a mosaic of blocks: at card size the mosaic
+          became grey mush, and the chevrons above it are the subject anyway. */}
+      <rect y="38" width="640" height="4" fill={P.ink} />
+      <rect y="42" width="640" height="3" fill={P.gold} />
+      <rect y="45" width="640" height="3" fill={P.ink} />
+    </svg>
+  );
+}
+
+/**
+ * Widened shweshwe print: the cloth's triangle rows, at poster scale.
+ *
+ * Three stacked registers — up-chevrons, echoed diamonds, down-chevrons — with
+ * alternating field colours, so it reads as fabric rather than as a gradient.
+ */
+export function ShweshwePanel({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg viewBox="0 0 96 68" className={className} style={style} aria-hidden="true" focusable="false">
+      <rect width="96" height="68" fill={P.chalk} />
+      {/* Register 1: echoed up-chevrons. */}
+      {tile(6, 16, (i) => (
+        <g>
+          {chevronFan(8, 3, 22, 7.4, [
+            { colour: i % 2 ? 'blue' : 'red', t: 0, w: 1 },
+            { colour: 'chalk', t: 5 },
+            { colour: i % 2 ? 'gold' : 'green', t: 10 },
+          ])}
+        </g>
+      ))}
+      <rect y="22" width="96" height="1.8" fill={P.ink} />
+      <rect y="23.8" width="96" height="1.2" fill={P.gold} />
+      {/* Register 2: echoed diamonds. */}
+      {tile(6, 16, (i) => (
+        <g>{diamonds(8, 33, [8, 5.2, 2.2], [i % 2 ? 'green' : 'gold', 'chalk', 'red'])}</g>
+      ))}
+      <rect y="41.4" width="96" height="1.2" fill={P.blue} />
+      <rect y="42.6" width="96" height="1.8" fill={P.ink} />
+      {/* Register 3: the echoed fan inverted. */}
+      {tile(6, 16, (i) => (
+        <g>
+          <g transform="translate(0 44) scale(1 -1) translate(0 -22)">
+            {chevronFan(8, 3, 22, 7.4, [
+              { colour: i % 2 ? 'gold' : 'green', t: 0, w: 1 },
+              { colour: 'chalk', t: 5 },
+              { colour: i % 2 ? 'red' : 'blue', t: 10 },
+            ])}
+          </g>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/**
+ * Ndebele stepped rule: a pinstripe ladder with an echoed diamond at each turn.
  * The section-closing device, where a plain hairline used to be.
  */
-export function WovenRule({ className = '' }: { className?: string }) {
+export function WovenRule({ className = '', on = 'chalk', style }: { className?: string; on?: 'chalk' | 'ink'; style?: React.CSSProperties }) {
+  const rail = on === 'ink' ? P.chalk : P.ink;
   return (
-    <svg viewBox="0 0 120 8" className={className} preserveAspectRatio="none" aria-hidden="true" focusable="false">
-      <defs>
-        <pattern id="hb-woven" width="16" height="8" patternUnits="userSpaceOnUse">
-          <rect x="0" y="2" width="8" height="4" fill={MHALANGU.ochre} stroke={MHALANGU.ink} strokeWidth=".5" />
-          <rect x="8" y="4" width="8" height="4" fill={MHALANGU.blue} stroke={MHALANGU.ink} strokeWidth=".5" />
-        </pattern>
-      </defs>
-      <rect width="120" height="8" fill="url(#hb-woven)" />
+    <svg viewBox="0 0 320 10" className={className} style={style} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      {tile(8, 16, (i) => (
+        <g>
+          <rect x="0" y="0" width="16" height="4" fill={P[i % 2 ? 'blue' : 'ochre']} />
+          <rect x="0" y="0" width="16" height="4" fill="none" stroke={rail} strokeWidth="1" />
+          <rect x="0" y="6" width="16" height="4" fill={P[i % 2 ? 'ochre' : 'blue']} />
+          <rect x="0" y="6" width="16" height="4" fill="none" stroke={rail} strokeWidth="1" />
+          <path d="M8 0.6 L15 5 L8 9.4 L1 5 Z" fill={P.chalk} stroke={rail} strokeWidth="0.8" />
+          <path d="M8 2.6 L11.6 5 L8 7.4 L4.4 5 Z" fill={P.red} />
+        </g>
+      ))}
     </svg>
   );
 }
 
+/* ---------------------------------------------------------------------- */
+/* Marks — small, and used repeatedly                                     */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * A pair of Ndebele chevrons, drawn as painted strokes: a chalk ground-stroke
+ * under a coloured one, then the ink contour. The mark used beside headings.
+ */
+export function HeritageMark({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <svg viewBox="0 0 36 32" className={className} style={style} aria-hidden="true" focusable="false">
+      {chevronFan(18, 5, 29, 15, [
+        { colour: 'ink', t: 0, w: 1.1 },
+        { colour: 'red', t: 4 },
+        { colour: 'chalk', t: 8 },
+        { colour: 'gold', t: 12 },
+        { colour: 'chalk', t: 16 },
+      ])}
+    </svg>
+  );
+}
+
+/**
+ * Standalone echoed diamond — the painting's atom, for badges and bullet marks.
+ */
+export function DiamondMark({ className = '', pigment = 'ochre', style }: { className?: string; pigment?: Pigment; style?: React.CSSProperties }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} style={style} aria-hidden="true" focusable="false">
+      {/* A chalk halo so an ink-bodied diamond still reads on the navy bars. */}
+      <path d="M8 0.4 L15.6 8 L8 15.6 L0.4 8 Z" fill={P.chalk} />
+      {diamonds(8, 8, [7.2, 4.6, 2], ['ink', 'chalk', pigment])}
+    </svg>
+  );
+}
+
+/**
+ * The three-legged pot, painted: flat pigment fills inside a heavy ink contour,
+ * with a chalk ground-stroke behind it so it holds on a navy field.
+ */
+export function PotMark({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+  /*
+   * A three-legged pot, not a bowl: the body is wider than tall and stops well
+   * above the baseline, so the three splayed legs have somewhere to be. Every
+   * part carries a chalk halo first, which is what lets the ink contour survive
+   * on the navy bars it is most often placed on.
+   */
+  const body = 'M4 12.6h24l-2.2 9.2a5 5 0 0 1-4.9 3.8H11.1a5 5 0 0 1-4.9-3.8Z';
+  return (
+    <svg viewBox="0 0 32 32" className={className} style={style} aria-hidden="true" focusable="false">
+      <g stroke={P.chalk} strokeWidth="4.8" strokeLinejoin="round" strokeLinecap="round" fill="none">
+        <path d={body} />
+        <path d="M9.6 25.4 6 31M16 25.6V31M22.4 25.4 26 31" />
+        <rect x="1.4" y="9.2" width="29.2" height="4.2" rx="1.6" />
+      </g>
+      <path d="M9.6 25.4 6 31M16 25.6V31M22.4 25.4 26 31" stroke={P.ink} strokeWidth="2.2" strokeLinecap="round" fill="none" />
+      <path d={body} fill={P.red} stroke={P.ink} strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M6.2 16.6h19.6l-1 4.4H7.1Z" fill={P.gold} stroke={P.ink} strokeWidth="1" strokeLinejoin="round" />
+      <rect x="1.4" y="9.2" width="29.2" height="4.2" rx="1.6" fill={P.chalk} stroke={P.ink} strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+/**
+ * Full Ndebele panel — the "big motif" for a hero or an empty surface.
+ *
+ * Deliberately built from the three devices above (echoed diamonds, chevron
+ * fans, pinstripe kerbs) rather than from new shapes: it is the same visual
+ * language at a larger size, which is what stops the page looking decorated
+ * at random.
+ */
+export function NdebelePanel({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+  /*
+   * A painted panel in the Mahlangu manner: the wings are large flat colour
+   * wedges divided on the diagonal inside a heavy ink frame, each hung with a
+   * small pendant arrow; the centre is a column of echoed diamonds on sky.
+   *
+   * Two constraints shape it. It cannot use concentric chevrons — the first
+   * version did, and the wings read as capital A's, a letterform rather than a
+   * painting. And its viewBox has to match the box it is put in: at 320×128
+   * (2.5:1) inside a 463×112 card (4.1:1) `slice` cropped the top and bottom off
+   * the diamonds. So it is drawn wide, 4:1, and laid out as two registers per
+   * wing rather than three.
+   */
+  const W = 320;
+  const H = 80;
+  const colX = 118;
+  const colW = 84;
+
+  const registers: { a: Pigment; b: Pigment; c: Pigment }[] = [
+    { a: 'green', b: 'gold', c: 'red' },
+    { a: 'blue', b: 'red', c: 'gold' },
+  ];
+
+  const wing = (flip: boolean) => (
+    <g transform={flip ? `translate(${W} 0) scale(-1 1)` : undefined}>
+      {registers.map(({ a, b, c }, i) => {
+        const y = 10 + i * 34;
+        const h = 30;
+        return (
+          <g key={i}>
+            <rect x="11" y={y} width="97" height={h} fill={P.chalk} stroke={P.ink} strokeWidth="2.2" />
+            {/* The large wedge, cut corner to corner. */}
+            <path d={`M11 ${y} L108 ${y} L11 ${y + h} Z`} fill={P[a]} stroke={P.ink} strokeWidth="1.8" strokeLinejoin="miter" />
+            {/* Two echoes between parallel diagonals, so they read as bands. */}
+            <path d={`M21 ${y + 5} L98 ${y + 5} L21 ${y + h - 5} Z`} fill={P[b]} stroke={P.ink} strokeWidth="1.5" strokeLinejoin="miter" />
+            <path d={`M31 ${y + 10} L86 ${y + 10} L31 ${y + h - 10} Z`} fill={P[c]} stroke={P.ink} strokeWidth="1.3" strokeLinejoin="miter" />
+            {/* Pendant arrow hanging off the inner edge. */}
+            <path d={`M108 ${y + h / 2 - 8} L119 ${y + h / 2} L108 ${y + h / 2 + 8} Z`} fill={P.gold} stroke={P.ink} strokeWidth="1.6" strokeLinejoin="miter" />
+          </g>
+        );
+      })}
+    </g>
+  );
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className={className} style={style} preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+      <rect width={W} height={H} fill={P.chalk} />
+      {wing(false)}
+      {wing(true)}
+
+      {/* Central column: two echoed diamonds on sky. */}
+      <rect x={colX} y="6" width={colW} height={H - 12} fill={P.blue} stroke={P.ink} strokeWidth="2.4" />
+      {[26, 54].map((cy, idx) => (
+        <g key={cy}>
+          {diamonds(colX + colW / 2, cy, [16, 11.8, 7.8, 3.8, 1.5], [idx % 2 ? 'gold' : 'red', 'chalk', idx % 2 ? 'green' : 'gold', 'chalk', 'ink'])}
+        </g>
+      ))}
+
+      {/* Ink frame, gold inner kerb. */}
+      <rect x="0" y="0" width={W} height="5" fill={P.ink} />
+      <rect x="0" y={H - 5} width={W} height="5" fill={P.ink} />
+      <rect x="0" y="5" width={W} height="2" fill={P.gold} />
+      <rect x="0" y={H - 7} width={W} height="2" fill={P.gold} />
+      <rect x="0" y="0" width="5" height={H} fill={P.ink} />
+      <rect x={W - 5} y="0" width="5" height={H} fill={P.ink} />
+    </svg>
+  );
+}
+
+/* ------------------------------ Field -------------------------------- */
 /* ------------------------------ Field -------------------------------- */
 
 export function Field({

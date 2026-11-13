@@ -4,7 +4,7 @@ import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 
 import { zar } from '../lib/format';
-import { Button, HeritageBand, LinkButton, PotMark, Reveal, SectionLabel, ShweshwePanel, WovenRule } from '../components/ui';
+import { Button, DiamondMark, HeritageBand, HeritageFrieze, LinkButton, NdebelePanel, PotMark, Reveal, SectionLabel, ShweshwePanel, WovenRule } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
 import { usePageSeo } from '../lib/seo';
@@ -75,7 +75,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
   const waHrefOrder = basketHref(s?.whatsapp, lines, { fulfilment });
 
   return (
-    <section className="hb-grain relative overflow-hidden bg-ink text-bone">
+    <section className="hb-grain hb-painted-dark relative overflow-hidden bg-ink text-bone">
       <img src={asset('/img/hero-feast.jpg')} alt="A traditional South African feast spread at Heritage Bites" className="absolute inset-0 h-full w-full object-cover opacity-55" />
       <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-ink/30" />
 
@@ -127,8 +127,13 @@ function Hero({ onOrder }: { onOrder: () => void }) {
 
         <Reveal delay={150}>
           <div className="rounded-3xl border border-bone/20 bg-bone/5 p-6 backdrop-blur">
-            {/* Shweshwe triangle print: the cloth reference, in the brand palette. */}
-            <ShweshwePanel className="mb-4 h-6 w-full rounded-md opacity-80" />
+            {/*
+              The painted panel, not a strip: a triptych of chevron fans around a
+              column of echoed diamonds, framed in ink with a gold kerb. This is
+              the one place on the site with room for the full composition, so it
+              is where the reference is stated most plainly.
+            */}
+            <NdebelePanel className="mb-5 aspect-[4/1] w-full rounded-xl ring-2 ring-ink/40" />
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">
               {service?.headline ?? 'Order your way'}
             </p>
@@ -179,7 +184,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
           </div>
         </Reveal>
       </div>
-      <HeritageBand className="relative h-2 w-full" />
+      <HeritageBand className="relative h-3 w-full" on="ink" />
     </section>
   );
 }
@@ -195,9 +200,7 @@ function Ticker() {
     <div className="flex shrink-0 items-center gap-8 pr-8">
       {row.map((m) => (
         <span key={m.id} className="flex items-center gap-3 whitespace-nowrap font-display text-lg">
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3 w-3 shrink-0 text-ochre" fill="currentColor">
-            <path d="M12 1.5 14.7 9.3 22.5 12l-7.8 2.7-2.7 7.8-2.7-7.8L1.5 12l7.8-2.7L12 1.5Z" />
-          </svg>
+          <DiamondMark className="h-3 w-3 shrink-0" pigment="gold" />
           {m.name}
         </span>
       ))}
@@ -205,11 +208,17 @@ function Ticker() {
   );
 
   return (
-    <div className="hb-mask-fade overflow-hidden border-y-2 border-ink/10 bg-ink py-3 text-bone">
-      <div className="animate-marquee flex w-max">
-        {line}
-        {line}
+    <div className="overflow-hidden bg-ink text-bone">
+      {/* A shweshwe rail above and below the ticker: the cloth print, at a
+          height where its three registers still read as cloth. */}
+      <ShweshwePanel className="h-10 w-full" />
+      <div className="hb-mask-fade py-3">
+        <div className="animate-marquee flex w-max">
+          {line}
+          {line}
+        </div>
       </div>
+      <ShweshwePanel className="h-10 w-full" />
     </div>
   );
 }
@@ -269,7 +278,7 @@ function PlateMenuCTA() {
   const contemporary = catalog.plateMenus.find((p) => p.id === 'contemporary');
 
   return (
-    <section className="border-y-2 border-ink/10 bg-bone-2 py-16">
+    <section className="hb-painted border-y-2 border-ink/10 bg-bone-2 py-16">
       <div className="mx-auto max-w-7xl px-4">
         <SectionLabel>Build it yourself</SectionLabel>
         <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">One protein, one starch, one side</h2>
@@ -281,24 +290,29 @@ function PlateMenuCTA() {
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           {catalog.plateMenus.map((plate) => (
             <Reveal key={plate.id}>
-              <div className="h-full rounded-3xl border-2 border-ink/10 bg-white p-6">
-                <div className="flex items-baseline justify-between gap-3">
+              <div className="h-full overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
+                {/* Painted crown: the same frieze as a meal card, so the two card
+                    kinds read as one family rather than two styles. */}
+                <HeritageFrieze className="h-11 w-full" />
+                <div className="flex items-baseline justify-between gap-3 px-6 pt-5">
                   <h3 className="font-display text-2xl font-semibold">{plate.name}</h3>
-                  <span className="font-mono text-lg font-bold">{zar(plate.price)}</span>
+                  <span className="rounded-lg border-2 border-ink bg-ochre px-2.5 py-1 font-mono text-lg font-bold leading-none">{zar(plate.price)}</span>
                 </div>
-                <ul className="mt-4 space-y-2 text-sm text-ink/70">
+                <ul className="mt-4 space-y-2 px-6 pb-1 text-sm text-ink/70">
                   {plate.groups.map((g) => (
                     <li key={g.id} className="flex items-start gap-2">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ochre" />
+                      <DiamondMark className="mt-1 h-3 w-3 shrink-0" pigment="ochre" />
                       <span>
                         <strong className="font-semibold">{g.label.replace('Choose your ', '')}</strong> — {g.items.map((i) => i.label).join(', ')}
                       </span>
                     </li>
                   ))}
                 </ul>
-                <Button className="mt-5" size="sm" onClick={() => nav(`/menu?builder=${plate.id}`)}>
-                  Build my plate
-                </Button>
+                <div className="mt-5 px-6 pb-6">
+                  <Button size="sm" onClick={() => nav(`/menu?builder=${plate.id}`)}>
+                    Build my plate
+                  </Button>
+                </div>
               </div>
             </Reveal>
           ))}
@@ -333,17 +347,23 @@ function HowItWorks() {
   ];
 
   return (
-    <section className="border-y-2 border-ink/10 bg-bone-2 py-16">
+    <section className="hb-painted border-y-2 border-ink/10 bg-bone-2 py-16">
       <div className="mx-auto max-w-7xl px-4">
         <SectionLabel>How it works</SectionLabel>
         <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">From craving to confirmation in four steps</h2>
         <div className="mt-10 grid gap-6 md:grid-cols-4">
           {steps.map((s, i) => (
             <Reveal key={s.n} delay={i * 80}>
-              <div className="h-full rounded-3xl border-2 border-ink/10 bg-white p-6">
-                <span className="font-mono text-sm font-bold text-ochre-deep">{s.n}</span>
-                <h3 className="mt-3 font-display text-xl font-semibold">{s.t}</h3>
-                <p className="mt-2 text-[13px] leading-relaxed text-ink/60">{s.d}</p>
+              <div className="h-full overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
+                {/* Each step keeps the painting's atom, in its own pigment. */}
+                <div className="flex items-center gap-2 border-b-2 border-ink/10 px-5 py-2.5">
+                  <DiamondMark className="h-3.5 w-3.5" pigment={(['red', 'blue', 'green', 'gold'] as const)[i % 4]} />
+                  <span className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-ochre-deep">Step {s.n}</span>
+                </div>
+                <div className="p-5">
+                  <h3 className="font-display text-xl font-semibold">{s.t}</h3>
+                  <p className="mt-2 text-[13px] leading-relaxed text-ink/60">{s.d}</p>
+                </div>
               </div>
             </Reveal>
           ))}
@@ -378,8 +398,9 @@ function ServiceRules() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-16">
-      <div className="grid gap-8 rounded-[2rem] border-2 border-ink/10 bg-white p-8 md:grid-cols-[1fr_1.1fr] md:p-12">
-        <div>
+      <div className="grid gap-8 overflow-hidden rounded-[2rem] border-2 border-ink/10 bg-white md:grid-cols-[1fr_1.1fr]">
+        <HeritageFrieze className="h-12 w-full md:col-span-2" />
+        <div className="px-8 pb-8 md:pt-2 md:pl-12">
           <SectionLabel>The rules, plainly</SectionLabel>
           <h2 className="font-display text-4xl font-semibold">When and where we cook</h2>
           <p className="mt-3 text-ink/65">{service.message}</p>
@@ -390,7 +411,7 @@ function ServiceRules() {
             Read our policies
           </LinkButton>
         </div>
-        <dl className="space-y-3 text-sm">
+        <dl className="space-y-3 px-8 pb-8 text-sm md:pr-12 md:pt-2">
           {rows.map(([term, value]) => (
             <div key={term} className="grid gap-1 border-b border-ink/10 pb-2 sm:grid-cols-[9rem_1fr] sm:gap-3">
               <dt className="font-semibold text-ink">{term}</dt>
@@ -433,7 +454,7 @@ function Channels({ settings }: { settings: Settings | undefined }) {
               : 'Direct ordering link coming soon.';
           const content = (
             <>
-              <span className="grid h-12 w-12 place-items-center rounded-xl bg-ink font-mono text-sm font-bold text-ochre">{r.icon}</span>
+              <span className="grid h-12 w-12 place-items-center rounded-xl border-2 border-ink bg-ochre font-mono text-sm font-bold text-ink">{r.icon}</span>
               <h3 className="mt-4 font-display text-xl font-semibold">{r.name}</h3>
               <p className="mt-1 text-[13px] text-ink/60">{description}</p>
               <span className="mt-auto pt-4 text-sm font-semibold text-ochre-deep">
@@ -468,7 +489,7 @@ function PassportCTA() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-16">
       <Reveal>
-        <div className="relative overflow-hidden rounded-[2rem] border-2 border-bone/15 bg-ink p-8 text-bone md:p-12">
+        <div className="hb-painted-dark relative overflow-hidden rounded-[2rem] border-2 border-bone/15 bg-ink p-8 text-bone md:p-12">
           <div className="hb-dots pointer-events-none absolute inset-0 opacity-[0.07]" />
           <div className="relative grid gap-6 md:grid-cols-[1.5fr_1fr] md:items-center">
             <div>
