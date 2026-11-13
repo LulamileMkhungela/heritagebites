@@ -4,7 +4,7 @@ import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 
 import { zar } from '../lib/format';
-import { Button, HeritageBand, LinkButton, PotMark, Reveal, SectionLabel, ShweshwePanel, WovenRule } from '../components/ui';
+import { Button, HeritageBand, LinkButton, MicroRule, PotMark, Reveal, SectionLabel, ShweshwePanel, WovenRule } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
 import { usePageSeo } from '../lib/seo';
@@ -110,7 +110,8 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             </LinkButton>
           </div>
 
-          <dl className="mt-10 grid max-w-lg grid-cols-3 gap-4 border-t border-bone/15 pt-6">
+          <MicroRule onDark teeth={14} className="mt-10 w-full max-w-lg" />
+          <dl className="mt-5 grid max-w-lg grid-cols-3 gap-4">
             {[
               [zar(traditional?.price ?? 100), 'traditional plate'],
               [`${s?.serviceWindow.open ?? '12:00'}–${s?.serviceWindow.close ?? '13:30'}`, 'service window'],
