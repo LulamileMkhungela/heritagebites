@@ -89,7 +89,7 @@ export default function About() {
                   { n: '01', t: 'Cook it properly', d: 'Nothing is rushed. Tripe gets four hours. If a dish cannot be made well today, it comes off the counter rather than going out half-done.' },
                   { n: '02', t: 'Share the story', d: 'We honour each dish by sharing its name, language and the story carried with it.' },
                   { n: '03', t: 'Keep it accessible', d: 'Generous portions at prices that work for students, shift workers and families — not just for weekends.' },
-                  { n: '04', t: 'Make ordering painless', d: 'Explore the menu, place your order online, and contact us directly to confirm collection or delivery details.' },
+                  { n: '04', t: 'Make ordering painless', d: 'Explore the menu, place your order online, and contact us directly to confirm the delivery details.' },
                 ].map((m) => (
                   <li key={m.n} className="flex gap-4">
                     <span className="font-mono text-sm font-bold text-ochre">{m.n}</span>
@@ -113,7 +113,7 @@ export default function About() {
           {[
             { t: 'Authentic flavours', d: 'Recipes that have not been softened for a mainstream palate.', img: '/img/plate-mogodu.jpg' },
             { t: 'Cooked to order', d: 'Two service days a week, cooked in small batches — never held over.', img: '/img/plate-tshotlo.jpg' },
-            { t: 'Order your way', d: 'Order online, choose collection or delivery in Rosebank and Sandton, or message us on WhatsApp.', img: '/img/plate-chicken.jpg' },
+            { t: 'Order your way', d: 'Order online for delivery in Sandton and Rosebank and beyond, or message us on WhatsApp.', img: '/img/plate-chicken.jpg' },
             { t: 'Real value', d: 'One honest price a plate — protein, starch and vegetable side, nothing padded on.', img: '/img/plate-lamb-stew.jpg' },
           ].map((v, i) => (
             <Reveal key={v.t} delay={i * 80}>

@@ -82,6 +82,12 @@ export interface PlateGroup {
   required: boolean;
   max: number;
   items: { id: string; label: string; price: number }[];
+  /**
+   * True for the one group sold *alongside* the plate rather than included in
+   * it — the soft drink. Its item prices are charged on top of the plate price;
+   * every other group's items are included and their amounts are ignored.
+   */
+  priced?: boolean;
 }
 
 export interface PlateMenu {
@@ -107,6 +113,29 @@ export interface Settings {
   freeDeliveryAbove: number;
   minDeliveryOrder: number;
   deliveryAreas: string[];
+  /**
+   * Delivery is free inside `includedRadiusKm` of the kitchen, charged
+   * `outsideFee` outside it, and refused past `maxDeliveryKm`.
+   *
+   * Optional because a catalogue served by an older API build has no such
+   * fields; every reader falls back to the shared defaults in
+   * `shared/address.js`, so an old server degrades to "everything is included"
+   * rather than to a crash.
+   */
+  outsideFee?: number;
+  outsideFeeNote?: string;
+  maxDeliveryKm?: number;
+  deliveryOrigin?: { lat: number; lng: number };
+  includedRadiusKm?: number;
+  /**
+   * Google reviews. `googleReviewUrl` is the link the button uses; when it is
+   * empty the whole review surface hides, because a "Review us" button with no
+   * destination is worse than no button.
+   */
+  googlePlaceId?: string;
+  googlePlaceName?: string;
+  googleReviewUrl?: string;
+  /** Retired with collection; empty, and no surface reads it as an address. */
   collectionArea: string;
   collectionPoint: string;
   collectionNote: string;
@@ -228,7 +257,20 @@ export interface CartLine {
   plateId?: string;
 }
 
-export type Fulfilment = 'collection' | 'delivery';
+/**
+ * Delivery only (owner, 14 Nov 2026 — "there is no collection, it is delivery
+ * based").
+ *
+ * `'collection'` stays in the union because orders and carts created before
+ * the change still carry it: a stored order's tracking page and a returning
+ * customer's saved basket both need to keep rendering instead of throwing. No
+ * surface offers it any more, and `store/cart.ts` migrates a saved cart to
+ * delivery on load.
+ */
+export type Fulfilment = 'delivery' | 'collection';
+
+/** The only fulfilment a new order can have. */
+export const DEFAULT_FULFILMENT: Fulfilment = 'delivery';
 
 export interface Totals {
   subtotal: number;

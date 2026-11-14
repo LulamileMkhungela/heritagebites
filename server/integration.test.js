@@ -131,11 +131,30 @@ async function postWebhook(signed) {
   return { res, body: await res.json().catch(() => ({})) };
 }
 
+/*
+ * Sandton centre: inside the included delivery ring, so an order placed with
+ * this address pays the plate price and nothing else. Spread it into any
+ * customer override so the test is about the thing it is testing, not about
+ * the address gate.
+ */
+const ADDRESS = { address: '1 Maude Street, Sandton', suburb: 'Sandton', lat: -26.1075, lng: 28.055 };
+
 async function placeOrder(overrides = {}) {
   const body = {
     channel: 'card',
-    fulfilment: 'collection',
-    customer: { name: 'Integration Test', phone: '+27 82 000 9999', email: 'i@e.co.za' },
+    fulfilment: 'delivery',
+    /* Delivery only (owner, 14 Nov 2026): every order needs an address, and the
+       coordinates are what the distance gate prices from. Sandton centre is
+       inside the included ring, so the default order pays no delivery fee. */
+    customer: {
+      name: 'Integration Test',
+      phone: '+27 82 000 9999',
+      email: 'i@e.co.za',
+      address: '12 Rivonia Road, Sandton',
+      suburb: 'Sandton',
+      lat: -26.1075,
+      lng: 28.055,
+    },
     items: [WINGS],
     payment: { method: 'card' },
     ...overrides,
@@ -167,7 +186,9 @@ describe('catalogue + search', () => {
     assert.deepEqual(labels(traditional, 'protein'), [
       'Mogodu (beef tripe)', 'Tshotlo (pounded beef)', 'Chicken hardbody', 'Tlhakwana (beef trotters)', 'Smiley (sheep head)',
     ]);
-    assert.deepEqual(labels(traditional, 'veg'), ['Braised cabbage', 'Spinach', 'Morogo', 'Salsa']);
+    assert.deepEqual(labels(traditional, 'veg'), [
+      'Braised cabbage', 'Spinach', 'Morogo', 'Salsa', 'Chakalaka', 'Atchaar', 'Green salad',
+    ]);
     assert.deepEqual(labels(contemporary, 'starch'), ['Potato mash', 'Savoury rice', 'Baby potatoes', 'Cous cous', 'Garlic bread']);
     assert.deepEqual(labels(contemporary, 'protein'), ['Chicken wings', 'BBQ beef short rib', 'Lamb stew']);
     assert.deepEqual(labels(contemporary, 'veg'), [
@@ -224,21 +245,25 @@ describe('catalogue + search', () => {
     const c = await fetch(`${base}/api/catalog`).then(json);
 
     assert.ok(Array.isArray(c.comingSoon), 'the archive categories are published for the view-only section');
-    assert.ok(c.comingSoon.length >= 4, 'the categories the site carried before the two-tier menu are back');
+    assert.ok(c.comingSoon.length >= 3, 'the categories the site carried before the two-tier menu are back');
     /*
      * Modern Favourites is gone on purpose: every dish in it is now a
      * Contemporary plate, and "coming soon" on food that is already on sale was
      * the owner's complaint.
      */
+    /*
+     * Heritage Pots was hidden on 14 Nov 2026 at the owner's request, so the
+     * archive is three categories, not four.
+     */
     assert.deepEqual(c.comingSoon.map((cat) => cat.id), [
-      'heritage-pots',
       'kasi-fast-food',
       'morning-heritage',
       'sides-relishes',
     ]);
 
     const archived = c.comingSoon.flatMap((cat) => cat.items);
-    assert.ok(archived.length >= 10);
+    /* Eight, because Heritage Pots (three cards) was hidden on 14 Nov 2026. */
+    assert.ok(archived.length >= 8);
 
     /* Nothing that can already be ordered belongs in the archive. */
     const sellableNames = c.menu.map((m) => m.name.toLowerCase());
@@ -669,7 +694,7 @@ describe('checkout', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fulfilment: 'collection',
-        customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999' },
+        customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', ...ADDRESS },
         // 'veg' is required on this plate and is deliberately omitted here.
         items: [{ itemId: 'mogodu-plate', qty: 1, options: { starch: 'pap' } }],
         payment: { method: 'card' },
@@ -702,6 +727,93 @@ describe('checkout', () => {
     assert.equal(missing.res.status, 422);
   });
 
+  test('the soft drink is charged on top of the plate, and only because it is priced', async () => {
+    /*
+     * Owner, 14 Nov 2026: ginger gemere, 500 ml, offered after the vegetable
+     * side.
+     *
+     * This is the test the plate builder's design makes necessary. Every other
+     * group is "included" — its components carry prices that mean nothing,
+     * because the plate price is the whole price. The drink is the one thing
+     * sold *alongside* the plate, so if the group were not marked `priced` it
+     * would ride along free. Asserting the arithmetic is what keeps that true.
+     */
+    const withDrink = await placeOrder({
+      items: [{
+        kind: 'plate',
+        plateId: 'traditional',
+        qty: 1,
+        selections: { protein: ['mogodu'], starch: ['pap'], veg: ['chakalaka'], drink: ['ginger-gemere'] },
+      }],
+    });
+    assert.equal(withDrink.res.status, 201);
+    const line = withDrink.body.order.items[0];
+    assert.equal(line.unitPrice, 125, 'R100 plate + R25 ginger gemere');
+    assert.equal(withDrink.body.order.totals.total, 125);
+    const drink = line.options.find((o) => /ginger/i.test(o.label));
+    assert.ok(drink, 'the drink is on the line, so the kitchen knows to pack it');
+    assert.match(drink.label, /500 ml/);
+    assert.equal(drink.priceDelta, 25, 'and it is priced, unlike a plate component');
+
+    /* The same plate without a drink is still exactly the plate price. */
+    const noDrink = await placeOrder({
+      items: [{
+        kind: 'plate',
+        plateId: 'traditional',
+        qty: 1,
+        selections: { protein: ['mogodu'], starch: ['pap'], veg: ['chakalaka'] },
+      }],
+    });
+    assert.equal(noDrink.res.status, 201);
+    assert.equal(noDrink.body.order.items[0].unitPrice, 100, 'the drink is optional');
+    assert.equal(noDrink.body.order.totals.total, 100);
+  });
+
+  test('a plate component never adds money, whatever the client sends', async () => {
+    /*
+     * The companion to the drink test: a tampered client that marks a starch or
+     * a vegetable side as costing R500 must still be charged the plate price.
+     * Only a `priced` group is allowed to move the total.
+     */
+    const { res, body } = await placeOrder({
+      items: [{
+        kind: 'plate',
+        plateId: 'traditional',
+        qty: 1,
+        selections: { protein: ['mogodu'], starch: ['dumpling'], veg: ['morogo'], drink: [] },
+      }],
+    });
+    assert.equal(res.status, 201);
+    assert.equal(body.order.items[0].unitPrice, 100);
+    assert.ok(body.order.items[0].options.every((o) => o.priceDelta === 0), 'every included component is R0');
+  });
+
+  test('a soft drink on a DISH CARD is charged, not swallowed by the plate price', async () => {
+    /*
+     * The dish cards are the other way to order the same plate, and they carry
+     * the drink as an *option* rather than a builder group. The plate-price
+     * override used to wipe every option delta, so a drink chosen from a dish
+     * card was charged at R0 — a free beer, from a menu that only has one price.
+     */
+    const withDrink = await placeOrder({
+      items: [{
+        itemId: 'mogodu-plate',
+        qty: 1,
+        options: { starch: 'pap', veg: 'braised-cabbage', drink: 'ginger-gemere' },
+      }],
+    });
+    assert.equal(withDrink.res.status, 201);
+    assert.equal(withDrink.body.order.items[0].unitPrice, 125, 'R100 plate + R25 drink');
+    assert.equal(withDrink.body.order.totals.total, 125);
+
+    /* And the same card without the drink is still the plate price exactly. */
+    const without = await placeOrder({
+      items: [{ itemId: 'mogodu-plate', qty: 1, options: { starch: 'pap', veg: 'braised-cabbage' } }],
+    });
+    assert.equal(without.res.status, 201);
+    assert.equal(without.body.order.items[0].unitPrice, 100, 'the drink is optional');
+  });
+
   test('the plate builder ignores an unknown plate and unknown choices', async () => {
     const { res, body } = await placeOrder({
       items: [{ kind: 'plate', plateId: 'ghost-menu', qty: 1, selections: {} }],
@@ -710,13 +822,20 @@ describe('checkout', () => {
     assert.match(body.errors[0], /no longer on our menu/i);
   });
 
-  test('dine-in is no longer an available order type', async () => {
-    const { res, body } = await placeOrder({ fulfilment: 'dine-in' });
-    assert.equal(res.status, 422);
-    assert.match(body.errors[0], /collection or delivery/i);
+  test('collection is gone: the order is delivered whatever the client sends', async () => {
+    /*
+     * Owner, 14 Nov 2026 — there is no collection any more. A stale tab that
+     * still says `collection` is corrected rather than rejected: the customer's
+     * food is the same food, and stranding them on an option that no longer
+     * exists would be a worse failure than quietly delivering it.
+     */
+    const stale = await placeOrder({ fulfilment: 'collection' });
+    assert.equal(stale.res.status, 201);
+    assert.equal(stale.body.order.fulfilment, 'delivery');
+    assert.equal(stale.body.order.fulfilmentLabel, 'Delivery');
   });
 
-  test('card and cash are both accepted, on collection and on delivery', async () => {
+  test('card and cash are both accepted for a delivery', async () => {
     const tap = await placeOrder({ payment: { method: 'yoco-tap' } });
     assert.equal(tap.res.status, 422);
     assert.match(tap.body.errors[0], /unknown payment method/i);
@@ -726,21 +845,18 @@ describe('checkout', () => {
 
     /*
      * The kitchen carries a card machine and a cash float, so a delivered order
-     * can be paid either way. Cash on delivery used to be refused; it is not.
+     * can be paid either way. The stored method is `cash`; the old
+     * `cash-on-collection` name is still accepted and normalised, because a
+     * cached bundle sending it is not a reason to refuse an order.
      */
-    const cashOnDelivery = await placeOrder({
-      fulfilment: 'delivery',
-      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Sandton Drive', suburb: 'Sandton' },
-      payment: { method: 'cash-on-collection' },
-    });
-    assert.equal(cashOnDelivery.res.status, 201, 'cash is accepted at the door');
+    const cash = await placeOrder({ payment: { method: 'cash' } });
+    assert.equal(cash.res.status, 201);
+    assert.equal(cash.body.order.payment.method, 'cash');
+    assert.equal(cash.body.order.payment.reference, 'CASH');
 
-    const cardOnCollection = await placeOrder({
-      fulfilment: 'collection',
-      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999' },
-      payment: { method: 'cash-on-collection' },
-    });
-    assert.equal(cardOnCollection.res.status, 201);
+    const legacy = await placeOrder({ payment: { method: 'cash-on-collection' } });
+    assert.equal(legacy.res.status, 201, 'the old method name still works');
+    assert.equal(legacy.body.order.payment.method, 'cash', 'and is stored under the new name');
   });
 
   test('delivery in Rosebank and Sandton costs the plate price, and the minimum is enforced', async () => {
@@ -764,23 +880,44 @@ describe('checkout', () => {
     assert.equal(rosebank.body.order.deliveryArea, 'Rosebank');
   });
 
-  test('REGRESSION: an address outside the delivery boundary is refused, not accepted', async () => {
-    const { res, body } = await placeOrder({
-      fulfilment: 'delivery',
-      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Pretoria' },
+  test('the delivery boundary is a 50 km radius, not a suburb list', async () => {
+    /*
+     * Owner, 14 Nov 2026: outside Sandton/Rosebank a fee is added, and past
+     * 50 km the order is refused. Both are decided by distance, so a Pretoria
+     * address is refused for being 45 km away — not for failing to name a suburb
+     * in a list. A Sandton address with no coordinates still goes through: an
+     * unmeasurable address is never treated as too far.
+     */
+    const far = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '1 Church Street, Heidelberg', suburb: 'Heidelberg',
+        lat: -26.5047, lng: 28.3586,
+      },
     });
-    assert.equal(res.status, 422);
-    assert.match(body.errors[0], /Rosebank and Sandton/i);
-    assert.deepEqual(body.deliveryAreas, ['Rosebank', 'Sandton']);
+    assert.equal(far.res.status, 422);
+    assert.match(far.body.errors[0], /52\.2 km away/i);
+    assert.match(far.body.errors[0], /within 50 km/);
+    assert.equal(far.body.outOfRange, true);
   });
 
-  test('a suburb name alone cannot smuggle an out-of-area delivery through', async () => {
+  test('an address just outside the included ring pays the fee, and is still served', async () => {
+    /*
+     * Bryanston is about 8 km from the kitchen: outside the included Sandton and
+     * Rosebank ring, comfortably inside the 50 km limit. It must be priced with
+     * the fee rather than refused — the owner's rule is "another fee will be
+     * added", not "no".
+     */
     const { res, body } = await placeOrder({
-      fulfilment: 'delivery',
-      customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '1 Church Street', suburb: 'Sandtonville' },
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '1 Bryanston Drive, Bryanston', suburb: 'Sandton',
+        lat: -26.0515, lng: 28.0207,
+      },
     });
-    assert.equal(res.status, 422);
-    assert.match(body.errors[0], /Rosebank and Sandton/i);
+    assert.equal(res.status, 201);
+    assert.ok(body.order.totals.delivery > 0, 'a delivery fee is charged outside the included ring');
+    assert.equal(body.order.totals.total, 130 + body.order.totals.delivery);
   });
 
   test('a typed address that contradicts the selected area is refused, and says both', async () => {
@@ -799,6 +936,25 @@ describe('checkout', () => {
     assert.match(body.errors[0], /Rosebank/);
     assert.match(body.errors[0], /Sandton/);
     assert.match(body.errors[0], /Change the delivery area/i);
+  });
+
+  test('choosing "other" lets a Bryanston order through, with the fee', async () => {
+    /*
+     * The select used to list only Rosebank and Sandton, so a customer in
+     * Bryanston had to lie about where they live to get past the form — and the
+     * lie was then caught as a contradiction. The third option says "outside
+     * those two", which is the truth, and distance alone decides the price.
+     */
+    const { res, body } = await placeOrder({
+      fulfilment: 'delivery',
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '1 Bryanston Drive, Bryanston', suburb: 'Other — outside Sandton & Rosebank',
+        lat: -26.0515, lng: 28.0207,
+      },
+    });
+    assert.equal(res.status, 201, 'an honest "other" is never a contradiction');
+    assert.ok(body.order.totals.delivery > 0, 'and it is priced by distance, not by suburb name');
   });
 
   test('an address that names the area is trusted even when the select was skipped', async () => {
@@ -844,7 +1000,7 @@ describe('checkout', () => {
    */
   test('a card order without an email is accepted', async () => {
     const { res, body } = await placeOrder({
-      customer: { name: 'No Email', phone: '+27 82 000 1111' },
+      customer: { name: 'No Email', phone: '+27 82 000 1111', address: '1 Maude Street, Sandton', suburb: 'Sandton', lat: -26.1075, lng: 28.055 },
     });
     assert.equal(res.status, 201);
     assert.equal(body.order.receiptEmail, null, 'nothing is promised without an address');
@@ -852,8 +1008,8 @@ describe('checkout', () => {
 
   test('a cash order does not need an email', async () => {
     const { res, body } = await placeOrder({
-      customer: { name: 'Walk In', phone: '+27 82 000 2222' },
-      payment: { method: 'cash-on-collection' },
+      customer: { name: 'Walk In', phone: '+27 82 000 2222', address: '1 Maude Street, Sandton', suburb: 'Sandton', lat: -26.1075, lng: 28.055 },
+      payment: { method: 'cash' },
     });
     assert.equal(res.status, 201);
     assert.equal(body.order.receiptEmail, null);
@@ -861,7 +1017,7 @@ describe('checkout', () => {
 
   test('a malformed email is refused for either payment method', async () => {
     const { res, body } = await placeOrder({
-      customer: { name: 'Typo', phone: '+27 82 000 3333', email: 'not-an-email' },
+      customer: { name: 'Typo', phone: '+27 82 000 3333', email: 'not-an-email', ...ADDRESS },
       payment: { method: 'cash-on-collection' },
     });
     assert.equal(res.status, 422);
@@ -948,7 +1104,7 @@ describe('order tracking + cancellation', () => {
 describe('loyalty card and contact', () => {
   test('repeat customers accumulate stamps', async () => {
     const phone = '+27 71 234 5678';
-    await placeOrder({ customer: { email: 't@e.co.za', name: 'Passport Test', phone } });
+    await placeOrder({ customer: { email: 't@e.co.za', name: 'Passport Test', phone, ...ADDRESS } });
     const after = await fetch(`${base}/api/passport`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -965,7 +1121,7 @@ describe('loyalty card and contact', () => {
     // Two contemporary plates is R260 — five full R50 bands, so a flat one
     // stamp per order would fail this assertion.
     const placed = await placeOrder({
-      customer: { email: 't@e.co.za', name: 'Stamp Check', phone },
+      customer: { email: 't@e.co.za', name: 'Stamp Check', phone, ...ADDRESS },
       items: [{ ...WINGS, qty: 2 }],
     });
     assert.equal(placed.res.status, 201, `order should be accepted: ${JSON.stringify(placed.body)}`);
@@ -988,7 +1144,7 @@ describe('loyalty card and contact', () => {
     // Four contemporary plates at R130 is exactly R520 — ten stamps, one
     // completed card. `10 - (stamps % 10)` used to answer "10 more to go".
     const placed = await placeOrder({
-      customer: { email: 't@e.co.za', name: 'Full Card', phone },
+      customer: { email: 't@e.co.za', name: 'Full Card', phone, ...ADDRESS },
       items: [{ itemId: 'short-rib-plate', qty: 4, options: { starch: 'savoury-rice', veg: 'glazed-carrots' } }],
     });
     assert.equal(placed.res.status, 201, `order should be accepted: ${JSON.stringify(placed.body)}`);

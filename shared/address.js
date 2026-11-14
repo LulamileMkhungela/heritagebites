@@ -39,6 +39,38 @@ export const DELIVERY_BBOX = {
   maxLat: -26.075,
 };
 
+/**
+ * The envelope the geocoder may answer from on the LIVE checkout.
+ *
+ * This is the 50 km delivery radius, not the two-suburb area list.
+ *
+ * It used to be `DELIVERY_BBOX` — Rosebank and Sandton only — which quietly made
+ * the radius unreachable: a customer in Bryanston, 9 km from the kitchen and
+ * squarely inside the paid-delivery ring, typed their address and the suggestion
+ * box answered with nothing. The owner's rule is "outside Sandton/Rosebank a fee
+ * applies, past 50 km we refuse" — a rule that can only be applied to someone
+ * whose address the box will accept.
+ *
+ * Roughly ±0.5° around the kitchen, which is comfortably wider than 50 km in
+ * every direction (0.45° of latitude is 50 km; at this longitude 0.5° is about
+ * 50 km east–west). The hard limit is still enforced by distance, not by this
+ * box: the box only decides what the geocoder is *asked* about.
+ */
+export const DELIVERY_RADIUS_BBOX = {
+  minLon: 27.55,
+  minLat: -26.58,
+  maxLon: 28.55,
+  maxLat: -25.68,
+};
+
+/** `bbox` query value for the radius envelope. */
+export const DELIVERY_RADIUS_BBOX_PARAM = [
+  DELIVERY_RADIUS_BBOX.minLon,
+  DELIVERY_RADIUS_BBOX.minLat,
+  DELIVERY_RADIUS_BBOX.maxLon,
+  DELIVERY_RADIUS_BBOX.maxLat,
+].join(',');
+
 /** `bbox` query value in the order Photon expects. */
 export const DELIVERY_BBOX_PARAM = [DELIVERY_BBOX.minLon, DELIVERY_BBOX.minLat, DELIVERY_BBOX.maxLon, DELIVERY_BBOX.maxLat].join(',');
 
@@ -64,8 +96,48 @@ export const DELIVERY_AREA_POINTS = [
   { area: 'Sandton', lat: -26.1075, lng: 28.055, radiusKm: 2.2 },
 ];
 
-/** Great-circle distance in km. */
-function haversineKm(aLat, aLng, bLat, bLng) {
+/**
+ * Where the kitchen cooks from, and the two rings drawn around it.
+ *
+ * The owner's rule (14 Nov 2026): the plate price includes delivery inside
+ * Sandton and Rosebank; outside that ring a fee is added; past 50 km the order
+ * is refused outright rather than quoted. Collection no longer exists, so every
+ * order is measured from here.
+ *
+ * The origin is the Sandton side of the Rosebank/Sandton run — the midpoint of
+ * the two area centres above — because the kitchen is a shadow kitchen with no
+ * public street address. It is the only honest centre available, and it puts
+ * both named suburbs well inside the included ring. Replace it with the real
+ * kitchen coordinates the moment the owner has them; nothing else changes.
+ */
+export const KITCHEN_ORIGIN = { lat: -26.126, lng: 28.049 };
+
+/**
+ * The fee rings, in km from the kitchen.
+ *
+ * `includedTo` is the edge of the Sandton/Rosebank run. It is generous on
+ * purpose: the two suburbs' own centres are about 4 km apart, so a customer in
+ * the far corner of either is still comfortably inside.
+ */
+export const DELIVERY_ZONES = {
+  /** Free: delivery is already in the plate price. */
+  includedTo: 6,
+  /** Beyond the included ring, up to the hard limit, a fee applies. */
+  maxKm: 50,
+  /**
+   * GUESSED FEE — the owner has not given a number yet.
+   *
+   * R30 is the one amount the codebase already carried as a default delivery
+   * flat fee (`deliveryFeeCents` falls back to 35), and it is a plausible
+   * per-run charge for a 6–50 km trip. It is NOT confirmed. Every surface that
+   * prints it reads `settings.outsideFee`, so changing the seed value changes
+   * the whole site at once.
+   */
+  fee: 30,
+};
+
+/** Great-circle distance in km. Exported so the checkout can measure a point. */
+export function haversineKm(aLat, aLng, bLat, bLng) {
   const R = 6371;
   const toRad = (deg) => (deg * Math.PI) / 180;
   const dLat = toRad(bLat - aLat);
@@ -100,6 +172,49 @@ export function insideDeliveryBox(lat, lng) {
 }
 
 /**
+ * Which fee ring a point falls in — the single decision every delivery surface
+ * asks.
+ *
+ * Returns one of three answers, never a bare boolean, because "too far" and
+ * "far enough to cost more" are different conversations with the customer:
+ *
+ *   `{ zone: 'included' }`  — inside Sandton/Rosebank; delivery is in the price
+ *   `{ zone: 'surcharge', fee, distanceKm }` — outside the ring, still served
+ *   `{ zone: 'refused', distanceKm }` — past the hard limit, cannot be ordered
+ *   `{ zone: 'unknown' }` — no usable coordinates; caller must ask for an address
+ *
+ * The hard limit is absolute: there is no fee that buys a 60 km delivery.
+ *
+ * @param {number | null | undefined} lat
+ * @param {number | null | undefined} lng
+ * @param {{ includedTo?: number, maxKm?: number, fee?: number, origin?: {lat: number, lng: number} }} [rules]
+ */
+export function deliveryZoneFor(lat, lng, rules = {}) {
+  const to = Number(rules.includedTo ?? DELIVERY_ZONES.includedTo);
+  const max = Number(rules.maxKm ?? DELIVERY_ZONES.maxKm);
+  const fee = Number(rules.fee ?? DELIVERY_ZONES.fee);
+  const origin = rules.origin ?? KITCHEN_ORIGIN;
+
+  if (lat === null || lat === undefined || lng === null || lng === undefined) return { zone: 'unknown' };
+  const nLat = Number(lat);
+  const nLng = Number(lng);
+  if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return { zone: 'unknown' };
+
+  const distanceKm = Math.round(haversineKm(nLat, nLng, origin.lat, origin.lng) * 10) / 10;
+  if (distanceKm > max) return { zone: 'refused', distanceKm };
+  if (distanceKm <= to) return { zone: 'included', distanceKm };
+  return { zone: 'surcharge', fee, distanceKm };
+}
+
+/** The delivery fee in rand for a distance, or -1 when the address is refused. */
+export function deliveryFeeForPoint(lat, lng, rules = {}) {
+  const result = deliveryZoneFor(lat, lng, rules);
+  if (result.zone === 'refused') return -1;
+  if (result.zone === 'surcharge') return Number(result.fee);
+  return 0;
+}
+
+/**
  * Keep only suggestions the kitchen can deliver to, and label the ones the map
  * left untagged.
  *
@@ -115,7 +230,7 @@ export function insideDeliveryBox(lat, lng) {
  * "Rosebank" + "Oxford" gives the Rosebank end of Oxford Road.
  *
  * @param {AddressSuggestion[]} suggestions
- * @param {{ areas?: string[], onlyArea?: string | null }} [options]
+ * @param {{ areas?: string[], onlyArea?: string | null, radius?: boolean, rules?: { includedTo?: number, maxKm?: number, fee?: number, origin?: {lat: number, lng: number} } }} [options]
  * @returns {AddressSuggestion[]}
  */
 export function filterSuggestions(suggestions, options) {
@@ -123,11 +238,47 @@ export function filterSuggestions(suggestions, options) {
   const only = String(options?.onlyArea ?? '').toLowerCase();
   const allowed = only ? areas.filter((a) => a === only) : areas;
 
+  /*
+   * `radius` switches this from "only the two approved suburbs" to "anywhere we
+   * can reach". That is the mode the checkout uses now:
+   *
+   *   - The owner's rule is a 50 km radius with a fee outside Sandton/Rosebank,
+   *     NOT a two-suburb list. Filtering suggestions down to the two suburbs
+   *     meant a Bryanston address produced no suggestion at all, so the radius
+   *     could never be applied to the people it exists for.
+   *   - When the radius mode is on, a result is kept if it is inside the
+   *     envelope — its coordinates are what decide, and an unknown suburb is
+   *     fine, because the distance check is the authority.
+   */
+  const radiusMode = Boolean(options?.radius);
+
   /** @type {AddressSuggestion[]} */
   const kept = [];
   for (const suggestion of suggestions ?? []) {
     if (!suggestion) continue;
     const tagged = suggestion.area ? String(suggestion.area) : null;
+
+    if (radiusMode) {
+      if (!Number.isFinite(Number(suggestion.lat)) || !Number.isFinite(Number(suggestion.lng))) continue;
+      /*
+       * The radius is a circle, not the search box. The box is a square drawn
+       * generously around the kitchen, so its corners reach ~65 km — offering a
+       * Polokwane address and then refusing it at submit is exactly the bait the
+       * old filter avoided. Anything the kitchen will not drive to is not offered.
+       */
+      if (deliveryZoneFor(suggestion.lat, suggestion.lng, options?.rules).zone === 'refused') continue;
+      const resolved = tagged ?? areaForPoint(suggestion.lat, suggestion.lng);
+      kept.push({
+        ...suggestion,
+        /* Keep the area when the map or the coordinates can place it; leave it
+           null rather than inventing a suburb for somewhere like Bryanston. */
+        area: resolved ?? null,
+        line: resolved ? lineWithArea(suggestion.line, resolved) : suggestion.line,
+        detail: resolved ? detailWithArea(suggestion.detail, resolved) : suggestion.detail,
+      });
+      continue;
+    }
+
     /* Tags beat coordinates; a result neither of them can place is not offered. */
     const resolved = tagged ?? areaForPoint(suggestion.lat, suggestion.lng);
     if (!resolved) continue;
@@ -352,6 +503,12 @@ export function mapPhotonFeature(feature, settings) {
   ]
     .map(str)
     .filter(Boolean);
+  /*
+   * Only the two *included* suburbs are tagged here, and that is deliberate: the
+   * tag is what makes a result read "Sandton delivery" and moves the area select.
+   * A Bryanston result keeps a null area and is priced — and offered — by its
+   * distance instead. The tag was never a whitelist; see `filterSuggestions`.
+   */
   const areas = settings?.deliveryAreas ?? [];
   const area = areas.find((approved) => candidates.some((c) => c.toLowerCase().includes(approved.toLowerCase()))) ?? null;
 

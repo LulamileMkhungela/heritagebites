@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { CartLine, CartOptionPick, Fulfilment, MenuItem } from '../lib/types';
+import { DEFAULT_FULFILMENT, type CartLine, type CartOptionPick, type Fulfilment, type MenuItem } from '../lib/types';
 
 interface CartState {
   lines: CartLine[];
@@ -29,7 +29,7 @@ export const useCart = create<CartState>()(
   persist(
     (set) => ({
       lines: [],
-      fulfilment: 'collection',
+      fulfilment: DEFAULT_FULFILMENT,
       open: false,
 
       /*
@@ -66,12 +66,21 @@ export const useCart = create<CartState>()(
     }),
     {
       name: 'hb.cart',
-      version: 2,
+      version: 3,
+      /*
+       * Version 3 is the collection removal.
+       *
+       * A basket saved before it still says `collection`, and there is no
+       * collection to offer that customer any more — so the saved value is
+       * rewritten to delivery rather than left to render a screen of copy about
+       * a collection point that no longer exists. The lines are kept: food in
+       * the basket is the customer's, whatever changed about delivery.
+       */
       migrate: (persisted) => {
         const old = persisted as Partial<Pick<CartState, 'lines' | 'fulfilment'>>;
         return {
           lines: old.lines ?? [],
-          fulfilment: old.fulfilment === 'delivery' ? 'delivery' : 'collection',
+          fulfilment: DEFAULT_FULFILMENT,
         };
       },
       partialize: (s) => ({ lines: s.lines, fulfilment: s.fulfilment }),

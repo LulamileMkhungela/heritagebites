@@ -39,6 +39,10 @@ const traditionalSides = [
   { id: 'spinach', label: 'Spinach', priceDelta: 0 },
   { id: 'morogo', label: 'Morogo', priceDelta: 0 },
   { id: 'salsa', label: 'Salsa', priceDelta: 0 },
+  /* Added on the owner's instruction (14 Nov 2026). Included in the plate price. */
+  { id: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
+  { id: 'atchaar', label: 'Atchaar', priceDelta: 0 },
+  { id: 'green-salad', label: 'Green salad', priceDelta: 0 },
 ];
 
 const contemporaryStarches = [
@@ -72,6 +76,59 @@ const sideGroup = (choices, id = 'veg') => ({
   choices,
 });
 
+/**
+ * The soft drink, offered after the vegetable side.
+ *
+ * `priced: true` is the one thing that makes this group different from the
+ * rest of the builder. Every other group is "included" — its price deltas are
+ * zero and the plate price is the only amount charged. A drink is not part of
+ * the R100/R130 plate, so its group is marked `priced` and the server adds the
+ * chosen item's `price` to the plate line. Without that flag the drink would
+ * ride along free, which is exactly the bug the plate builder's design invites.
+ *
+ * Optional (`required: false`): a customer who wants water with their own drink
+ * should not be forced to buy one.
+ *
+ * PRICE IS A GUESS — the owner has the number. R25 for a 500 ml home-made
+ * ginger beer is the placeholder; `price` and `priceDelta` must be changed
+ * together.
+ */
+const GINGER_GEMERE_PRICE = 25;
+
+/**
+ * The same drink for a dish card.
+ *
+ * A plate builder has *groups*; a dish card has *options*. Both sell the same
+ * 500 ml ginger gemere, so both read the same price constant — two places that
+ * could drift apart is exactly how one of them ends up free.
+ *
+ * `priced: true` tells the pricing code that this choice's `priceDelta` is real
+ * money, unlike a starch or a side whose delta is zero because it is already in
+ * the plate price.
+ */
+const drinksOption = () => ({
+  id: 'drink',
+  label: 'Add a soft drink',
+  required: false,
+  priced: true,
+  choices: [{ id: 'ginger-gemere', label: 'Ginger gemere — home-made ginger beer, 500 ml', priceDelta: GINGER_GEMERE_PRICE }],
+});
+
+const drinksGroup = () => ({
+  id: 'drink',
+  label: 'Add a soft drink',
+  required: false,
+  max: 1,
+  priced: true,
+  items: [
+    {
+      id: 'ginger-gemere',
+      label: 'Ginger gemere — home-made ginger beer, 500 ml',
+      price: GINGER_GEMERE_PRICE,
+    },
+  ],
+});
+
 /** The two confirmed plate prices. The customer picks components within a plate. */
 export const plateMenus = [
   {
@@ -94,6 +151,7 @@ export const plateMenus = [
       },
       { id: 'starch', label: 'Choose your starch', required: true, max: 1, items: traditionalStarches.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
       { id: 'veg', label: 'Choose your vegetable side', required: true, max: 1, items: traditionalSides.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
+      drinksGroup(),
     ],
   },
   {
@@ -114,6 +172,7 @@ export const plateMenus = [
       },
       { id: 'starch', label: 'Choose your starch', required: true, max: 1, items: contemporaryStarches.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
       { id: 'veg', label: 'Choose your vegetable side', required: true, max: 1, items: contemporarySides.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
+      drinksGroup(),
     ],
   },
 ];
@@ -132,7 +191,7 @@ export const categories = [
      * differently — and the price belongs on the plate, where it is calculated.
      */
     tagline: 'Slow-cooked, the traditional way',
-    blurb: 'Starch, protein and a vegetable side. Pap, mabele, samp or dumpling with the pots that carry memory.',
+    blurb: 'Starch, protein and a vegetable side. Pap, mabele, samp or dumpling, cooked the way a Sunday kitchen does it.',
     accent: 'chili',
   },
   {
@@ -173,34 +232,40 @@ export const categories = [
  *     search it or put it in a basket.
  */
 export const comingSoon = [
-  {
-    id: 'heritage-pots',
-    name: 'Heritage Pots',
-    tagline: 'Slow-cooked the way grandmothers taught us',
-    blurb: 'Samp, beans and grains — the pots that carry memory.',
-    accent: 'chili',
-    items: [
-      {
-        id: 'archive-isistambu', name: 'Isistambu — Samp & Beans', price: 100, image: img('samp-beans'),
-        description: 'Samp and sugar beans slow-cooked until creamy, finished with a little butter.',
-        status: 'coming-soon',
-      },
-      {
-        id: 'archive-dombolo', name: 'Dombolo', price: 100, image: img('dumplings'),
-        description: 'Steamed bread, soft in the middle, made to soak up the gravy on the plate.',
-        status: 'coming-soon',
-      },
-      {
-        id: 'archive-motogo', name: 'Motogo wa Mabele', price: 100, image: img('mabele'),
-        description: 'Sorghum porridge cooked the old way and served warm, the way it is made at home.',
-        status: 'coming-soon',
-      },
-      // Tlhakwana only ever had a short-rib photo to sit on, and a photo of the
-      // wrong dish is worse than no card. It is already on the Traditional menu
-      // as a protein, so nothing is lost by leaving it out here.
-      // { id: 'archive-tlhakwana', name: 'Tlhakwana', image: img('short-ribs'), status: 'coming-soon' },
-    ],
-  },
+  /*
+   * Heritage Pots is hidden at the owner's request (14 Nov 2026). Commented out
+   * rather than deleted, so the signed-off copy can come back with one uncomment
+   * if she changes her mind.
+   *
+   * {
+   *   id: 'heritage-pots',
+   *   name: 'Heritage Pots',
+   *   tagline: 'Slow-cooked the way grandmothers taught us',
+   *   blurb: 'Samp, beans and grains — the pots that carry memory.',
+   *   accent: 'chili',
+   *   items: [
+   *     {
+   *       id: 'archive-isistambu', name: 'Isistambu — Samp & Beans', price: 100, image: img('samp-beans'),
+   *       description: 'Samp and sugar beans slow-cooked until creamy, finished with a little butter.',
+   *       status: 'coming-soon',
+   *     },
+   *     {
+   *       id: 'archive-dombolo', name: 'Dombolo', price: 100, image: img('dumplings'),
+   *       description: 'Steamed bread, soft in the middle, made to soak up the gravy on the plate.',
+   *       status: 'coming-soon',
+   *     },
+   *     {
+   *       id: 'archive-motogo', name: 'Motogo wa Mabele', price: 100, image: img('mabele'),
+   *       description: 'Sorghum porridge cooked the old way and served warm, the way it is made at home.',
+   *       status: 'coming-soon',
+   *     },
+   *     // Tlhakwana only ever had a short-rib photo to sit on, and a photo of the
+   *     // wrong dish is worse than no card. It is already on the Traditional menu
+   *     // as a protein, so nothing is lost by leaving it out here.
+   *     // { id: 'archive-tlhakwana', name: 'Tlhakwana', image: img('short-ribs'), status: 'coming-soon' },
+   *   ],
+   * },
+   */
   {
     id: 'kasi-fast-food',
     name: 'Kasi Fast Food',
@@ -231,7 +296,7 @@ export const comingSoon = [
     id: 'morning-heritage',
     name: 'Morning Heritage',
     tagline: 'For the early start',
-    blurb: 'Warm porridge and fresh fat cakes, made the way they are made at home.',
+    blurb: 'Warm sorghum porridge and golden fat cakes, fried at dawn.',
     accent: 'morogo',
     items: [
       {
@@ -337,7 +402,7 @@ export const menu = [
     rating: 4.9,
     orders: 1240,
     available: true,
-    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides)],
+    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides), drinksOption()],
   },
   {
     id: 'tshotlo-plate',
@@ -359,7 +424,7 @@ export const menu = [
     rating: 4.8,
     orders: 980,
     available: true,
-    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides)],
+    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides), drinksOption()],
   },
   {
     id: 'chicken-hardbody-plate',
@@ -380,7 +445,7 @@ export const menu = [
     rating: 4.7,
     orders: 870,
     available: true,
-    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides)],
+    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides), drinksOption()],
   },
   {
     id: 'tlhakwana-plate',
@@ -402,7 +467,7 @@ export const menu = [
     rating: 4.7,
     orders: 610,
     available: true,
-    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides)],
+    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides), drinksOption()],
   },
   {
     id: 'smiley-plate',
@@ -424,7 +489,7 @@ export const menu = [
     rating: 4.8,
     orders: 540,
     available: true,
-    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides)],
+    options: [starchGroup(traditionalStarches), sideGroup(traditionalSides), drinksOption()],
   },
 
   /* ---------------------------- Contemporary -------------------------- */
@@ -447,7 +512,7 @@ export const menu = [
     rating: 4.9,
     orders: 1560,
     available: true,
-    options: [wingsBaste, starchGroup(contemporaryStarches), sideGroup(contemporarySides)],
+    options: [wingsBaste, starchGroup(contemporaryStarches), sideGroup(contemporarySides), drinksOption()],
   },
   {
     id: 'short-rib-plate',
@@ -468,7 +533,7 @@ export const menu = [
     rating: 4.8,
     orders: 430,
     available: true,
-    options: [starchGroup(contemporaryStarches), sideGroup(contemporarySides)],
+    options: [starchGroup(contemporaryStarches), sideGroup(contemporarySides), drinksOption()],
   },
   {
     id: 'lamb-stew-plate',
@@ -489,7 +554,7 @@ export const menu = [
     rating: 4.8,
     orders: 390,
     available: true,
-    options: [starchGroup(contemporaryStarches), sideGroup(contemporarySides)],
+    options: [starchGroup(contemporaryStarches), sideGroup(contemporarySides), drinksOption()],
   },
 ];
 
@@ -539,10 +604,36 @@ export const settings = {
   minDeliveryOrder: 100,
   deliveryAreas: ['Rosebank', 'Sandton'],
 
-  /* Collection: a shadow kitchen, so no public street address is published. */
-  collectionArea: 'Rosebank & Sandton',
-  collectionPoint: 'Standard Bank, Rosebank and Sandton — exact collection point to be confirmed',
-  collectionNote: 'We will confirm the exact collection point by WhatsApp when your order is placed.',
+  /*
+   * Delivery-only pricing, on the owner's instruction (14 Nov 2026).
+   *
+   * `deliveryIncluded` above still describes the Sandton/Rosebank run: inside
+   * that ring the plate price is the whole price. Outside it, `outsideFee` is
+   * added, and past `maxDeliveryKm` the checkout refuses the order instead of
+   * quoting for it. Collection was removed at the same time, so there is no
+   * counter price any more — `deliveryFlat: 0` is the honest default because
+   * the included ring owes nothing, and the surcharge is a separate field.
+   *
+   * THE FEE IS A GUESS. The owner has the number; R30 is placeholder. It is
+   * read from here by the server, the basket and the checkout, so replacing
+   * this one value updates the entire site.
+   */
+  outsideFee: 30,
+  outsideFeeNote: 'Outside Sandton and Rosebank we add a delivery fee, confirmed on WhatsApp before you pay.',
+  maxDeliveryKm: 50,
+  deliveryOrigin: { lat: -26.126, lng: 28.049 },
+  includedRadiusKm: 6,
+
+  /*
+   * Collection: REMOVED (owner, 14 Nov 2026 — "there is no collection, it is
+   * delivery based"). The three fields stay in the schema because the type and
+   * a few legacy surfaces read them, but nothing in the customer's path offers
+   * collection any more. They are cleared rather than left pointing at a
+   * collection point that no longer exists.
+   */
+  collectionArea: '',
+  collectionPoint: '',
+  collectionNote: '',
 
   /* Both delivery and collection run inside the service window. */
   serviceWindow: { open: '12:00', close: '13:30' },
@@ -553,6 +644,26 @@ export const settings = {
   contactFormspreeUrl: 'https://formspree.io/f/xvkkkwve',
 
   loyaltyRateCents: 5000,
+
+  /*
+   * Google reviews (owner, 14 Nov 2026).
+   *
+   * BLOCKED ON ONE THING: the Google Business Profile Place ID. A review link is
+   * `https://search.google.com/local/writereview?placeid=<PLACE_ID>` — a plain
+   * URL that works on any host, including the GitHub Pages preview, so this does
+   * NOT have to wait for the .co.za domain. What does need the domain and the
+   * verification is the Profile itself, because Google will not collect reviews
+   * for a business it has not verified.
+   *
+   * Until the ID arrives the field is empty and every surface that reads it
+   * hides itself — no dead "Review us" button, and no invented Place ID, which
+   * would send customers to somebody else's listing.
+   *
+   * `googlePlaceName` is the text shown on the button once a link exists.
+   */
+  googlePlaceId: '',
+  googlePlaceName: 'Heritage Bites',
+  googleReviewUrl: '',
 
   channels: {
     ubereats: { label: 'Uber Eats', url: '', enabled: false },
@@ -669,10 +780,12 @@ export const policies = [
     ],
   },
   {
+    /* The id is stable on purpose: it is a URL fragment, and renaming it breaks
+       every saved link to this policy and the test that pins the list. */
     id: 'delivery-collection',
-    title: 'Delivery & Collection',
-    updated: '2026-10-27',
-    intro: 'Heritage Bites is a shadow kitchen serving Thursdays and Fridays between 12:00 and 13:30.',
+    title: 'Delivery',
+    updated: '2026-11-14',
+    intro: 'Heritage Bites is a delivery-only kitchen serving Thursdays and Fridays between 12:00 and 13:30.',
     sections: [
       {
         heading: 'Service days and times',
@@ -680,15 +793,15 @@ export const policies = [
       },
       {
         heading: 'Delivery areas',
-        body: 'We deliver in Rosebank and Sandton only. If your address falls outside those areas we will contact you to arrange collection instead.',
+        body: 'We deliver everywhere within 50 km of our kitchen in Sandton. Delivery is included in the plate price in Sandton and Rosebank; anywhere further out up to 50 km carries a delivery fee, confirmed on WhatsApp before you pay. Beyond 50 km we do not deliver, and the checkout will tell you so before you order.',
       },
       {
         heading: 'Minimum order and delivery fee',
-        body: 'The minimum order is R100 for plated meals. There is no separate delivery fee — the Rosebank and Sandton run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one whether you collect or have it delivered.',
+        body: 'The minimum order is R100 for plated meals. Inside Sandton and Rosebank there is no separate delivery fee — the run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one. Outside those areas a delivery fee applies; the exact amount is confirmed on WhatsApp before payment.',
       },
       {
-        heading: 'Collection',
-        body: 'Collection is from our kitchen point at Standard Bank, Rosebank and Sandton. No public street address is published because we operate as a shadow kitchen; we confirm the exact collection point by WhatsApp when your order is placed.',
+        heading: 'No collection',
+        body: 'We are a delivery-only kitchen. There is no counter to collect from and no collection point; every order is brought to the address you gave at checkout, within the service window.',
       },
       {
         heading: 'Preparation and delivery estimates',

@@ -9,14 +9,14 @@ import { waHref } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
 
 /*
- * Customer quests.
+ * Customer requests.
  *
  * A quest is a request for a specific meal — the dish someone wishes we cooked.
  * The page deliberately runs in a fixed order: look first, then ask. Step one is
  * a *reference* of what the kitchen already cooks, drawn from the live catalogue
  * so it can never drift from the real menu. It is view only on purpose: the
  * cards are not links, carry no photos, no descriptions and no add-to-basket
- * control, so a quest cannot be mistaken for an order and no dish detail page
+ * control, so a request cannot be mistaken for an order and no dish detail page
  * opens from here. If the dish somebody wants is not in that list, step two is
  * the form — and a person reads it and replies.
  */
@@ -46,7 +46,7 @@ export default function Quest() {
    * being retyped in the chat.
    */
   const questMessage = [
-    'Hi Heritage Bites, I have a meal quest:',
+    'Hi Heritage Bites, I have a meal request:',
     form.dish.trim() ? `Dish: ${form.dish.trim()}` : '',
     form.plates.trim() ? `Plates: ${form.plates.trim()}` : '',
     form.serviceDay && form.serviceDay !== 'either' ? `Day: ${form.serviceDay}` : '',
@@ -65,7 +65,7 @@ export default function Quest() {
 
   /*
    * Same rule as the contact form: a name, the dish, and one way to reply — an
-   * email address or a cell number. A quest nobody can answer is not a quest.
+   * email address or a cell number. A request nobody can answer is not a request.
    */
   const validate = () => {
     const next: Record<string, string> = {};
@@ -108,12 +108,12 @@ export default function Quest() {
         <img src={asset('/img/mogodu.jpg')} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" />
         <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/90 to-ink/40" />
         <div className="relative mx-auto max-w-7xl px-4">
-          <SectionLabel onDark>Customer quest</SectionLabel>
+          <SectionLabel onDark>Customer request</SectionLabel>
           <h1 className="font-display text-5xl font-semibold md:text-6xl">Ask us to cook it</h1>
           <p className="mt-4 max-w-2xl text-bone/70">
             Is there a dish you wish was on our menu — something from home, a family favourite, or a plate you had
             somewhere and cannot stop thinking about? Look through what the kitchen cooks, then tell us what you are
-            after. A person reads every quest and comes back to you.
+            after. A person reads every request and comes back to you.
           </p>
         </div>
       </header>
@@ -193,19 +193,19 @@ export default function Quest() {
             <div className="rounded-[2rem] border-2 border-ink/10 bg-white p-6 md:p-8">
               <div className="flex flex-wrap items-baseline gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ochre font-mono text-sm font-bold text-ink">2</span>
-                <h2 className="font-display text-3xl font-semibold">Send your quest</h2>
+                <h2 className="font-display text-3xl font-semibold">Send your request</h2>
               </div>
 
               {state === 'sent' ? (
                 <div className="mt-6 rounded-3xl border-2 border-ochre bg-ochre/10 p-6 text-center">
                   <p className="text-3xl" aria-hidden="true">✦</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold">{delivered ? 'Quest sent' : 'Quest received'}</h3>
+                  <h3 className="mt-2 font-display text-2xl font-semibold">{delivered ? 'Request sent' : 'Request received'}</h3>
                   <p className="mt-2 text-sm text-ink/65">
                     {delivered
                       ? 'It is in our inbox and a person will come back to you on the number you gave us.'
                       : STATIC_PREVIEW
-                        ? 'Your quest reached the site, but it could not be delivered to our inbox. Please call or WhatsApp us so it is not missed.'
-                        : 'Your quest is saved with us, but our email notification did not go through just now. Please call or WhatsApp us if it is for this week’s window.'}
+                        ? 'Your request reached the site, but it could not be delivered to our inbox. Please call or WhatsApp us so it is not missed.'
+                        : 'Your request is saved with us, but our email notification did not go through just now. Please call or WhatsApp us if it is for this week’s window.'}
                   </p>
                   <p className="mt-2 text-[13px] font-medium text-ink/70">
                     This is a request, not an order — nothing has been charged and nothing is booked yet.
@@ -220,7 +220,7 @@ export default function Quest() {
                       Open WhatsApp
                     </a>
                     <Button variant="outline" onClick={() => setState('idle')}>
-                      Send another quest
+                      Send another request
                     </Button>
                   </div>
                 </div>
@@ -312,11 +312,11 @@ export default function Quest() {
                   </Field>
 
                   <Button type="submit" size="lg" disabled={state === 'sending'}>
-                    {state === 'sending' ? 'Sending…' : 'Send my quest'}
+                    {state === 'sending' ? 'Sending…' : 'Send my request'}
                   </Button>
 
                   <p className="text-xs leading-relaxed text-ink/40">
-                    A quest does not place an order. If we can cook it, we come back to you first with the date and what it
+                    A request does not place an order. If we can cook it, we come back to you first with the date and what it
                     costs, and you decide from there. We only use these details to answer you — see our{' '}
                     <Link to="/policies" className="font-semibold text-ink/60 underline">privacy policy</Link>.
                   </p>

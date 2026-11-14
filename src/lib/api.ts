@@ -258,7 +258,7 @@ export const api = {
    * Server-authoritative quote. The client shows live totals, but this is what
    * actually gets charged — the server re-prices every line from its own menu.
    */
-  quote: (payload: { items: unknown[]; fulfilment: string }) =>
+  quote: (payload: { items: unknown[]; fulfilment: string; customer?: { lat?: number | null; lng?: number | null } }) =>
     request<{
       lines: { itemId: string; name: string; unitPrice: number; qty: number; options: { label: string }[]; lineTotal: number }[];
       totals: { subtotal: number; delivery: number; discount: number; total: number; currency: string };

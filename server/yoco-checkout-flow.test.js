@@ -122,8 +122,16 @@ async function placeCardOrder() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       channel: 'card',
-      fulfilment: 'collection',
-      customer: { name: 'Sandbox Customer', phone: '+27 82 000 1234', email: 'sandbox@example.co.za' },
+      fulfilment: 'delivery',
+      customer: {
+        name: 'Sandbox Customer',
+        phone: '+27 82 000 1234',
+        email: 'sandbox@example.co.za',
+        address: '12 Rivonia Road, Sandton',
+        suburb: 'Sandton',
+        lat: -26.1075,
+        lng: 28.055,
+      },
       items: [WINGS],
       payment: { method: 'card' },
     }),

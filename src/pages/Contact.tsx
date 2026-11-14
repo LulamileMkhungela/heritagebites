@@ -150,16 +150,16 @@ export default function Contact() {
                 })}
               </ul>
               <p className="mt-3 border-t border-ink/10 pt-3 text-xs leading-relaxed text-ink/55">
-                {s?.collectionNote ?? 'We confirm the exact collection point by WhatsApp when your order is placed.'}
+                Every order is delivered. The kitchen confirms the time on WhatsApp when your order is placed.
               </p>
             </div>
 
             <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
               <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</p>
               <p className="mt-2 text-sm text-ink/70">
-                {s?.deliveryAreas?.join(' & ') ?? 'Rosebank & Sandton'} only, Thursdays and Fridays between{' '}
-                {s?.serviceWindow.open} and {s?.serviceWindow.close}. Collection is the plate price; delivery adds a flat fee; the minimum
-                order is R{Number(s?.minDeliveryOrder ?? 100)}.
+                Thursdays and Fridays between {s?.serviceWindow.open} and {s?.serviceWindow.close}. Delivery is included in{' '}
+                {s?.deliveryAreas?.join(' & ') ?? 'Sandton & Rosebank'}; outside them a fee applies, and we deliver up to{' '}
+                {s?.maxDeliveryKm ?? 50} km from the kitchen. The minimum order is R{Number(s?.minDeliveryOrder ?? 100)}.
               </p>
               <Link to="/policies" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-ochre-deep underline">
                 Delivery, refund and cancellation policies

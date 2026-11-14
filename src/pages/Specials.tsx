@@ -35,7 +35,7 @@ export default function Specials() {
           <SectionLabel onDark>This week</SectionLabel>
           <h1 className="max-w-3xl font-display text-5xl font-semibold md:text-6xl">Cooked Thursdays &amp; Fridays</h1>
           <p className="mt-4 max-w-2xl text-bone/70">
-            We cook two days a week, serving delivery and collection between {settings.serviceWindow.open} and{' '}
+            We cook two days a week, delivering between {settings.serviceWindow.open} and{' '}
             {settings.serviceWindow.close}. Weekly specials are announced on WhatsApp — ask us what is on this week.
           </p>
         </div>
@@ -48,7 +48,7 @@ export default function Specials() {
           <p className="mt-2 font-display text-2xl font-semibold">{service.message}</p>
           <p className="mt-2 text-sm text-ink/60">
             {service.open
-              ? `Delivery and collection until ${settings.serviceWindow.close}.`
+              ? `Delivering until ${settings.serviceWindow.close}.`
               : `Orders placed now are pre-orders${service.nextWindowLabel ? ` for ${service.nextWindowLabel}` : ''}.`}
           </p>
         </div>
@@ -116,7 +116,7 @@ export default function Specials() {
         <div className="rounded-[2rem] border-2 border-ink/10 bg-bone-2 p-8 md:p-12">
           <div className="grid gap-8 md:grid-cols-[1.3fr_1fr] md:items-center">
             <div>
-              <SectionLabel>Delivery &amp; collection</SectionLabel>
+              <SectionLabel>Delivery</SectionLabel>
               <h2 className="font-display text-3xl font-semibold md:text-4xl">How the week works</h2>
               <dl className="mt-5 space-y-3 text-sm">
                 {[
@@ -124,8 +124,8 @@ export default function Specials() {
                   ['Service window', `${settings.serviceWindow.open}–${settings.serviceWindow.close}`],
                   ['Delivery areas', areas],
                   ['Minimum order', `${zar(settings.minDeliveryOrder)} for plated meals`],
-                  ['Delivery fee', 'Included in the plate price'],
-                  ['Collection', settings.collectionPoint],
+                  ['Delivery fee', 'Included in Sandton & Rosebank'],
+                  ['Furthest we deliver', `${settings.maxDeliveryKm ?? 50} km from the kitchen`],
                   ['Preparation', `About ${settings.prepEstimateMins} minutes, cooked to order`],
                   ['Delivery time', `About ${settings.deliveryEstimateMins} minutes inside the window`],
                 ].map(([term, value]) => (
@@ -146,7 +146,7 @@ export default function Specials() {
                 WhatsApp us
               </LinkButton>
               <p className="mt-4 text-xs leading-relaxed text-bone/45">
-                No delivery-partner links are published yet. Order online, or collect in {areas}.
+                No delivery-partner links are published yet. Order online, and we bring it to you in {areas}.
               </p>
             </div>
           </div>

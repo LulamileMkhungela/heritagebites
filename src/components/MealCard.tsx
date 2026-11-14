@@ -55,9 +55,16 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
           </p>
         )}
         {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>}
+        {/*
+          The price sits on the photograph above; this line used to repeat it and
+          add "collect price, no extras", which stopped being true twice over —
+          there is no collection any more, and delivery outside Sandton/Rosebank
+          does carry a fee. The card states the one thing that is always true:
+          what is in the plate, and that delivery is included where it is.
+        */}
         {!compact && (
           <p className="mt-2 font-mono text-xs uppercase tracking-wider text-ink/40">
-            {zar(item.price)} · collect price, no extras
+            One complete plate · delivery included in Sandton &amp; Rosebank
           </p>
         )}
 
@@ -84,7 +91,18 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
   const [qty, setQty] = useState(1);
   const [picked, setPicked] = useState<Record<string, string | string[]>>(() => {
     const initial: Record<string, string | string[]> = {};
-    for (const o of item.options) if (!o.multiple && o.choices[0]) initial[o.id] = o.choices[0].id;
+    for (const o of item.options) {
+      /*
+       * Optional options start EMPTY.
+       *
+       * They used to start on their first choice, which was harmless while every
+       * option was free — and became a real overcharge the moment the drink
+       * arrived: a customer who only wanted a plate was silently given a R25
+       * ginger beer. An optional choice must start unchosen.
+       */
+      if (!o.multiple && !o.required && o.choices[0]) continue;
+      if (!o.multiple && o.choices[0]) initial[o.id] = o.choices[0].id;
+    }
     return initial;
   });
   const [toast, setToast] = useState<string | null>(null);
@@ -114,9 +132,19 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
     onClose();
   };
 
-  const toggle = (optionId: string, choiceId: string, multiple?: boolean) => {
+  const toggle = (optionId: string, choiceId: string, multiple?: boolean, required = true) => {
     setPicked((prev) => {
-      if (!multiple) return { ...prev, [optionId]: choiceId };
+      if (!multiple) {
+        /* Tapping the chosen answer of an optional option clears it — that is
+           the only way to say "no drink", and a drink nobody wanted is money
+           taken for nothing. */
+        if (!required && prev[optionId] === choiceId) {
+          const next = { ...prev };
+          delete next[optionId];
+          return next;
+        }
+        return { ...prev, [optionId]: choiceId };
+      }
       const current = (Array.isArray(prev[optionId]) ? prev[optionId] : []) as string[];
       const next = current.includes(choiceId) ? current.filter((c) => c !== choiceId) : [...current, choiceId];
       return { ...prev, [optionId]: next };
@@ -182,7 +210,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => toggle(o.id, c.id, o.multiple)}
+                      onClick={() => toggle(o.id, c.id, o.multiple, Boolean(o.required))}
                       aria-pressed={isOn}
                       className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                     >

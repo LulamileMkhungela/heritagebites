@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaFor } from '../../shared/service.js';
+import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaFor, deliveryAreaOptions, isOutsideAreaChoice } from '../../shared/service.js';
 import {
   DELIVERY_BBOX,
   DELIVERY_BBOX_PARAM,
@@ -18,6 +18,10 @@ import {
   areaForPoint,
   expandStreetAbbreviations,
   filterSuggestions,
+  DELIVERY_RADIUS_BBOX,
+  deliveryFeeForPoint,
+  deliveryZoneFor,
+  haversineKm,
   insideDeliveryBox,
   mapPhotonFeature,
   mapPhotonResponse,
@@ -25,6 +29,75 @@ import {
 } from '../../shared/address.js';
 
 const settings = { deliveryAreas: ['Rosebank', 'Sandton'] };
+const OUTSIDE = 'Other — outside Sandton & Rosebank';
+
+/* ------------------------- The delivery radius -------------------------- */
+
+/*
+ * The owner's rule (14 Nov 2026): delivery is in the plate price inside
+ * Sandton/Rosebank, a fee applies outside that ring, and past 50 km the order is
+ * refused. These are the three answers every delivery surface depends on, and
+ * the numbers are the ones that decide whether the business makes or loses money
+ * on a trip.
+ */
+
+test('a point inside the Sandton/Rosebank ring is delivered at the plate price', () => {
+  /* Sandton CBD and Rosebank station: the two centres the kitchen serves. */
+  for (const [label, lat, lng] of [
+    ['Sandton CBD', -26.1075, 28.055],
+    ['Rosebank', -26.1445, 28.043],
+  ]) {
+    const zone = deliveryZoneFor(lat, lng);
+    assert.equal(zone.zone, 'included', `${label} is inside the included ring`);
+    assert.equal(deliveryFeeForPoint(lat, lng), 0, `${label} pays no delivery fee`);
+  }
+});
+
+test('a point outside the ring is served at a fee, not refused', () => {
+  /* Bryanston: about 9 km out — past the ring, well inside the 50 km limit. */
+  const zone = deliveryZoneFor(-26.0515, 28.0207, { fee: 45 });
+  assert.equal(zone.zone, 'surcharge');
+  assert.equal(zone.fee, 45, 'the configured fee is used, not a hard-coded one');
+  assert.equal(deliveryFeeForPoint(-26.0515, 28.0207, { fee: 45 }), 45);
+  assert.ok(zone.distanceKm > 6 && zone.distanceKm < 20, `distance reads ${zone.distanceKm} km`);
+});
+
+test('past the hard limit the order is refused, and the distance is reported', () => {
+  /* Heidelberg: 52 km from the kitchen — over the 50 km limit. */
+  const zone = deliveryZoneFor(-26.5047, 28.3586);
+  assert.equal(zone.zone, 'refused');
+  assert.ok(zone.distanceKm > 50, `reported ${zone.distanceKm} km`);
+  assert.equal(deliveryFeeForPoint(-26.5047, 28.3586), -1, 'no fee buys a delivery this far out');
+});
+
+test('an unmeasurable address is never treated as too far', () => {
+  /*
+   * A hand-typed address has no coordinates. Refusing it would block a real
+   * Sandton customer whose street the map does not know, so "unknown" is its
+   * own answer and every caller has to decide what to do with it.
+   */
+  assert.equal(deliveryZoneFor(null, null).zone, 'unknown');
+  assert.equal(deliveryZoneFor(undefined, undefined).zone, 'unknown');
+  assert.equal(deliveryZoneFor(Number.NaN, 28.05).zone, 'unknown');
+  assert.equal(deliveryFeeForPoint(null, null), 0, 'an unknown point is priced as included, never refused');
+});
+
+test('the radius rules are configurable, so the owner can change the fee', () => {
+  /* The values live in settings; the maths must follow them, not constants. */
+  const tight = deliveryZoneFor(-26.0515, 28.0207, { includedTo: 2, maxKm: 8, fee: 99 });
+  assert.equal(tight.zone, 'refused', 'a tighter limit refuses Bryanston');
+
+  const wide = deliveryZoneFor(-26.5047, 28.3586, { maxKm: 80, fee: 120 });
+  assert.equal(wide.zone, 'surcharge', 'a wider limit serves Heidelberg, at a fee');
+  assert.equal(wide.fee, 120);
+});
+
+test('distance is a real great-circle distance, not a bounding box', () => {
+  /* Sandton to Rosebank is about 4.2 km on the ground. */
+  const d = haversineKm(-26.1075, 28.055, -26.1445, 28.043);
+  assert.ok(d > 3.9 && d < 4.6, `Sandton–Rosebank measures ${d.toFixed(2)} km`);
+  assert.equal(haversineKm(-26.1, 28.05, -26.1, 28.05), 0);
+});
 
 /* --------------------------- The default area --------------------------- */
 
@@ -68,7 +141,13 @@ test('an address that names a different area is an error that names both', () =>
 test('an address with no suburb only warns — it must never block a real order', () => {
   const problem = deliveryAddressProblem('12 Oxford Road', 'Sandton', settings);
   assert.equal(problem?.level, 'warn');
-  assert.match(problem?.message ?? '', /Rosebank and Sandton/);
+  /*
+   * The warning used to tell the customer to "choose collection" if they were
+   * outside the two suburbs. Collection is gone, and a customer 20 km out is a
+   * paying delivery rather than an error, so the advice is about the address
+   * itself — which is the only thing the customer can still act on.
+   */
+  assert.match(problem?.message ?? '', /suburb and city/);
 });
 
 test('an empty address is left to the required-field check', () => {
@@ -284,4 +363,77 @@ test('street abbreviations are expanded, but a leading St stays a saint', () => 
   assert.equal(expandStreetAbbreviations('12 Oxford Ave, rosebank'), '12 Oxford avenue, rosebank');
   assert.equal(expandStreetAbbreviations('St Andrews Rd'), 'St Andrews road');
   assert.equal(expandStreetAbbreviations('173 oxf'), '173 oxf');
+});
+
+
+/* ------------------- Anywhere inside the radius is served ----------------- */
+
+/*
+ * These cover the bug the owner hit: the address box was bolted to the two
+ * suburb names, so a customer in Bryanston — 9 km out, inside the fee ring —
+ * typed a real address and got no suggestion at all. The 50 km rule could never
+ * be applied to the people it exists for.
+ */
+
+test('the geocoder envelope reaches the whole 50 km radius, not two suburbs', () => {
+  /* Bryanston, Midrand and Roodepoort are all outside Sandton/Rosebank and all
+     inside 50 km. Their coordinates must fall inside the search box. */
+  for (const [name, lat, lng] of [
+    ['Bryanston', -26.0515, 28.0207],
+    ['Midrand', -25.9992, 28.1263],
+    ['Roodepoort', -26.1625, 27.8725],
+    ['Soweto', -26.2678, 27.8585],
+    ['Centurion', -25.8603, 28.1894],
+  ]) {
+    const inside =
+      lat >= DELIVERY_RADIUS_BBOX.minLat &&
+      lat <= DELIVERY_RADIUS_BBOX.maxLat &&
+      lng >= DELIVERY_RADIUS_BBOX.minLon &&
+      lng <= DELIVERY_RADIUS_BBOX.maxLon;
+    assert.equal(inside, true, `${name} must be inside the search envelope`);
+  }
+});
+
+test('an address outside the two suburbs is no longer a contradiction', () => {
+  /*
+   * The select has a third option, and picking it must silence the "you chose
+   * Sandton but typed Bryanston" error. That error was correct when the shop
+   * only served two suburbs; with a radius it refuses paying customers.
+   */
+  assert.equal(deliveryAddressProblem('1 Bryanston Drive, Bryanston', OUTSIDE, settings), null);
+  assert.equal(deliveryAddressProblem('1 Rivonia Road, Midrand', OUTSIDE, settings), null);
+  /* And the two-suburb checks still work when one of them is chosen. */
+  const wrong = deliveryAddressProblem('14 Oxford Road, Rosebank', 'Sandton', settings);
+  assert.equal(wrong?.level, 'error');
+});
+
+test('the area select offers the two suburbs and "other"', () => {
+  const options = deliveryAreaOptions(settings);
+  assert.deepEqual(options.slice(0, 2), ['Rosebank', 'Sandton']);
+  assert.equal(options.length, 3);
+  assert.equal(isOutsideAreaChoice(options[2]), true, 'the third option is the outside choice');
+  assert.equal(isOutsideAreaChoice('Rosebank'), false);
+  assert.equal(isOutsideAreaChoice('Sandton'), false);
+});
+
+test('radius mode keeps a suggestion the suburb list would have thrown away', () => {
+  /*
+   * In radius mode the coordinates are what decide. A Bryanston result carries no
+   * "Rosebank"/"Sandton" tag, so the old filter dropped it — and the customer saw
+   * an empty list for a real address inside the delivery area.
+   */
+  const bryanston = {
+    id: 'b1',
+    line: '1 Bryanston Drive',
+    detail: 'Johannesburg · 2191',
+    area: null,
+    lat: -26.0515,
+    lng: 28.0207,
+  };
+  const strict = filterSuggestions([bryanston], { areas: ['Rosebank', 'Sandton'] });
+  assert.equal(strict.length, 0, 'the old two-suburb filter drops it');
+
+  const radial = filterSuggestions([bryanston], { radius: true });
+  assert.equal(radial.length, 1, 'the radius filter keeps it');
+  assert.equal(radial[0].lat, -26.0515, 'and keeps its coordinates, which are what price it');
 });

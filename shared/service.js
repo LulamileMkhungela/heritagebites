@@ -2,7 +2,7 @@
  * Service-window and delivery-area rules.
  *
  * The business cooks on Thursdays and Fridays only, serving delivery and
- * collection between 12:00 and 13:30, and delivers in Rosebank and Sandton.
+ * delivery between 12:00 and 13:30, in Sandton and Rosebank and up to 50 km out.
  * These helpers decide what the storefront may promise, in one place, so the
  * API and the page copy can never drift apart.
  *
@@ -252,8 +252,8 @@ export function serviceStatus(settings, now = new Date()) {
   if (open) {
     headline = isSpecial ? 'Special opening — serving now' : 'Serving now';
     message = isSpecial
-      ? `We are trading today, ${today.open}–${today.close}, as a special opening — delivery and collection until ${today.close}.`
-      : `We are serving now — delivery and collection until ${today.close}.`;
+      ? `We are trading today, ${today.open}–${today.close}, as a special opening — delivering until ${today.close}.`
+      : `We are serving now — delivering until ${today.close}.`;
     shortMessage = `Serving now until ${today.close}.`;
   } else if (isServiceDay && at.minutes < today.openMinutes) {
     headline = 'Not cooking yet';
@@ -398,6 +398,17 @@ export function deliveryAddressProblem(address, area, settings, hintArea = null)
   const chosen = String(area ?? '').trim();
   const typed = String(address ?? '').trim();
   if (!chosen) return null;
+  /*
+   * "Other / outside Sandton & Rosebank" is a legitimate answer now.
+   *
+   * The rules are distance-based (owner, 14 Nov 2026): inside the two suburbs
+   * delivery is included, outside them a fee applies, and past 50 km we refuse.
+   * So an address in Bryanston is not a contradiction of the area select — it is
+   * simply outside the included ring, and the distance check prices it. Checking
+   * it against a two-suburb list would refuse exactly the customers the fee
+   * exists for.
+   */
+  if (isOutsideAreaChoice(chosen)) return null;
 
   const known = settings?.deliveryAreas ?? [];
   const hinted = String(hintArea ?? '').trim();
@@ -416,7 +427,7 @@ export function deliveryAddressProblem(address, area, settings, hintArea = null)
     if (!typed) return null;
     return {
       level: 'warn',
-      message: `Check the suburb — we deliver in ${deliveryAreasLabel(settings)} only. Add "${chosen}" to the address, or choose collection.`,
+      message: `Check the suburb — include a street, suburb and city, or pick the address from the list as you type.`,
     };
   }
   if (named.some((a) => a.toLowerCase() === chosen.toLowerCase())) return null;
@@ -425,6 +436,34 @@ export function deliveryAddressProblem(address, area, settings, hintArea = null)
     level: 'error',
     message: `That address is in ${named.join(' and ')}, but you chose ${chosen}. Change the delivery area, or enter a ${chosen} address.`,
   };
+}
+
+/**
+ * The value the "Delivery area" select uses for anywhere that is not Sandton or
+ * Rosebank.
+ *
+ * It exists because the radius made the two-name select wrong: a customer in
+ * Bryanston had no honest answer to "which of these two suburbs are you in".
+ * Picking a lie is worse than a third option, so the third option is "other" and
+ * the distance check does the deciding.
+ */
+export const OUTSIDE_AREA = 'Other — outside Sandton & Rosebank';
+
+/** Is this select value the "somewhere else" option? */
+export function isOutsideAreaChoice(area) {
+  const value = String(area ?? '').trim().toLowerCase();
+  return value.startsWith('other') || value === 'other';
+}
+
+/**
+ * The select's options: the approved suburbs first, then "other".
+ *
+ * Kept in one place so the live checkout, the preview checkout and any other
+ * surface cannot disagree about what can be chosen.
+ */
+export function deliveryAreaOptions(settings) {
+  const named = settings?.deliveryAreas ?? [];
+  return [...named, OUTSIDE_AREA];
 }
 
 export function deliveryAreasLabel(settings) {

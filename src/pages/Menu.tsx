@@ -430,7 +430,7 @@ export default function MenuPage() {
               )}
 
               {/*
-                One route forward that is not a dish: the customer quest, shown
+                One route forward that is not a dish: the customer request, shown
                 once after the last archive section. It sits outside the
                 `data-coming-soon` card grid because that must hold no links at
                 all.
@@ -438,7 +438,7 @@ export default function MenuPage() {
               {section.id === lastArchived?.id && (
                 <p className="mt-6 text-[13px] text-ink/70">
                   Want one of these back on the menu?{' '}
-                  <Link to="/quest" className="font-semibold text-ochre-deep underline">Send a customer quest</Link>{' '}
+                  <Link to="/quest" className="font-semibold text-ochre-deep underline">Send a customer request</Link>{' '}
                   and we will come back to you on whether and when we can cook it.
                 </p>
               )}
@@ -550,12 +550,26 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [qty, setQty] = useState(1);
 
+  /* Tapping the chosen answer clears it, which is how an optional group (the
+     drink) is declined. Required groups are guarded by `missing` below. */
   const toggle = (groupId: string, itemId: string) =>
     setPicked((prev) => ({ ...prev, [groupId]: prev[groupId] === itemId ? '' : itemId }));
 
   const missing = plate.groups.filter((g) => g.required && !picked[g.id]);
   const missingLabel = missing[0]?.label.replace(/^choose your\s+/i, '') ?? '';
-  const total = plate.price;
+
+  /*
+   * The drink is the only choice that adds money (owner, 14 Nov 2026 — ginger
+   * gemere, 500 ml, after the vegetable side). Every other group is included in
+   * the plate price, so `extras` is a sum over `priced` groups only and the
+   * total is the plate price plus whatever was chosen there.
+   */
+  const extras = plate.groups.reduce((sum, g) => {
+    if (!g.priced) return sum;
+    const it = g.items.find((i) => i.id === picked[g.id]);
+    return sum + (Number(it?.price) || 0);
+  }, 0);
+  const total = Math.round((plate.price + extras) * 100) / 100;
 
   const submit = () => {
     if (missing.length) return;
@@ -564,7 +578,9 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       if (!id) return [];
       const it = g.items.find((i) => i.id === id);
       if (!it) return [];
-      return [{ optionId: g.id, choiceId: `${g.id}:${id}`, label: it.label, priceDelta: 0 }];
+      /* A priced group carries its amount, so the basket line explains the
+         difference between the plate price and what is being charged. */
+      return [{ optionId: g.id, choiceId: `${g.id}:${id}`, label: it.label, priceDelta: g.priced ? Number(it.price) || 0 : 0 }];
     });
     addPlate({
       key: `plate::${plate.id}::${picks.map((p) => p.choiceId).sort().join('|')}`,
@@ -586,7 +602,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       <div className="animate-rise relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-bone shadow-2xl sm:rounded-3xl">
         <header className="flex items-start justify-between gap-4 bg-ink p-6 text-bone">
           <div>
-            <SectionLabel onDark>{zar(plate.price)} a plate · collect price</SectionLabel>
+            <SectionLabel onDark>{zar(plate.price)} a plate · delivered</SectionLabel>
             <h2 className="font-display text-3xl font-semibold">{plate.name}</h2>
             <p className="mt-2 max-w-xl text-sm text-bone/65">{plate.blurb}</p>
           </div>
@@ -614,7 +630,9 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                         className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                       >
                         <span>{it.label}</span>
-                        <span className="font-mono text-xs text-ink/40">Included</span>
+                        <span className={`font-mono text-xs ${g.priced ? 'font-semibold text-ink/70' : 'text-ink/40'}`}>
+                          {g.priced ? `+ ${zar(Number(it.price) || 0)}` : 'Included'}
+                        </span>
                       </button>
                     );
                   })}
@@ -626,7 +644,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
 
         <footer className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-ink/10 bg-bone p-5">
           <div>
-            <p className="font-mono text-xs uppercase tracking-wider text-ink/45">Plate price · delivery adds a flat fee</p>
+            <p className="font-mono text-xs uppercase tracking-wider text-ink/45">Plate price · delivery included in Sandton &amp; Rosebank</p>
             <p className="font-display text-3xl font-bold">{zar(total)}</p>
           </div>
           <div className="flex items-center gap-3">
