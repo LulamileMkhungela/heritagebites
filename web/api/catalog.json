@@ -1248,15 +1248,17 @@
         "label": "Saturday",
         "closed": true
       }
-    ]
+    ],
+    "specialServiceDays": []
   },
   "service": {
     "open": false,
     "orderingClosed": false,
     "isServiceDay": false,
+    "specialToday": false,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Saturday",
-    "timeLabel": "10:33",
+    "timeLabel": "12:13",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Saturday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",

@@ -57,6 +57,13 @@ services:
       # --- the public address of this deployment -------------------------------
       # Used for the customer's tracking link (HB_PUBLIC_URL) and for the
       # canonical/og URLs written during the build (HB_SITE_URL).
+      # One-off trading days beyond Thursday/Friday (a Saturday market, a
+      # holiday): set HB_SPECIAL_SERVICE_DAYS=2026-11-21,2026-12-05 here to
+      # trade on those dates only, and remove it afterwards. It is a promise to
+      # cook and deliver those days, so set it only for days the business is
+      # really trading. See README → "One-off service days".
+      # - key: HB_SPECIAL_SERVICE_DAYS
+      #   value: "2026-11-21"
       - key: HB_PUBLIC_URL
         value: https://heritagebites.onrender.com
       - key: HB_SITE_URL

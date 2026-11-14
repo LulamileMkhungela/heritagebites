@@ -36,7 +36,7 @@ import {
   removeSubscription,
   saveSubscription,
 } from './lib/web-push.js';
-import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor } from './lib/service.js';
+import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor, parseSpecialServiceDays, mergeSpecialServiceDays } from './lib/service.js';
 import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
 import { HEAD_END, HEAD_START, headHtml, normaliseSiteUrl } from '../shared/seo.js';
@@ -90,6 +90,31 @@ if (!has('seq')) store.save('seq', { n: 1 });
 
 const get = (name) => store.load(name, null);
 const set = (name, value) => store.save(name, value);
+
+/*
+ * One-off trading days from the environment.
+ *
+ * `HB_SPECIAL_SERVICE_DAYS=2026-11-21,2026-12-05` opens the kitchen on those
+ * dates only, each once, with the normal service window (or a per-date window
+ * if the catalogue entry sets one). It exists so a host can turn a single
+ * Saturday market on and off without a code change; the seed's own
+ * `specialServiceDays` list is the same mechanism for dates chosen at review
+ * time. Catalogue entries win per date, env-only dates are added; nothing is
+ * persisted back to the store.
+ */
+const ENV_SPECIAL_DAYS = parseSpecialServiceDays(process.env.HB_SPECIAL_SERVICE_DAYS);
+if (String(process.env.HB_SPECIAL_SERVICE_DAYS ?? '').trim()) {
+  const tokens = String(process.env.HB_SPECIAL_SERVICE_DAYS).split(/[\s,;]+/).map((t) => t.trim()).filter(Boolean);
+  const kept = new Set(ENV_SPECIAL_DAYS);
+  const dropped = tokens.filter((t) => !kept.has(t));
+  if (dropped.length) console.warn(`[heritagebites] HB_SPECIAL_SERVICE_DAYS ignored invalid entries: ${dropped.join(', ')}`);
+  if (ENV_SPECIAL_DAYS.length) console.info(`[heritagebites] special service days from HB_SPECIAL_SERVICE_DAYS: ${ENV_SPECIAL_DAYS.join(', ')}`);
+}
+const getSettings = () => {
+  const s = get('settings');
+  if (!ENV_SPECIAL_DAYS.length) return s;
+  return mergeSpecialServiceDays(s, ENV_SPECIAL_DAYS);
+};
 const tokenDigest = (token) => createHash('sha256').update(String(token)).digest('hex');
 const hasValidTrackingToken = (order, token) => {
   if (!order?.trackingTokenHash || typeof token !== 'string' || !token) return false;
@@ -336,7 +361,7 @@ function priceLines(clientLines) {
 function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
   const { lines, errors } = priceLines(clientLines);
   if (!['collection', 'delivery'].includes(fulfilment)) errors.push('Please choose collection or delivery.');
-  const settings = get('settings');
+  const settings = getSettings();
   const subtotalCents = lines.reduce((s, l) => s + toCents(l.unitPrice) * l.qty, 0);
 
   const disc = applyDiscountCode(code, subtotalCents, get('discountCodes'));
@@ -368,7 +393,7 @@ function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
 }
 
 function publicOrder(order) {
-  const settings = get('settings');
+  const settings = getSettings();
   return {
     id: order.id,
     code: order.code,
@@ -474,7 +499,7 @@ function contactEndpoint() {
     const override = process.env.HB_CONTACT_FORMSPREE_URL.trim();
     return override ? override : null;
   }
-  const configured = String(get('settings')?.contactFormspreeUrl ?? '').trim();
+  const configured = String(getSettings()?.contactFormspreeUrl ?? '').trim();
   return configured || null;
 }
 
@@ -563,7 +588,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
-  const settings = get('settings');
+  const settings = getSettings();
   res.json({
     categories: get('categories'),
     /**
@@ -689,7 +714,7 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
    * gate below stays wired so its own test can exercise the closed path.
    */
   const ordersForcedOpen = process.env.HB_ORDERS_OPEN === 'true';
-  if (!ordersForcedOpen && serviceStatus(get('settings'), clockNow()).orderingClosed) {
+  if (!ordersForcedOpen && serviceStatus(getSettings(), clockNow()).orderingClosed) {
     return res.status(409).json({
       errors: ["Today's window has closed, so we are not taking orders. Message us on WhatsApp and we will tell you if the kitchen can still prepare it."],
       closed: true,
@@ -715,22 +740,22 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
      * Sandton — a delivery outside the boundary they thought they were inside.
      */
     const chosen = String(customer.suburb ?? '').trim();
-    const named = areasNamedIn(customer.address, get('settings'));
+    const named = areasNamedIn(customer.address, getSettings());
     if (chosen && named.length && !named.some((area) => area.toLowerCase() === chosen.toLowerCase())) {
       return res.status(422).json({
         errors: [
           `That address is in ${named.join(' and ')}, but you chose ${chosen}. Change the delivery area, or give us a ${chosen} address.`,
         ],
-        deliveryAreas: get('settings')?.deliveryAreas ?? [],
+        deliveryAreas: getSettings()?.deliveryAreas ?? [],
       });
     }
     /* The address itself decides where the food goes; the select only breaks a tie
        when the address carries no suburb at all (plenty of real ones do not). */
-    const area = deliveryAreaFor(customer.address, get('settings')) ?? deliveryAreaFor(chosen, get('settings'));
+    const area = deliveryAreaFor(customer.address, getSettings()) ?? deliveryAreaFor(chosen, getSettings());
     if (!area) {
       return res.status(422).json({
-        errors: [`We deliver in ${deliveryAreasLabel(get('settings'))} only. Choose collection, or contact us on WhatsApp to arrange something else.`],
-        deliveryAreas: get('settings')?.deliveryAreas ?? [],
+        errors: [`We deliver in ${deliveryAreasLabel(getSettings())} only. Choose collection, or contact us on WhatsApp to arrange something else.`],
+        deliveryAreas: getSettings()?.deliveryAreas ?? [],
       });
     }
     customer.suburb = area;
@@ -829,8 +854,8 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
      * Thursday or Friday it is for today; outside it is a pre-order and the
      * receipt, email alert and customer all say which window it is cooked in.
      */
-    serviceWindow: serviceWindowFor(get('settings')),
-    loyalty: { pointsEarned: loyaltyPointsFor(totals.total, get('settings').loyaltyRateCents), pointsRedeemed: 0 },
+    serviceWindow: serviceWindowFor(getSettings()),
+    loyalty: { pointsEarned: loyaltyPointsFor(totals.total, getSettings().loyaltyRateCents), pointsRedeemed: 0 },
     timeline: [],
   };
 
@@ -866,7 +891,7 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
     appendTimeline(order, 'pending', 'Payment method: cash on collection');
   }
 
-  const settings = get('settings');
+  const settings = getSettings();
   order.whatsapp = whatsappLink(
     settings.whatsapp,
     buildWhatsAppMessage({ code: order.code, items: lines, totals, fulfilment, customer: order.customer }),
@@ -1247,7 +1272,7 @@ function shellRenderer(shell) {
       shell.slice(0, start) +
       HEAD_START +
       '\n    ' +
-      headHtml(path, { siteUrl, settings: get('settings') }) +
+      headHtml(path, { siteUrl, settings: getSettings() }) +
       '\n    ' +
       HEAD_END +
       shell.slice(end + HEAD_END.length);

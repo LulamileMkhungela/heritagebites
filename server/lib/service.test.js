@@ -7,7 +7,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { serviceStatus, deliveryAreaFor, deliveryAreasLabel, serviceWindowFor, sastNow, windowLabel } from './service.js';
+import { serviceStatus, deliveryAreaFor, deliveryAreasLabel, serviceWindowFor, sastNow, windowLabel, parseSpecialServiceDays, specialServiceDayFor, mergeSpecialServiceDays } from './service.js';
 
 const settings = {
   hours: [
@@ -149,5 +149,115 @@ describe('delivery boundary', () => {
     assert.equal(deliveryAreasLabel(settings), 'Rosebank and Sandton');
     assert.equal(deliveryAreasLabel({ deliveryAreas: ['Rosebank'] }), 'Rosebank');
     assert.equal(deliveryAreasLabel({ deliveryAreas: [] }), '');
+  });
+});
+
+/* --------------------------------------------------------------------- */
+/* One-off service days                                                   */
+/*                                                                        */
+/* A Saturday market or holiday trading day opens the kitchen once, on a   */
+/* calendar date, without touching the weekly Thursday/Friday rhythm.      */
+/* --------------------------------------------------------------------- */
+
+const withSpecial = (days) => ({ ...settings, specialServiceDays: days });
+
+describe('special service days', () => {
+  test('a Saturday with a special opening trades like a service day, once', () => {
+    const s = withSpecial(['2026-10-31']);
+    const before = serviceStatus(s, sast('2026-10-31', '09:00'));
+    assert.equal(before.isServiceDay, true);
+    assert.equal(before.specialToday, true);
+    assert.equal(before.open, false);
+    assert.equal(before.headline, 'Not cooking yet');
+    assert.match(before.message, /special opening/i);
+
+    const during = serviceStatus(s, sast('2026-10-31', '12:30'));
+    assert.equal(during.open, true);
+    assert.equal(during.specialToday, true);
+    assert.match(during.message, /special opening/i);
+
+    // The very next Saturday is a rest day again — the date never repeats.
+    const nextWeek = serviceStatus(s, sast('2026-11-07', '12:30'));
+    assert.equal(nextWeek.open, false);
+    assert.equal(nextWeek.specialToday, false);
+    assert.equal(nextWeek.headline, 'Saturday is a rest day');
+  });
+
+  test('after the special window the orders gate closes, like a Thursday', () => {
+    const s = withSpecial(['2026-10-31']);
+    const after = serviceStatus(s, sast('2026-10-31', '14:00'));
+    assert.equal(after.open, false);
+    assert.equal(after.orderingClosed, true);
+    // The next window is named, so the customer has a next step.
+    assert.match(after.message, /Thursday 12:00–13:30/);
+  });
+
+  test('a special opening can carry its own hours and label', () => {
+    const s = withSpecial([{ date: '2026-10-31', open: '10:00', close: '14:00', label: 'Saturday market' }]);
+    assert.equal(serviceStatus(s, sast('2026-10-31', '10:30')).open, true);
+    assert.equal(serviceStatus(s, sast('2026-10-31', '09:30')).todayLabel, 'Saturday market 10:00–14:00');
+    const after = serviceStatus(s, sast('2026-10-31', '13:45'));
+    assert.equal(after.open, true, 'close is the special close, not the weekly one');
+    assert.equal(serviceStatus(s, sast('2026-10-31', '14:01')).orderingClosed, true);
+  });
+
+  test('a special day tomorrow is named as the next window from today', () => {
+    // Saturday with only Sunday 2026-11-01 opened: Saturday still takes
+    // pre-orders, and the site must point at Sunday, not Thursday.
+    const s = withSpecial(['2026-11-01']);
+    const st = serviceStatus(s, sast('2026-10-31', '12:30'));
+    assert.equal(st.headline, 'Saturday is a rest day');
+    assert.match(st.nextWindowLabel, /Sunday 1 Nov \(special opening\) 12:00–13:30/);
+  });
+
+  test('pre-orders on a special morning are filed against that day', () => {
+    const s = withSpecial(['2026-10-31']);
+    const planned = serviceWindowFor(s, sast('2026-10-31', '08:00'));
+    assert.equal(planned.isPreOrder, true);
+    assert.match(planned.plannedFor, /Saturday 31 Oct \(special opening\) 12:00–13:30/);
+  });
+
+  test('an in-window order on a special day is for today', () => {
+    const s = withSpecial(['2026-10-31']);
+    const planned = serviceWindowFor(s, sast('2026-10-31', '12:15'));
+    assert.equal(planned.isPreOrder, false);
+    assert.match(planned.plannedFor, /Saturday 31 Oct \(special opening\) 12:00–13:30/);
+  });
+
+  test('malformed special-day config never opens the shop', () => {
+    for (const bad of ['not-a-date', '2026-13-40', '2026-02-31', '', '31/10/2026']) {
+      const s = withSpecial([bad]);
+      assert.equal(serviceStatus(s, sast('2026-10-31', '12:30')).open, false, bad);
+    }
+  });
+
+  test('parseSpecialServiceDays keeps real dates only, and dedupes', () => {
+    assert.deepEqual(
+      parseSpecialServiceDays(' 2026-11-14, 2026-02-31; 2026-11-14  nonsense | 2026-12-05 '),
+      ['2026-11-14', '2026-12-05'],
+    );
+    assert.deepEqual(parseSpecialServiceDays(undefined), []);
+    assert.deepEqual(parseSpecialServiceDays('not bad at all'), []);
+  });
+
+  test('the env merge adds dates the catalogue does not name, catalogue wins per date', () => {
+    const merged = mergeSpecialServiceDays(
+      { specialServiceDays: [{ date: '2026-11-14', open: '10:00', close: '14:00', label: 'Market' }] },
+      ['2026-11-14', '2026-11-21'],
+    );
+    assert.deepEqual(merged.specialServiceDays, [
+      { date: '2026-11-14', open: '10:00', close: '14:00', label: 'Market' },
+      { date: '2026-11-21' },
+    ]);
+  });
+
+  test('specialServiceDayFor matches the configured serviceWindow by default', () => {
+    const entry = specialServiceDayFor(withSpecial(['2026-10-31']), '2026-10-31', 6);
+    assert.equal(entry.open, '12:00');
+    assert.equal(entry.close, '13:30');
+    assert.equal(entry.special, true);
+    assert.equal(specialServiceDayFor(withSpecial(['2026-10-31']), '2026-10-30', 5), null);
+    assert.equal(specialServiceDayFor(settings, '2026-10-31', 6), null, 'no special days configured on this settings object');
+    assert.equal(specialServiceDayFor(settings, 'garbage', 6), null);
   });
 });
