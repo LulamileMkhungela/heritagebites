@@ -57,14 +57,17 @@ describe('pricing', () => {
     assert.equal(deliveryFeeCents(25000, s), 0);
   });
 
-  test('delivery is charged on top of the plates and enforces the R100 minimum', () => {
-    // Collection pays the plate price; delivery adds the flat Rosebank/Sandton fee.
-    const s = { deliveryFlat: 55, freeDeliveryAbove: 300, minDeliveryOrder: 100 };
+  test('delivery is included in the plate price but still enforces the R100 minimum', () => {
+    /*
+     * The owner signed off "Delivery fee: None — delivery is included in the
+     * plate price". The seeded settings express that as a zero threshold, and
+     * the minimum is a floor on the order, not a fee.
+     */
+    const s = { deliveryIncluded: true, deliveryFlat: 0, freeDeliveryAbove: 0, minDeliveryOrder: 100 };
     assert.equal(deliveryFeeCents(9900, s), -1, 'below the R100 minimum');
-    assert.equal(deliveryFeeCents(10000, s), 5500, 'one plate delivered still pays the run');
-    assert.equal(deliveryFeeCents(13000, s), 5500);
-    assert.equal(deliveryFeeCents(29000, s), 5500);
-    assert.equal(deliveryFeeCents(30000, s), 0, 'free from R300');
+    assert.equal(deliveryFeeCents(10000, s), 0, 'one plate delivered is the plate price');
+    assert.equal(deliveryFeeCents(13000, s), 0);
+    assert.equal(deliveryFeeCents(30000, s), 0, 'no fee at any size');
   });
 
   test('totals are additive and discount cannot go negative', () => {

@@ -428,7 +428,7 @@ function ServiceRules() {
           ? `${zar(settings.deliveryFlat)}, free over ${zar(settings.freeDeliveryAbove)}`
           : zar(settings.deliveryFlat),
     ],
-    ['Collection', 'Price excludes delivery — confirm the point on WhatsApp'],
+    ['Collection', 'Same plate price — collection point confirmed on WhatsApp'],
   ];
 
   return (
