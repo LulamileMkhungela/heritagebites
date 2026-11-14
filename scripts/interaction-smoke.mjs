@@ -1148,12 +1148,16 @@ await step('the loyalty card looks up stamps by cell number', async () => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      channel: 'card',
+      channel: 'web',
       fulfilment: 'collection',
       customer: { name: 'Passport Test', phone: loyal, email: 'passport@example.co.za' },
       items: [{ itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } }],
-      /* No card fields: this site never takes a card number, it hands off to Yoco. */
-      payment: { method: 'card' },
+      /*
+       * Cash, not card: the passport check is about stamps, not payment plumbing,
+       * and cash works on every host — a card order is refused outright where no
+       * Yoco keys are configured, which has nothing to do with loyalty stamps.
+       */
+      payment: { method: 'cash-on-collection' },
     }),
   }).then((r) => r.json());
   if (!placed.order?.code) throw new Error('could not seed an order for the passport check');
@@ -1245,6 +1249,22 @@ await step('checkout link from the basket navigates to /checkout', async () => {
 });
 
 await step('validation blocks an empty order', async () => {
+  /*
+   * On a host with no Yoco keys the card submit reads "Online payment coming
+   * soon" and cannot be clicked, which says nothing about form validation.
+   * Only then switch to cash — clicking anything else would leak into the
+   * later steps, which expect the card flow on hosts that have it.
+   */
+  const cardSubmit = s1.byText('button[type="submit"]', /Place order/i)[0];
+  const cardUsable = Boolean(cardSubmit) && !cardSubmit.disabled;
+  if (!cardUsable) {
+    const cashFirst = [...s1.doc.querySelectorAll('button')]
+      .find((b) => (b.textContent ?? '').trim().startsWith('Cash'));
+    if (cashFirst) {
+      s1.click(cashFirst);
+      await sleep(200);
+    }
+  }
   const submit = s1.byText('button[type="submit"]', /Place order/i)[0];
   s1.click(submit);
   await sleep(400);
@@ -1338,6 +1358,9 @@ await step('placing an online order saves it and hands the customer to Yoco', as
   if (ordersAfter !== ordersBefore + 1) throw new Error(`expected one new order, ${ordersBefore} -> ${ordersAfter}`);
 
   s1.__code = code;
+  /* Marks that __code is a card order — the Yoco-only steps key off this, not
+     on __code alone, which the tracking-page steps may fill with a cash order. */
+  s1.__card = true;
   /* The checkout parks the token, because Yoco returns without it. */
   s1.__trackingToken = s1.w.localStorage.getItem(`hb.track.${code}`) ?? '';
   if (!s1.__trackingToken) throw new Error('the checkout did not keep the tracking token for the return trip');
@@ -1351,6 +1374,7 @@ await step('the order page says the payment has not arrived, and offers to finis
    * the only thing that marks it paid is the signed webhook.
    */
   const code = s1.__code;
+  if (!code || !s1.__card) return `SKIP: ${SKIP_YOCO}`;
   const view = boot(`/order/${code}?token=${encodeURIComponent(s1.__trackingToken)}`);
   await view.waitFor(() => /Order tracking/i.test(view.text()), 'the tracking page', 20000);
 
@@ -1384,6 +1408,32 @@ await step('the order page says the payment has not arrived, and offers to finis
  * as that failure rather than as a mysterious crash here.
  */
 let s1Order = null;
+/*
+ * The receipt/tracking checks do not care how the order was paid for — only
+ * that one exists. On a host with no Yoco keys the card steps never produce
+ * an order, so those checks seed their own cash order instead of failing on
+ * an environment gap that has nothing to do with what they assert. Card-
+ * specific steps (the Yoco hand-off, the webhook) never call this and skip
+ * with the reason instead.
+ */
+async function ensureTrackedOrder() {
+  if (s1.__code && s1.__trackingToken) return;
+  const loyal = `+27 84 ${String(Date.now()).slice(-8)}`;
+  const placed = await fetch(`${BASE}/api/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      channel: 'web',
+      fulfilment: 'collection',
+      customer: { name: 'Tracking Test', phone: loyal, email: 'interaction@example.co.za' },
+      items: [{ itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } }],
+      payment: { method: 'cash-on-collection' },
+    }),
+  }).then((r) => r.json());
+  if (!placed.order?.code) throw new Error('could not seed an order for the tracking-page checks');
+  s1.__code = placed.order.code;
+  s1.__trackingToken = placed.trackingToken;
+}
 async function orderPage() {
   if (s1Order) return s1Order;
   if (!s1.__code || !s1.__trackingToken) throw new Error('no order came out of the checkout steps');
@@ -1395,6 +1445,7 @@ async function orderPage() {
 }
 
 await step('the order page claims no email receipt and leaks no address', async () => {
+  await ensureTrackedOrder();
   await orderPage();
   /*
    * Email alerts were removed, so there is exactly one honest outcome now: the
@@ -1413,6 +1464,7 @@ await step('the order page claims no email receipt and leaks no address', async 
 });
 
 await step('the tracking page offers manual WhatsApp updates, an order ticket and a shareable receipt', async () => {
+  await ensureTrackedOrder();
   await orderPage();
   const links = [...s1Order.doc.querySelectorAll('a[href^="https://wa.me/"]')];
   if (links.length < 3) throw new Error('expected update-request, order-message and keep-receipt links');
@@ -1443,6 +1495,7 @@ await step('the tracking page offers manual WhatsApp updates, an order ticket an
 });
 
 await step('a verified Yoco payment marks the order paid, and then it cannot self-cancel', async () => {
+  if (!s1.__code || !s1.__card) return `SKIP: ${SKIP_YOCO}`;
   await orderPage();
   const code = s1.__code;
 

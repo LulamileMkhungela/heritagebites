@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 7;
+export const SEED_VERSION = 8;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -569,6 +569,24 @@ export const settings = {
     { day: 5, label: 'Friday', open: '12:00', close: '13:30', closed: false },
     { day: 6, label: 'Saturday', closed: true },
   ],
+
+  /*
+   * One-off service days — a Saturday market, a holiday trading day. These are
+   * NOT part of the weekly rhythm: a date listed here opens the kitchen once,
+   * on that calendar date (Africa/Johannesburg), with delivery and collection
+   * exactly as on a Thursday, and never again.
+   *
+   *   specialServiceDays: ['2026-11-21']                                   date, `serviceWindow` hours
+   *   specialServiceDays: [{ date: '2026-11-21', open: '10:00', close: '14:00', label: 'Saturday market' }]
+   *
+   * Nothing is listed here because the business has not signed off any extra
+   * trading days — adding one is a promise to cook and deliver that day, so it
+   * needs the owner's explicit go-ahead and must be removed once it has passed.
+   * An equally supported alternative is the HB_SPECIAL_SERVICE_DAYS environment
+   * variable (comma-separated dates, e.g. "2026-11-21,2026-12-05"), which turns a
+   * day on without a code change; the host sets or unsets it and restarts.
+   */
+  specialServiceDays: [],
 };
 
 /*

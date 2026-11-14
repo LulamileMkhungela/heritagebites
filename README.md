@@ -23,6 +23,16 @@ These are implemented, not just described. `server/seed.js` is the source of tru
 
 Outside the window the site still takes orders, but labels them **pre-orders** for the next window on the order page and on the customer's screen.
 
+### One-off service days (special openings)
+
+Thursday and Friday stay the signed-off rhythm. For a single extra trading day — a Saturday market, a holiday — the server can open once on a calendar date without a code change:
+
+```
+HB_SPECIAL_SERVICE_DAYS=2026-11-21,2026-12-05   # host environment; each date trades once
+```
+
+Every listed date opens with the normal 12:00–13:30 window and the usual delivery rules (Rosebank and Sandton, included in the plate price), the site says **"Special opening"** instead of a rest day, and orders placed that day are filed against that day rather than the next Thursday. Invalid dates are ignored and logged, never opened. The same list can be reviewed into the catalogue as `specialServiceDays` in `server/seed.js` — an ISO string for the standard window, or `{ date: '2026-11-21', open: '10:00', close: '14:00', label: 'Saturday market' }` for a custom one. Setting either is a promise to cook and deliver that day, so it is the owner's call, not a default — and a reviewed date should be removed once it has passed.
+
 ## Current product status
 
 The kitchen/manager console, staff roles, seeded staff logins and admin API have been removed. No staff-facing order workflow remains in this application. Successful orders are saved and alerted on: a Web Push notification to every enrolled kitchen device, and a Web Push confirmation to a customer who enabled alerts. Nothing is delivered until the VAPID keys exist on the host, but the order is still saved and still tracked. The alerts do not provide a staff queue or advance order statuses. Order receipts are secure contact points, not live kitchen tracking.

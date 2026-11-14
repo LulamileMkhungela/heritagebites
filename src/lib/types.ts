@@ -117,6 +117,12 @@ export interface Settings {
   loyaltyRateCents: number;
   channels: Record<string, { label: string; url: string; enabled: boolean }>;
   hours: { day: number; label: string; open?: string; close?: string; closed?: boolean }[];
+  /**
+   * One-off trading days beyond the weekly rhythm — a Saturday market, a holiday
+   * trading day. ISO dates ("2026-11-21") or richer objects with their own
+   * window. Empty unless the business has signed one off; see server/seed.js.
+   */
+  specialServiceDays?: (string | { date: string; open?: string; close?: string; label?: string; note?: string })[];
 }
 
 /** Where the kitchen is in its weekly Thursday/Friday rhythm. */
@@ -130,6 +136,8 @@ export interface ServiceStatus {
   orderingClosed: boolean;
   /** True when today is one of the days the kitchen cooks at all. */
   isServiceDay: boolean;
+  /** True when today's opening comes from `specialServiceDays`, not the weekly rhythm. */
+  specialToday?: boolean;
   /** Short, human status: "Serving now", "Wednesday is a rest day", … */
   headline: string;
   /** One-liner for the site-wide status strip. */

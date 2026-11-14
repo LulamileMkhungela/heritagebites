@@ -25,6 +25,7 @@ export function toMinutes(value) {
 }
 
 const pad = (n) => String(n).padStart(2, '0');
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function formatMinutes(total) {
   const safe = ((Math.round(Number(total) || 0) % 1440) + 1440) % 1440;
@@ -36,6 +37,9 @@ export function sastNow(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: SERVICE_TZ,
     weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -46,12 +50,17 @@ export function sastNow(now = new Date()) {
   const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(shortDay);
   const hour = Number(get('hour')) % 24;
   const minute = Number(get('minute'));
+  const dayOfMonth = Number(get('day')) || 1;
+  const month = Number(get('month')) || 1;
 
   return {
     day: day >= 0 ? day : 0,
     dayLabel: DAY_LABELS[day >= 0 ? day : 0],
     minutes: hour * 60 + minute,
     timeLabel: `${pad(hour)}:${pad(minute)}`,
+    dayOfMonth,
+    month,
+    dateKey: `${get('year')}-${get('month')}-${get('day')}`,
   };
 }
 
@@ -63,6 +72,105 @@ export function hoursFor(settings, day) {
   const close = toMinutes(entry.close);
   if (open === null || close === null || close <= open) return null;
   return { ...entry, openMinutes: open, closeMinutes: close, label: entry.label ?? DAY_LABELS[day] };
+}
+
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DAY_LABELS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * Parse a special-days env value into ISO date strings.
+ *
+ * Accepts comma, semicolon or whitespace separated entries:
+ *   "2026-11-14"                    one day, the configured service window
+ *   "2026-11-14 2026-12-05"         several
+ * Anything that is not a real calendar date is dropped, so a typo can never
+ * open the shop on an unexpected day. Returned entries are de-duplicated and
+ * sorted.
+ */
+export function parseSpecialServiceDays(value) {
+  if (!value) return [];
+  const out = new Set();
+  for (const chunk of String(value).split(/[\s,;]+/)) {
+    const token = chunk.trim();
+    const match = DATE_RE.exec(token);
+    if (!match) continue;
+    const [, y, m, d] = match;
+    const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+    if (
+      date.getUTCFullYear() !== Number(y) ||
+      date.getUTCMonth() !== Number(m) - 1 ||
+      date.getUTCDate() !== Number(d)
+    ) {
+      continue;
+    }
+    out.add(token);
+  }
+  return [...out].sort();
+}
+
+/**
+ * The special opening configured for a calendar date (SAST), or null.
+ *
+ * `settings.specialServiceDays` carries the owner's one-off service days — a
+ * single Saturday market, a holiday trading day — as either an ISO date string
+ * ("2026-11-14", the configured `serviceWindow` applies) or an object
+ * ({ date: '2026-11-14', open: '11:00', close: '14:00', label?, note? }).
+ *
+ * The shape returned matches `hoursFor` (openMinutes / closeMinutes / label) so
+ * the rest of the service rules apply unchanged — a special day can be before
+ * the window, inside it, or after it just like a Thursday. `special: true` is
+ * added so callers can say "special opening" rather than implying it is the
+ * weekly rhythm.
+ */
+export function specialServiceDayFor(settings, dateKey, weekday) {
+  const list = Array.isArray(settings?.specialServiceDays) ? settings.specialServiceDays : [];
+  if (!DATE_RE.test(String(dateKey ?? ''))) return null;
+  const wanted = String(dateKey);
+
+  for (const raw of list) {
+    const entry = typeof raw === 'string' ? { date: raw } : raw && typeof raw === 'object' ? raw : null;
+    if (!entry || String(entry.date ?? '').trim() !== wanted) continue;
+
+    const fallback = settings?.serviceWindow ?? {};
+    const open = toMinutes(entry.open ?? fallback.open ?? '12:00');
+    const close = toMinutes(entry.close ?? fallback.close ?? '13:30');
+    if (open === null || close === null || close <= open) return null;
+
+    const day = typeof weekday === 'number' ? weekday : new Date(`${wanted}T00:00:00Z`).getUTCDay();
+    const [y, m, d] = wanted.split('-').map(Number);
+    const label =
+      String(entry.label ?? '').trim() ||
+      `${DAY_LABELS_FULL[day]} ${d} ${MONTH_SHORT[m - 1]} (special opening)`;
+
+    return {
+      day,
+      label,
+      open: formatMinutes(open),
+      close: formatMinutes(close),
+      closed: false,
+      special: true,
+      note: String(entry.note ?? '').trim() || null,
+      openMinutes: open,
+      closeMinutes: close,
+      date: wanted,
+    };
+  }
+  return null;
+}
+
+/** Merge env-provided dates into the catalogue's special days (catalogue wins per date). */
+export function mergeSpecialServiceDays(settings, envDates) {
+  const fromEnv = (Array.isArray(envDates) ? envDates : []).map((date) => ({ date }));
+  const fromSeed = Array.isArray(settings?.specialServiceDays) ? settings.specialServiceDays : [];
+  const seen = new Set();
+  const merged = [];
+  for (const entry of [...fromSeed, ...fromEnv]) {
+    const date = typeof entry === 'string' ? entry : String(entry?.date ?? '').trim();
+    if (!date || seen.has(date)) continue;
+    seen.add(date);
+    merged.push(entry);
+  }
+  return { ...settings, specialServiceDays: merged };
 }
 
 export function windowLabel(settings) {
@@ -81,13 +189,25 @@ export function windowLabel(settings) {
  */
 export function serviceStatus(settings, now = new Date()) {
   const at = sastNow(now);
-  const today = hoursFor(settings, at.day);
+  /*
+   * A one-off special opening (a Saturday market, a holiday trading day) is a
+   * service day like any other. It is looked up by calendar date, not weekday,
+   * so "the 14th" trades once and never again. The weekly rhythm is unchanged
+   * on every other day.
+   */
+  const [cy, cm, cd] = at.dateKey.split('-').map(Number);
+  const keyFor = (offset) => {
+    const shifted = new Date(Date.UTC(cy, cm - 1, cd + offset));
+    return { key: shifted.toISOString().slice(0, 10), weekday: shifted.getUTCDay() };
+  };
+  const today = specialServiceDayFor(settings, at.dateKey, at.day) ?? hoursFor(settings, at.day);
   const open = Boolean(today && at.minutes >= today.openMinutes && at.minutes <= today.closeMinutes);
 
-  const days = today ? [today] : [];
+  const isSpecial = Boolean(today?.special);
   const ahead = [];
   for (let offset = 1; offset <= 7; offset += 1) {
-    const entry = hoursFor(settings, (at.day + offset) % 7);
+    const { key, weekday } = keyFor(offset);
+    const entry = specialServiceDayFor(settings, key, weekday) ?? hoursFor(settings, weekday);
     if (entry) ahead.push({ ...entry, offset, date: new Date(now.getTime() + offset * 86400000) });
   }
 
@@ -130,17 +250,21 @@ export function serviceStatus(settings, now = new Date()) {
   let shortMessage;
 
   if (open) {
-    headline = 'Serving now';
-    message = `We are serving now — delivery and collection until ${today.close}.`;
+    headline = isSpecial ? 'Special opening — serving now' : 'Serving now';
+    message = isSpecial
+      ? `We are trading today, ${today.open}–${today.close}, as a special opening — delivery and collection until ${today.close}.`
+      : `We are serving now — delivery and collection until ${today.close}.`;
     shortMessage = `Serving now until ${today.close}.`;
   } else if (isServiceDay && at.minutes < today.openMinutes) {
     headline = 'Not cooking yet';
-    message = `The pots go on at ${today.open}. Place your order now and it goes in first — today's window is ${today.open}–${today.close}.`;
+    message = isSpecial
+      ? `Today is a special opening. The pots go on at ${today.open}. Place your order now and it goes in first — today's window is ${today.open}–${today.close}.`
+      : `The pots go on at ${today.open}. Place your order now and it goes in first — today's window is ${today.open}–${today.close}.`;
     shortMessage = `Pots go on at ${today.open} — order now and you are first in the queue.`;
   } else if (isServiceDay) {
     headline = "Today's window has closed";
     message = nextWindowLabel
-      ? `Today's ${today.open}–${today.close} window has closed. The next one is ${nextWindowLabel} — ordering opens again shortly before it. If you need food today, message us and we will tell you whether the kitchen can still help.`
+      ? `Today's ${today.open}–${today.close} ${isSpecial ? 'special opening' : 'window'} has closed. The next one is ${nextWindowLabel} — ordering opens again shortly before it. If you need food today, message us and we will tell you whether the kitchen can still help.`
       : `Today's ${today.open}–${today.close} window has closed. Please contact us on WhatsApp to arrange an order.`;
     /*
      * The strip prints `headline` and then this line, so this one carries only
@@ -167,6 +291,8 @@ export function serviceStatus(settings, now = new Date()) {
     /** True only once today's window has passed — ordering is refused. */
     orderingClosed,
     isServiceDay,
+    /** True when today's service comes from `specialServiceDays`, not the weekly rhythm. */
+    specialToday: isSpecial,
     timeZone: SERVICE_TZ,
     dayLabel: at.dayLabel,
     timeLabel: at.timeLabel,
