@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 8;
+export const SEED_VERSION = 9;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -111,13 +111,29 @@ const drinksOption = () => ({
   label: 'Add a soft drink',
   required: false,
   priced: true,
-  choices: [{ id: 'ginger-gemere', label: 'Ginger gemere — home-made ginger beer, 500 ml', priceDelta: GINGER_GEMERE_PRICE }],
+  /*
+   * Up to four bottles on one plate, and the count is the customer's to choose.
+   *
+   * A plate is for one person; a table of four ordering one delivery is the
+   * normal case, and forcing them to add the whole plate four times to get four
+   * drinks would charge for four plates. This is the Uber Eats behaviour the
+   * owner asked for — a stepper on the extra, priced per bottle.
+   */
+  choices: [
+    { id: 'ginger-gemere', label: 'Ginger gemere — home-made ginger beer, 500 ml', priceDelta: GINGER_GEMERE_PRICE, max: 4 },
+  ],
 });
 
 const drinksGroup = () => ({
   id: 'drink',
   label: 'Add a soft drink',
   required: false,
+  /*
+   * `max: 1` counts *selections*, not bottles: the builder lets one drink choice
+   * into the group, and the bottle count is asked for separately (see
+   * `extraQty`). Raising this to 4 would let a customer pick the same drink four
+   * times, which the pricing would then have to de-duplicate.
+   */
   max: 1,
   priced: true,
   items: [
@@ -125,6 +141,8 @@ const drinksGroup = () => ({
       id: 'ginger-gemere',
       label: 'Ginger gemere — home-made ginger beer, 500 ml',
       price: GINGER_GEMERE_PRICE,
+      /* How many bottles one plate may carry. */
+      max: 4,
     },
   ],
 });

@@ -209,7 +209,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "priceDelta": 25
+              "priceDelta": 25,
+              "max": 4
             }
           ]
         }
@@ -315,7 +316,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "priceDelta": 25
+              "priceDelta": 25,
+              "max": 4
             }
           ]
         }
@@ -421,7 +423,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "priceDelta": 25
+              "priceDelta": 25,
+              "max": 4
             }
           ]
         }
@@ -528,7 +531,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "priceDelta": 25
+              "priceDelta": 25,
+              "max": 4
             }
           ]
         }
@@ -635,7 +639,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "priceDelta": 25
+              "priceDelta": 25,
+              "max": 4
             }
           ]
         }
@@ -759,7 +764,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "priceDelta": 25
+              "priceDelta": 25,
+              "max": 4
             }
           ]
         }
@@ -866,7 +872,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "priceDelta": 25
+              "priceDelta": 25,
+              "max": 4
             }
           ]
         }
@@ -973,7 +980,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "priceDelta": 25
+              "priceDelta": 25,
+              "max": 4
             }
           ]
         }
@@ -1102,7 +1110,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "price": 25
+              "price": 25,
+              "max": 4
             }
           ]
         }
@@ -1219,7 +1228,8 @@
             {
               "id": "ginger-gemere",
               "label": "Ginger gemere — home-made ginger beer, 500 ml",
-              "price": 25
+              "price": 25,
+              "max": 4
             }
           ]
         }
@@ -1457,12 +1467,12 @@
     "isServiceDay": false,
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Saturday",
-    "timeLabel": "21:52",
+    "dayLabel": "Sunday",
+    "timeLabel": "01:17",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Saturday: closed",
+    "todayLabel": "Sunday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Saturday is a rest day",
+    "headline": "Sunday is a rest day",
     "message": "The pots are resting today — and honestly, so are we. We cook on Thursdays and Fridays, 12:00–13:30, and we are working towards being open every day. We are back Thursday 12:00–13:30.",
     "shortMessage": "We cook Thursdays and Fridays, 12:00–13:30. Your order goes in first on Thursday.",
     "serviceDays": [

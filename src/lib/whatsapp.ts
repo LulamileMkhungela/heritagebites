@@ -17,6 +17,7 @@
  *     line list is capped and the count says so.
  */
 import { zar } from './format';
+import { extraLabel } from '../../shared/service.js';
 import type { CartLine, Fulfilment } from './types';
 
 /** Used when the catalogue has not loaded yet or has no number configured. */
@@ -53,7 +54,14 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
   const fulfilment = opts.fulfilment ?? 'delivery';
 
   const rows = lines.slice(0, MAX_LINES).map((l) => {
-    const picks = l.picks.length ? `\n   ${l.picks.map((p) => p.label).join(', ')}` : '';
+    /*
+     * An extra is written as "2 × Ginger gemere" rather than twice in a row.
+     * The kitchen packs from this message, and a repeated label reads as a
+     * mistake in the order rather than as a number of bottles.
+     */
+    const picks = l.picks.length
+      ? `\n   ${l.picks.map((p) => extraLabel(p.label, p.qty)).join(', ')}`
+      : '';
     return `• ${l.qty} × ${l.name} — ${zar(l.unitPrice * l.qty)}${picks}`;
   });
   if (lines.length > MAX_LINES) {

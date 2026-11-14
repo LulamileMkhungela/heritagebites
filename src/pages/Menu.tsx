@@ -7,6 +7,7 @@ import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
+import { extraCost, maxPerExtra } from '../../shared/service.js';
 import { currentSiteUrl, usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
 
@@ -548,6 +549,15 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
 function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => void }) {
   const addPlate = useCart((s) => s.addPlate);
   const [picked, setPicked] = useState<Record<string, string>>({});
+  /*
+   * How many of a priced extra, keyed by "groupId:itemId".
+   *
+   * Kept apart from `picked` because `picked` is a map of *which* choice fills a
+   * slot, and a slot holds one. The bottle count is a second question — how many
+   * of the thing in the slot — and mixing the two would mean a vegetable side
+   * could claim a count it has no business having.
+   */
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [qty, setQty] = useState(1);
 
   /* Tapping the chosen answer clears it, which is how an optional group (the
@@ -567,7 +577,11 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   const extras = plate.groups.reduce((sum, g) => {
     if (!g.priced) return sum;
     const it = g.items.find((i) => i.id === picked[g.id]);
-    return sum + (Number(it?.price) || 0);
+    if (!it) return sum;
+    /* Price × how many. The clamp is the catalogue's, so the button cannot add a
+       fifth bottle the server would refuse. */
+    const count = Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
+    return sum + extraCost(Number(it.price) || 0, count);
   }, 0);
   const total = Math.round((plate.price + extras) * 100) / 100;
 
@@ -580,10 +594,19 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       if (!it) return [];
       /* A priced group carries its amount, so the basket line explains the
          difference between the plate price and what is being charged. */
-      return [{ optionId: g.id, choiceId: `${g.id}:${id}`, label: it.label, priceDelta: g.priced ? Number(it.price) || 0 : 0 }];
+      const count = g.priced ? Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1)) : 1;
+      return [{
+        optionId: g.id,
+        choiceId: `${g.id}:${id}`,
+        label: it.label,
+        priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : 0,
+        ...(count > 1 ? { qty: count } : {}),
+      }];
     });
     addPlate({
-      key: `plate::${plate.id}::${picks.map((p) => p.choiceId).sort().join('|')}`,
+      /* The count is part of the identity: one plate with one beer and one plate
+         with three are different orders at different prices. */
+      key: `plate::${plate.id}::${picks.map((p) => `${p.choiceId}${p.qty && p.qty > 1 ? `x${p.qty}` : ''}`).sort().join('|')}`,
       itemId: `plate-${plate.id}`,
       plateId: plate.id,
       name: plate.name,
@@ -621,6 +644,55 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                 <div className="grid gap-2 sm:grid-cols-2">
                   {g.items.map((it) => {
                     const on = picked[g.id] === it.id;
+                    /*
+                     * A priced extra gets a stepper once added — the same control
+                     * the dish card uses, so the drink behaves identically
+                     * whichever way a customer reaches it. Everything else stays a
+                     * plain toggle: a starch is one, and picking another replaces
+                     * it rather than adding a second.
+                     */
+                    const cap = maxPerExtra(g, it);
+                    const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
+                    const setCount = (next: number) =>
+                      setCounts((prev) => ({ ...prev, [`${g.id}:${it.id}`]: Math.min(cap, Math.max(1, next)) }));
+
+                    if (g.priced && cap > 1 && on) {
+                      return (
+                        <div
+                          key={it.id}
+                          className="flex items-center justify-between gap-2 rounded-xl border-2 border-ochre bg-ochre/15 px-3 py-2 text-left text-sm"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold">{it.label}</span>
+                            <span className="font-mono text-xs text-ink/60">
+                              + {zar(extraCost(Number(it.price) || 0, count))}
+                              {count > 1 && <span className="text-ink/40"> · {zar(Number(it.price) || 0)} each</span>}
+                            </span>
+                          </span>
+                          <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
+                            <button
+                              type="button"
+                              onClick={() => (count <= 1 ? toggle(g.id, it.id) : setCount(count - 1))}
+                              className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
+                              aria-label={count <= 1 ? `Remove ${it.label}` : `One fewer ${it.label}`}
+                            >
+                              −
+                            </button>
+                            <span className="w-6 text-center font-mono text-sm font-bold" aria-live="polite">{count}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCount(count + 1)}
+                              disabled={count >= cap}
+                              className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-inherit"
+                              aria-label={`One more ${it.label}`}
+                            >
+                              +
+                            </button>
+                          </span>
+                        </div>
+                      );
+                    }
+
                     return (
                       <button
                         key={it.id}

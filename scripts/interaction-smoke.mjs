@@ -1545,6 +1545,65 @@ await step('the plate builder requires its mandatory groups before adding', asyn
   return `${chosen} required group(s) satisfied`;
 });
 
+await step('the soft drink takes a quantity, and prices per bottle', async () => {
+  /*
+   * Owner, 14 Nov 2026 — "have ability to add extras like how its done on
+   * ubereats". The drink is the one priced extra on the plate: tapping it adds
+   * one, and a stepper raises the count without touching the plate price.
+   *
+   * This is the assertion that keeps the two behaviours apart. Adding a second
+   * bottle must cost a second R25, and adding the whole plate again must cost
+   * another R100 — if the stepper ever started multiplying the plate instead of
+   * the drink, a table of four would be charged for four plates.
+   */
+  const drink = [...(builderDialog()?.querySelectorAll('button') ?? [])]
+    .find((b) => /Ginger gemere/i.test(b.textContent ?? ''));
+  if (!drink) throw new Error('the soft drink is not offered in the builder');
+
+  const priceOn = () => {
+    const label = builderAdd()?.textContent ?? '';
+    return Number((label.match(/R\s?([\d\s]+)[.,](\d{2})/) ?? [])[1]?.replace(/\s/g, ''));
+  };
+  const findPlus = () =>
+    [...(builderDialog()?.querySelectorAll('button') ?? [])]
+      .find((b) => /One more Ginger/i.test(b.getAttribute('aria-label') ?? ''));
+
+  /* Required groups are already chosen by the previous step, so the button has a price. */
+  const before = priceOn();
+  s5.click(drink);
+  await s5.waitFor(() => findPlus(), 'the drink stepper', 6000);
+
+  const one = priceOn();
+  if (one !== before + 25) throw new Error(`one bottle added R${one - before}, not R25`);
+
+  s5.click(findPlus());
+  await s5.waitFor(() => priceOn() === before + 50, 'the second bottle to be priced', 6000);
+
+  /*
+   * The catalogue caps one plate at four bottles.
+   *
+   * The two clicks need a tick between them: React re-renders the stepper after
+   * each, and clicking the stale node twice in the same task asks for the same
+   * increment twice and gets one.
+   */
+  for (let i = 0; i < 2; i += 1) {
+    s5.click(findPlus());
+    await sleep(120);
+  }
+  await s5.waitFor(() => priceOn() === before + 100, 'four bottles to be priced', 6000);
+  if (!findPlus()?.disabled) throw new Error('the stepper does not stop at the catalogue limit');
+
+  /* Back down to two, so the basket assertion below is about the drink, not the count. */
+  const findMinus = () =>
+    [...(builderDialog()?.querySelectorAll('button') ?? [])]
+      .find((b) => /One fewer Ginger|Remove Ginger/i.test(b.getAttribute('aria-label') ?? ''));
+  s5.click(findMinus());
+  await sleep(120);
+  s5.click(findMinus());
+  await s5.waitFor(() => priceOn() === before + 50, 'two bottles', 6000);
+  return `R${before} plate, +R25 per bottle, capped at four`;
+});
+
 await step('a configured plate lands in the basket at the fixed plate price', async () => {
   const addBtn = builderAdd();
   if (!addBtn) throw new Error('no add-plate control after configuring the plate');

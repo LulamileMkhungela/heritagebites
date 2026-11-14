@@ -4,6 +4,7 @@ import { zar } from '../lib/format';
 import { Button, HeritageBand, Qty } from './ui';
 import { buildLine, useCart } from '../store/cart';
 import { useOverlay } from '../lib/useOverlay';
+import { extraCost, maxPerExtra } from '../../shared/service.js';
 
 export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; onOpen: () => void; compact?: boolean }) {
   const add = useCart((s) => s.add);
@@ -89,6 +90,13 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
   const add = useCart((s) => s.add);
   const dialogRef = useOverlay<HTMLDivElement>(onClose);
   const [qty, setQty] = useState(1);
+  /*
+   * `picked` holds the choice, and — for an extra the customer took more than
+   * one of — how many. `{ id, qty }` rather than a second map, because the count
+   * belongs to the choice: switching from ginger beer to something else must not
+   * carry the old count across.
+   */
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [picked, setPicked] = useState<Record<string, string | string[]>>(() => {
     const initial: Record<string, string | string[]> = {};
     for (const o of item.options) {
@@ -114,11 +122,20 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
     const ids = Array.isArray(val) ? val : [val];
     for (const id of ids) {
       const c = o.choices.find((x) => x.id === id);
-      if (c) picks.push({ optionId: o.id, choiceId: c.id, label: c.label, priceDelta: c.priceDelta });
+      if (!c) continue;
+      /*
+       * Only a priced extra carries a count. A starch picked "twice" is still one
+       * starch — and its delta is zero, so a count there would be a number with
+       * no meaning that still showed up in the key and split the basket line.
+       */
+      const qty = o.priced ? Math.min(maxPerExtra(o, c), Math.max(1, counts[`${o.id}:${c.id}`] ?? 1)) : 1;
+      picks.push({ optionId: o.id, choiceId: c.id, label: c.label, priceDelta: c.priceDelta, ...(qty > 1 ? { qty } : {}) });
     }
   }
 
-  const unitPrice = item.price + picks.reduce((n, p) => n + (p.priceDelta || 0), 0);
+  /* The count multiplies the extra, not the plate: 2 beers beside one plate is
+     R100 + R50, never 2 × R125. */
+  const unitPrice = item.price + picks.reduce((n, p) => n + extraCost(p.priceDelta || 0, p.qty), 0);
 
   const missing = item.options.filter((o) => o.required && !picked[o.id]);
 
@@ -206,6 +223,62 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                 {o.choices.map((c) => {
                   const val = picked[o.id];
                   const isOn = Array.isArray(val) ? val.includes(c.id) : val === c.id;
+                  /*
+                   * A priced extra gets a stepper, not a switch.
+                   *
+                   * This is the Uber Eats shape the owner asked for: the add-on is
+                   * off until it is added, adding it puts a − / + on it, and the
+                   * price beside it is what that many cost. A plain toggle could
+                   * only ever mean "one", so a table of four wanting four ginger
+                   * beers had to add the whole plate four times — four plates they
+                   * did not order.
+                   */
+                  const cap = maxPerExtra(o, c);
+                  const count = Math.min(cap, Math.max(1, counts[`${o.id}:${c.id}`] ?? 1));
+                  const steppable = Boolean(o.priced) && cap > 1;
+                  const setCount = (next: number) =>
+                    setCounts((prev) => ({ ...prev, [`${o.id}:${c.id}`]: Math.min(cap, Math.max(1, next)) }));
+
+                  if (steppable && isOn) {
+                    return (
+                      <div
+                        key={c.id}
+                        /* Span both columns: a bottle name plus a stepper does not
+                           fit half a modal on a phone, and truncating the name is
+                           how a customer ends up not knowing what they bought. */
+                        className="flex items-center justify-between gap-2 rounded-xl border-2 border-ochre bg-ochre/15 px-3 py-2 text-left text-sm sm:col-span-2"
+                      >
+                        <span className="min-w-0">
+                          <span className="block font-semibold leading-snug">{c.label}</span>
+                          <span className="font-mono text-xs text-ink/60">
+                            + {zar(extraCost(c.priceDelta, count))}
+                            {count > 1 && <span className="text-ink/40"> · {zar(c.priceDelta)} each</span>}
+                          </span>
+                        </span>
+                        <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
+                          <button
+                            type="button"
+                            onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required)) : setCount(count - 1))}
+                            className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
+                            aria-label={count <= 1 ? `Remove ${c.label}` : `One fewer ${c.label}`}
+                          >
+                            −
+                          </button>
+                          <span className="w-6 text-center font-mono text-sm font-bold" aria-live="polite">{count}</span>
+                          <button
+                            type="button"
+                            onClick={() => setCount(count + 1)}
+                            disabled={count >= cap}
+                            className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-inherit"
+                            aria-label={`One more ${c.label}`}
+                          >
+                            +
+                          </button>
+                        </span>
+                      </div>
+                    );
+                  }
+
                   return (
                     <button
                       key={c.id}
@@ -215,7 +288,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                       className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                     >
                       <span>{c.label}</span>
-                      {c.priceDelta > 0 && <span className="font-mono text-xs text-ink/55">+R{c.priceDelta}</span>}
+                      {c.priceDelta > 0 && <span className="font-mono text-xs text-ink/55">+ {zar(c.priceDelta)}</span>}
                     </button>
                   );
                 })}

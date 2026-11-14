@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DEFAULT_FULFILMENT, type CartLine, type CartOptionPick, type Fulfilment, type MenuItem } from '../lib/types';
+import { extraCost } from '../../shared/service.js';
 
 interface CartState {
   lines: CartLine[];
@@ -15,9 +16,17 @@ interface CartState {
   setOpen: (open: boolean) => void;
 }
 
-const keyFor = (itemId: string, picks: { optionId: string; choiceId: string }[]) =>
+/**
+ * The line's identity: the item, its choices, and how many of each extra.
+ *
+ * The quantity belongs in the key. Two mogodu plates are one line with qty 2;
+ * "one plate with one beer" and "one plate with two beers" are two different
+ * orders at two different prices, and merging them would silently rewrite one
+ * of them.
+ */
+const keyFor = (itemId: string, picks: { optionId: string; choiceId: string; qty?: number }[]) =>
   `${itemId}::${picks
-    .map((p) => `${p.optionId}=${p.choiceId}`)
+    .map((p) => `${p.optionId}=${p.choiceId}${p.qty && p.qty > 1 ? `x${p.qty}` : ''}`)
     .sort()
     .join('|')}`;
 
@@ -93,9 +102,16 @@ export const useCart = create<CartState>()(
 export const cartCount = (lines: CartLine[]) => lines.reduce((n, l) => n + l.qty, 0);
 export const cartSubtotal = (lines: CartLine[]) => lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
 
-/** Builds a stable cart line from a menu item and its chosen options. */
+/**
+ * Builds a stable cart line from a menu item and its chosen options.
+ *
+ * The extra count multiplies the extra's own price, never the item: two ginger
+ * beers beside one plate is R100 + (2 × R25), not 2 × R125. That distinction is
+ * the whole point of a quantity on an add-on, and it is the one thing a
+ * "add the plate again" workaround gets wrong.
+ */
 export function buildLine(item: MenuItem, picks: CartOptionPick[], qty: number): CartLine {
-  const unitPrice = item.price + picks.reduce((n, p) => n + (p.priceDelta || 0), 0);
+  const unitPrice = item.price + picks.reduce((n, p) => n + extraCost(p.priceDelta || 0, p.qty), 0);
   return {
     key: keyFor(item.id, picks),
     itemId: item.id,
@@ -110,8 +126,14 @@ export function buildLine(item: MenuItem, picks: CartOptionPick[], qty: number):
 
 /**
  * Shape the /api/quote and /api/orders endpoints expect.
+ *
  * Options are sent as choice *ids* grouped by option id, because the server
  * looks deltas up by id — never by the label a customer happened to see.
+ *
+ * An extra the customer took more than one of is sent as `{ id, qty }` in an
+ * `extraQty` map rather than by repeating the id, because the id list answers
+ * "which choice" and the map answers "how many". The server clamps the number
+ * against its own catalogue; sending it is a request, not an instruction.
  */
 export function toApiItems(lines: CartLine[]) {
   const out: unknown[] = [];
@@ -119,23 +141,32 @@ export function toApiItems(lines: CartLine[]) {
   for (const l of lines) {
     if (l.kind === 'plate') {
       const selections: Record<string, string[]> = {};
+      const extraQty: Record<string, number> = {};
       for (const p of l.picks) {
         // Plate picks encode "groupId:itemId" in choiceId.
         const [groupId, itemId] = p.choiceId.includes(':') ? p.choiceId.split(':') : [p.optionId, p.choiceId];
         (selections[groupId] ||= []).push(itemId);
+        if (p.qty && p.qty > 1) extraQty[`${groupId}:${itemId}`] = p.qty;
       }
-      out.push({ kind: 'plate', plateId: l.plateId, qty: l.qty, selections });
+      out.push({ kind: 'plate', plateId: l.plateId, qty: l.qty, selections, ...(Object.keys(extraQty).length ? { extraQty } : {}) });
       continue;
     }
 
     const options: Record<string, string | string[]> = {};
+    const extraQty: Record<string, number> = {};
     for (const p of l.picks) {
       const prev = options[p.optionId];
       if (prev === undefined) options[p.optionId] = p.choiceId;
       else if (Array.isArray(prev)) prev.push(p.choiceId);
       else options[p.optionId] = [prev, p.choiceId];
+      if (p.qty && p.qty > 1) extraQty[`${p.optionId}:${p.choiceId}`] = p.qty;
     }
-    out.push({ itemId: l.itemId, qty: l.qty, options });
+    out.push({
+      itemId: l.itemId,
+      qty: l.qty,
+      options,
+      ...(Object.keys(extraQty).length ? { extraQty } : {}),
+    });
   }
 
   return out;

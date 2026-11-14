@@ -481,3 +481,64 @@ export function serviceWindowFor(settings, now = new Date()) {
     label: status.open ? `Now — ${status.windowLabel}` : status.nextWindowLabel ?? 'To be confirmed',
   };
 }
+
+/* --------------------------------------------------------------------- */
+/* Extras: how many of a thing, and what that costs                      */
+/* --------------------------------------------------------------------- */
+
+/**
+ * How many of this extra one line may carry.
+ *
+ * `max` is the catalogue's word for it and is optional, because most choices are
+ * not extras: a starch is one, and picking a different one replaces it. `1` is
+ * therefore the default, and a plate group's own `max` (which is about how many
+ * *selections* fit in a group) is clamped to the same number so the two can
+ * never disagree about whether two ginger beers is allowed.
+ *
+ * The ceiling of 20 is not a business rule — it is a sanity limit so a malicious
+ * client cannot ask the kitchen to pack 10,000 drinks, exactly as the line
+ * quantity is capped at 20/50 elsewhere.
+ *
+ * @param {{ max?: number, multiple?: boolean } | null | undefined} group
+ * @param {{ max?: number } | null | undefined} [choice]
+ * @returns {number}
+ */
+export function maxPerExtra(group, choice) {
+  const raw = [choice?.max, group?.max].find((v) => Number.isFinite(Number(v)) && Number(v) >= 1);
+  const n = Math.floor(Number(raw ?? 1));
+  return Math.max(1, Math.min(20, n));
+}
+
+/**
+ * The money one priced extra adds to a line: unit price × how many.
+ *
+ * Kept here, rather than inline in the two pricing paths, because the browser and
+ * the server must agree to the cent — a basket that says R150 and a server that
+ * charges R175 is the bug this whole shared module exists to prevent.
+ *
+ * @param {number} priceDelta
+ * @param {number} [qty]
+ * @returns {number}
+ */
+export function extraCost(priceDelta, qty) {
+  const unit = Number(priceDelta) || 0;
+  const n = Math.max(1, Math.min(20, Math.floor(Number(qty) || 1)));
+  return Math.round(unit * n * 100) / 100;
+}
+
+/**
+ * How a picked extra reads in a basket line, a receipt and the WhatsApp order.
+ *
+ * One is silent — "Ginger gemere" — and more than one is stated, because the
+ * quantity is the part the kitchen has to act on: `2 × Ginger gemere`.
+ *
+ * @param {string} label
+ * @param {number} [qty]
+ * @returns {string}
+ */
+export function extraLabel(label, qty) {
+  /* Clamped with the same ceiling as the money, so a label can never claim a
+     quantity the price did not charge for. */
+  const n = Math.max(1, Math.min(20, Math.floor(Number(qty) || 1)));
+  return n > 1 ? `${n} × ${label}` : String(label ?? '');
+}
