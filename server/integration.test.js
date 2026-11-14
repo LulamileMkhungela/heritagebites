@@ -185,8 +185,9 @@ describe('catalogue + search', () => {
     // Business rules confirmed by the owner.
     assert.equal(c.settings.minDeliveryOrder, 100);
     assert.deepEqual(c.settings.deliveryAreas, ['Rosebank', 'Sandton']);
-    assert.equal(c.settings.deliveryFlat, 55, 'delivery is a flat fee charged on top of the plates');
-    assert.equal(c.settings.freeDeliveryAbove, 300, 'delivery is free from R300');
+    assert.equal(c.settings.deliveryIncluded, true, 'delivery is included in the plate price');
+    assert.equal(c.settings.deliveryFlat, 0, 'there is no separate delivery fee');
+    assert.equal(c.settings.freeDeliveryAbove, 0, 'nothing to reach: delivery is always included');
     assert.equal(c.settings.serviceWindow.open, '12:00');
     assert.equal(c.settings.serviceWindow.close, '13:30');
     assert.equal(c.settings.contactFormspreeUrl, 'https://formspree.io/f/xvkkkwve');
@@ -742,15 +743,16 @@ describe('checkout', () => {
     assert.equal(cardOnCollection.res.status, 201);
   });
 
-  test('delivery adds the flat fee in Rosebank and Sandton and enforces the minimum', async () => {
+  test('delivery in Rosebank and Sandton costs the plate price, and the minimum is enforced', async () => {
     const sandton = await placeOrder({
       fulfilment: 'delivery',
       customer: { email: 't@e.co.za', name: 'T', phone: '+27820009999', address: '12 Rivonia Road', suburb: 'Sandton' },
       items: [MOGODU],
     });
     assert.equal(sandton.res.status, 201);
-    assert.equal(sandton.body.order.totals.delivery, 55, 'the run is charged on top of the plate');
-    assert.equal(sandton.body.order.totals.total, 155, 'plate price plus the delivery fee');
+    /* Delivery is included in the plate price — no fee line, no surcharge. */
+    assert.equal(sandton.body.order.totals.delivery, 0, 'delivery adds nothing to the plate price');
+    assert.equal(sandton.body.order.totals.total, 100, 'a delivered plate costs the plate price');
     assert.equal(sandton.body.order.deliveryArea, 'Sandton');
 
     const rosebank = await placeOrder({
@@ -820,8 +822,9 @@ describe('checkout', () => {
     });
     assert.equal(res.status, 201);
     assert.equal(body.order.payment.reference, 'CASH');
-    /* WINGS is a contemporary plate at R130, plus the R55 run. */
-    assert.equal(body.order.totals.total, 185, 'plate plus the delivery fee');
+    /* WINGS is a contemporary plate at R130, delivered at the plate price. */
+    assert.equal(body.order.totals.total, 130, 'delivery adds nothing to the plate price');
+    assert.equal(body.order.totals.delivery, 0, 'no delivery fee line');
   });
 
   test('cash on collection still works', async () => {

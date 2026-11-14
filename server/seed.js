@@ -519,17 +519,23 @@ export const settings = {
   established: 2025,
 
   /*
-   * Delivery: a real, charged fee now, Rosebank and Sandton only.
+   * Delivery: included in the plate price, Rosebank and Sandton only.
    *
-   * It used to be folded into the plate price, which meant a customer who
-   * collected paid for a delivery they never used. Collection is now the plate
-   * price exactly; delivery adds one flat fee for the run between Rosebank and
-   * Sandton — roughly 8km — at R55, and it is free from R300 so a family order
-   * is not penalised for being big.
+   * This is the rule the owner signed off (`docs/regomoditswe-answers-2026-10.md`:
+   * "Delivery fee: None — delivery is included in the plate price", and the plate
+   * lines that read "R100 a plate (delivery included)").
+   *
+   * The two fee fields stay in the schema because the pricing code reads them:
+   * `deliveryFeeCents` returns zero when the free-delivery threshold is zero, so
+   * `freeDeliveryAbove: 0` is what makes delivery free rather than a separate
+   * branch in the maths. A zero flat fee is the same statement in the other
+   * field, and it keeps any surface that still prints `deliveryFlat` honest.
+   *
+   * The R100 minimum still applies — it is a floor on the order, not a fee.
    */
-  deliveryIncluded: false,
-  deliveryFlat: 55,
-  freeDeliveryAbove: 300,
+  deliveryIncluded: true,
+  deliveryFlat: 0,
+  freeDeliveryAbove: 0,
   minDeliveryOrder: 100,
   deliveryAreas: ['Rosebank', 'Sandton'],
 
@@ -660,7 +666,7 @@ export const policies = [
       },
       {
         heading: 'Minimum order and delivery fee',
-        body: 'The minimum order is R100 for plated meals. Collect and you pay the plate price exactly — R100 traditional, R130 contemporary. Delivery adds R55 for the Rosebank and Sandton run, and is free on orders of R300 or more.',
+        body: 'The minimum order is R100 for plated meals. There is no separate delivery fee — the Rosebank and Sandton run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one whether you collect or have it delivered.',
       },
       {
         heading: 'Collection',

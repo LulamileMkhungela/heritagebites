@@ -6,7 +6,7 @@
 
 The public storefront and the customer journey are complete and tested: menu, plate builder, basket, collection or delivery, checkout by card or cash on collection, secure order receipt, loyalty-card lookup, a contact form that reaches the business inbox, and the five approved customer policies.
 
-The catalogue is the owner-signed content: **Traditional plates R100** (five proteins, four starches, four sides) and **Contemporary plates R130** (three proteins, five starches, six sides), **Thursdays and Fridays 12:00–13:30**, delivery in **Rosebank and Sandton** at **+R55, free from R300**, **R100 minimum order**.
+The catalogue is the owner-signed content: **Traditional plates R100** (five proteins, four starches, four sides) and **Contemporary plates R130** (three proteins, five starches, six sides), **Thursdays and Fridays 12:00–13:30**, delivery in **Rosebank and Sandton** at **no extra charge — included in the plate price**, **R100 minimum order**.
 
 What is not yet live is operational, not cosmetic. In order:
 

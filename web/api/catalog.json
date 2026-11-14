@@ -1110,7 +1110,7 @@
         },
         {
           "heading": "Minimum order and delivery fee",
-          "body": "The minimum order is R100 for plated meals. Collect and you pay the plate price exactly — R100 traditional, R130 contemporary. Delivery adds R55 for the Rosebank and Sandton run, and is free on orders of R300 or more."
+          "body": "The minimum order is R100 for plated meals. There is no separate delivery fee — the Rosebank and Sandton run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one whether you collect or have it delivered."
         },
         {
           "heading": "Collection",
@@ -1172,9 +1172,9 @@
     "whatsapp": "27670137587",
     "email": "heritagebitesfood@gmail.com",
     "established": 2025,
-    "deliveryIncluded": false,
-    "deliveryFlat": 55,
-    "freeDeliveryAbove": 300,
+    "deliveryIncluded": true,
+    "deliveryFlat": 0,
+    "freeDeliveryAbove": 0,
     "minDeliveryOrder": 100,
     "deliveryAreas": [
       "Rosebank",
@@ -1252,17 +1252,17 @@
   },
   "service": {
     "open": false,
-    "orderingClosed": true,
-    "isServiceDay": true,
+    "orderingClosed": false,
+    "isServiceDay": false,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Friday",
-    "timeLabel": "22:57",
+    "dayLabel": "Saturday",
+    "timeLabel": "10:33",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Friday 12:00–13:30",
+    "todayLabel": "Saturday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Today's window has closed",
-    "message": "Today's 12:00–13:30 window has closed. The next one is Thursday 12:00–13:30 — ordering opens again shortly before it. If you need food today, message us and we will tell you whether the kitchen can still help.",
-    "shortMessage": "Next cooking day: Thursday 12:00–13:30. Ordering opens again shortly before it.",
+    "headline": "Saturday is a rest day",
+    "message": "The pots are resting today — and honestly, so are we. We cook on Thursdays and Fridays, 12:00–13:30, and we are working towards being open every day. We are back Thursday 12:00–13:30.",
+    "shortMessage": "We cook Thursdays and Fridays, 12:00–13:30. Your order goes in first on Thursday.",
     "serviceDays": [
       "Thursday",
       "Friday"
@@ -1282,5 +1282,5 @@
   "notifications": {
     "push": false
   },
-  "today": 5
+  "today": 6
 }
