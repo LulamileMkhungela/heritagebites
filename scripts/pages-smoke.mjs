@@ -146,7 +146,7 @@ await check('checkout is a preview that prices the basket without charging', asy
               kind: 'menu',
             },
           ],
-          fulfilment: 'collection',
+          fulfilment: 'delivery',
         },
         version: 2,
       }),
@@ -157,6 +157,41 @@ await check('checkout is a preview that prices the basket without charging', asy
   if (!/Finish your order/i.test(body)) throw new Error('the checkout hand-off is missing');
   if (!/R200,00/.test(body)) throw new Error('the basket total is wrong');
   if (/Place order|Pay now/i.test(body)) throw new Error('a live order button is still on the static checkout');
+
+  /*
+   * The hand-off is deliberately gated now: the 50 km rule cannot be checked
+   * without coordinates, and an order with no name or address is one the kitchen
+   * has to interrogate before it can cook. So this check does what a customer
+   * does — fills the form and shares a location — rather than expecting a link
+   * on an empty page that would carry none of it.
+   */
+  await page.evaluate(() => {
+    const set = (el, value) => {
+      const setter = Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value')?.set;
+      setter?.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const fields = [...document.querySelectorAll('input')];
+    set(fields.find((f) => /Thabo Mahlangu/.test(f.placeholder ?? '')), 'Preview Customer');
+    set(fields.find((f) => /\+27 82/.test(f.placeholder ?? '')), '+27 82 555 1234');
+    set(fields.find((f) => /Illovo/.test(f.placeholder ?? '')), '12 Oxford Road, Illovo, Sandton');
+    const area = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => o.value === 'Rosebank'));
+    if (area) {
+      const setter = Object.getOwnPropertyDescriptor(area.constructor.prototype, 'value')?.set;
+      setter?.call(area, 'Rosebank');
+      area.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+  /* Grant a location at Sandton, as the browser would after the customer taps Allow. */
+  const context = page.browserContext();
+  await context.overridePermissions(BASE.replace(/\/$/, ''), ['geolocation']);
+  await page.setGeolocation({ latitude: -26.1075, longitude: 28.055 });
+  await page.evaluate(() => {
+    [...document.querySelectorAll('button')]
+      .find((b) => /Use my current location/i.test(b.textContent ?? ''))
+      ?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1500));
 
   /*
    * The exact complaint this guards against: on the preview, "Order this on
@@ -180,9 +215,15 @@ await check('checkout is a preview that prices the basket without charging', asy
   if (!/Mogodu Plate/.test(message)) throw new Error('the WhatsApp message does not name the dish');
   if (!/2 ×|2 x/.test(message)) throw new Error('the WhatsApp message does not carry the quantity');
   if (!/R200[,.]00/.test(message)) throw new Error('the WhatsApp message does not carry the total');
-  if (!/collect/i.test(message)) throw new Error('the WhatsApp message does not carry the collection choice');
+  /*
+   * Delivery only — the word "collect" must be gone from the message, and the
+   * address and chosen area must be in it instead.
+   */
+  if (/collection|collect from/i.test(message)) throw new Error('the WhatsApp message still mentions collection');
+  if (!/delivered in Rosebank/i.test(message)) throw new Error(`the message does not carry the delivery area: ${message.slice(0, 200)}`);
+  if (!/Address:/.test(message)) throw new Error('the message does not carry the address');
 
-  return 'R200,00 basket, no live order button, WhatsApp handoff pre-filled';
+  return 'R200,00 basket, no live order button, WhatsApp handoff pre-filled with delivery';
 });
 
 await check('the enquiry and quest forms really submit from the static build', async () => {
@@ -234,11 +275,11 @@ await check('the enquiry and quest forms really submit from the static build', a
       setValue(field(/\+27 82 000 0000/), '+27 82 555 0000');
       setValue(field(/Dombolo with tshotlo/), 'Dombolo with extra morogo');
       [...document.querySelectorAll('button[type="submit"]')]
-        .find((b) => /Send my quest/i.test(b.textContent ?? ''))
+        .find((b) => /Send my request/i.test(b.textContent ?? ''))
         ?.click();
     });
     await new Promise((r) => setTimeout(r, 1500));
-    if (!/Quest sent/i.test(await text())) throw new Error('the quest form did not report a successful send');
+    if (!/Request sent/i.test(await text())) throw new Error('the quest form did not report a successful send');
 
     /* --- the contact form --- */
     await goto('contact');

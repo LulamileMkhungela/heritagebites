@@ -1,11 +1,16 @@
 /**
  * Address suggestions from OpenStreetMap, for the delivery address field.
  *
- * Why this exists: the kitchen delivers in Rosebank and Sandton only, and the
- * typed address used to be taken on trust — a customer could select "Sandton"
- * and type a Rosebank street, and the order went through labelled with whichever
- * area matched first. Suggestions fix the root cause: pick the address, and we
- * know from the map data which suburb it is actually in.
+ * Why this exists: the typed address used to be taken on trust — a customer
+ * could select "Sandton" and type a Rosebank street, and the order went through
+ * labelled with whichever area matched first. Suggestions fix the root cause:
+ * pick the address, and the map's own coordinates come with it, which is what
+ * the 50 km check needs.
+ *
+ * Scope is the delivery radius, not a suburb list. Delivery is included in
+ * Sandton and Rosebank, costs a fee further out, and stops at 50 km — so the
+ * search reaches the whole radius and the distance decides, not the name of
+ * the suburb the customer happened to type.
  *
  * Why Photon and not Google Maps: Google's Places API needs a billing account and
  * a key shipped to the browser, and its licence forbids caching results. Photon
@@ -24,7 +29,9 @@
  * checkout still works; suggestions are an assist, never a requirement.
  */
 import {
-  DELIVERY_BBOX_PARAM,
+  DELIVERY_RADIUS_BBOX_PARAM,
+  DELIVERY_ZONES,
+  KITCHEN_ORIGIN,
   MIN_QUERY_LENGTH,
   PHOTON_ENDPOINT,
   applyHouseHint,
@@ -38,12 +45,19 @@ export {
   DELIVERY_AREA_POINTS,
   DELIVERY_BBOX,
   DELIVERY_BBOX_PARAM,
+  DELIVERY_RADIUS_BBOX,
+  DELIVERY_RADIUS_BBOX_PARAM,
+  DELIVERY_ZONES,
+  KITCHEN_ORIGIN,
   MIN_QUERY_LENGTH,
   PHOTON_ENDPOINT,
   applyHouseHint,
   areaForPoint,
+  deliveryFeeForPoint,
+  deliveryZoneFor,
   expandStreetAbbreviations,
   filterSuggestions,
+  haversineKm,
   mapPhotonFeature,
   mapPhotonResponse,
   stripHouseNumber,
@@ -79,9 +93,22 @@ export async function suggestAddresses(
   query: string,
   options: {
     signal?: AbortSignal;
-    settings?: { deliveryAreas?: string[] } | null;
+    /**
+     * The catalogue's delivery settings. The radius fields are read here too,
+     * because the same numbers decide what the box offers and what the order is
+     * charged — a suggestion that ignores them can be offered and then refused.
+     */
+    settings?: {
+      deliveryAreas?: string[];
+      includedRadiusKm?: number;
+      maxDeliveryKm?: number;
+      outsideFee?: number;
+      deliveryOrigin?: { lat: number; lng: number };
+    } | null;
     /** The area the customer already chose, so only that one is offered. */
     area?: string | null;
+    /** Keep everything in the delivery radius, not only the two named suburbs. */
+    radius?: boolean;
     limit?: number;
     timeoutMs?: number;
   } = {},
@@ -107,16 +134,20 @@ export async function suggestAddresses(
   const ask = async (text: string): Promise<AddressSuggestion[] | null> => {
     const url = new URL(PHOTON_ENDPOINT);
     url.searchParams.set('q', text);
-    /* Ask for more than we show: the area filter throws some away, and a short
-       final list is better than an empty one when a street straddles two areas. */
+    /* Ask for more than we show: some results are thrown away, and a short
+       final list is better than an empty one when a street straddles a boundary. */
     url.searchParams.set('limit', String(Math.max(10, limit)));
     url.searchParams.set('lang', 'en');
     /*
-     * Restrict the search to the Rosebank/Sandton envelope rather than biasing
-     * towards Johannesburg: the kitchen does not deliver outside it, so a Pretoria
-     * address is not a suggestion worth offering and then rejecting.
+     * The envelope is the DELIVERY RADIUS, not the two suburb names.
+     *
+     * The kitchen serves anywhere it can reach, with a fee outside Sandton and
+     * Rosebank — so answering only inside those two suburbs made the radius
+     * unreachable: a Bryanston customer typed a real address and the box offered
+     * nothing. The hard 50 km limit is enforced afterwards, by distance, from the
+     * coordinates this returns.
      */
-    url.searchParams.set('bbox', DELIVERY_BBOX_PARAM);
+    url.searchParams.set('bbox', DELIVERY_RADIUS_BBOX_PARAM);
     /* The point bias still helps rank two in-area results sensibly. */
     url.searchParams.set('lat', String(BIAS.lat));
     url.searchParams.set('lon', String(BIAS.lng));
@@ -125,9 +156,19 @@ export async function suggestAddresses(
     /* `null` means "stop asking": a refusal or rate-limit is not an invitation to
        fire three more requests at a free service. */
     if (!res.ok) return null;
+    /*
+     * Radius mode: keep anything the map could place with coordinates. The
+     * suburb-tagged filter is kept available (`radius: false`) for callers that
+     * genuinely need the two-suburb list, but the checkout is not one of them.
+     */
     return filterSuggestions(mapPhotonResponse(await res.json(), options.settings), {
-      areas: options.settings?.deliveryAreas,
-      onlyArea: options.area ?? null,
+      radius: true,
+      rules: {
+        includedTo: Number(options.settings?.includedRadiusKm ?? DELIVERY_ZONES.includedTo),
+        maxKm: Number(options.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm),
+        fee: Number(options.settings?.outsideFee ?? DELIVERY_ZONES.fee),
+        origin: options.settings?.deliveryOrigin ?? KITCHEN_ORIGIN,
+      },
     });
   };
 

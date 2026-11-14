@@ -9,7 +9,7 @@ import { useOverlay } from '../lib/useOverlay';
 import { asset } from '../lib/assets';
 import { HeritageBand, WhatsAppIcon } from './ui';
 import { BasketBar } from './BasketBar';
-import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY, COLLECTION_POINT_ENQUIRY } from '../lib/whatsapp';
+import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY } from '../lib/whatsapp';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -322,7 +322,7 @@ function Footer() {
             <p className="font-display text-3xl font-semibold">Heritage Bites</p>
           </div>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-bone/65">
-            South African plates cooked with care, Thursdays and Fridays. Order online for collection or delivery in Rosebank and Sandton.
+            South African plates cooked with care, Thursdays and Fridays. Delivered in Sandton and Rosebank, and further afield by arrangement.
           </p>
           {/*
             Two words each, on purpose: "Call us" and "Email us" are the whole
@@ -465,7 +465,7 @@ function Footer() {
             </li>
             {/* The pages that are not part of ordering a plate. "Loyalty card"
                 used to appear here and again inside the Meals group above. */}
-            <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer quest</Link></li>
+            <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer request</Link></li>
             <li>
               {s?.channels?.ubereats?.url
                 ? <a href={s.channels.ubereats.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Uber Eats</a>
@@ -532,7 +532,6 @@ function CartDrawerPanel() {
     if (!lines.length) setConfirmClear(false);
   }, [lines.length]);
   const fulfilment = useCart((s) => s.fulfilment);
-  const setFulfilment = useCart((s) => s.setFulfilment);
   const catalog = useCatalog((s) => s.data);
   const dialogRef = useOverlay<HTMLDivElement>(() => setOpen(false));
 
@@ -548,9 +547,9 @@ function CartDrawerPanel() {
     fulfilment,
     ...(shut ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
   });
-  // Collection is the plate price; delivery adds one flat fee at checkout, so
+  // Delivery is in the plate price inside Sandton/Rosebank, so
   // the drawer shows the plates and only warns about the minimum order.
-  const belowMinimum = fulfilment === 'delivery' && subtotal < (settings?.minDeliveryOrder ?? 100);
+  const belowMinimum = subtotal < (settings?.minDeliveryOrder ?? 100);
 
   return (
     <div ref={dialogRef} className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Your basket">
@@ -577,34 +576,16 @@ function CartDrawerPanel() {
           </div>
         ) : (
           <>
-            <div className="flex gap-1 border-b border-ink/10 px-5 py-3">
-              {(['collection', 'delivery'] as const).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setFulfilment(f)}
-                  className={`flex-1 rounded-full px-3 py-2 text-xs font-semibold capitalize transition-colors ${fulfilment === f ? 'bg-ink text-bone' : 'bg-ink/5 text-ink/60 hover:bg-ink/10'}`}
-                >
-                  {f.replace('-', ' ')}
-                </button>
-              ))}
-            </div>
             {/*
-              Collection has no street address to show — it is a shadow kitchen —
-              so the drawer carries the redirect that answers the question: one
-              tap opens the WhatsApp thread where the point is confirmed.
+              The collection/delivery toggle is gone (owner, 14 Nov 2026 —
+              "there is no collection, it is delivery based"). A one-option
+              toggle is a button that cannot change anything, so the drawer
+              states the arrangement instead.
             */}
-            {fulfilment === 'collection' && (
-              <a
-                href={waHref(settings?.whatsapp, COLLECTION_POINT_ENQUIRY)}
-                target="_blank"
-                rel="noreferrer"
-                className="flex min-h-11 items-center justify-between gap-3 border-b border-ink/10 px-5 py-2 text-xs font-semibold text-ochre-deep hover:bg-ochre/10"
-              >
-                <span>Collection point · confirmed on WhatsApp</span>
-                <span aria-hidden="true">→</span>
-              </a>
-            )}
+            <div className="flex items-center gap-2 border-b border-ink/10 px-5 py-3 text-xs font-semibold text-ink/60">
+              <span aria-hidden="true">🛵</span>
+              <span>Delivered — included in Sandton &amp; Rosebank</span>
+            </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {lines.map((l) => (
@@ -634,23 +615,19 @@ function CartDrawerPanel() {
             <footer className="border-t-2 border-ink/10 px-5 py-4">
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between text-ink/60"><span>Subtotal</span><span className="font-mono">{zar(subtotal)}</span></div>
-                {fulfilment === 'delivery' && (
-                  <div className="flex justify-between text-ink/60">
-                    <span>Delivery</span>
-                    <span className="font-mono">Included</span>
-                  </div>
-                )}
+                <div className="flex justify-between text-ink/60">
+                  <span>Delivery</span>
+                  <span className="font-mono">Included</span>
+                </div>
                 <div className="flex justify-between border-t border-ink/10 pt-2 text-base font-semibold">
                   <span>Total</span>
                   <span className="font-mono">{zar(subtotal)}</span>
                 </div>
               </div>
               <p className="mt-2 text-xs text-ink/45">
-                {fulfilment === 'delivery'
-                  ? belowMinimum
-                    ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
-                    : `Delivery ${zar(settings?.deliveryFlat ?? 0)} is added at checkout.`
-                  : 'Collection — nothing is added at checkout.'}
+                {belowMinimum
+                  ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
+                  : 'Delivery included in Sandton & Rosebank — anywhere else, the fee is added at checkout.'}
               </p>
               {shut ? (
                 <a

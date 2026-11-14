@@ -58,7 +58,7 @@ const makeSub = (n = 1) => ({
 
 const order = {
   code: 'HB-0900C',
-  fulfilment: 'collection',
+  fulfilment: 'delivery',
   totals: { total: 200 },
   serviceWindow: { label: 'Thursday 12:00–13:30', isPreOrder: false },
   items: [{ qty: 2, name: 'Mogodu Plate', lineTotal: 200 }],
@@ -212,7 +212,7 @@ describe('payloads', () => {
     assert.equal(payload.title, 'New order HB-0900C');
     assert.match(payload.body, /2 plates/);
     assert.match(payload.body, /R200\.00/);
-    assert.match(payload.body, /collection/);
+    assert.match(payload.body, /delivery/i);
     assert.equal(payload.requireInteraction, true, 'a kitchen alert should not fade away');
   });
 

@@ -36,7 +36,13 @@ import {
   removeSubscription,
   saveSubscription,
 } from './lib/web-push.js';
-import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, serviceStatus, serviceWindowFor, parseSpecialServiceDays, mergeSpecialServiceDays } from './lib/service.js';
+import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, isOutsideAreaChoice, serviceStatus, serviceWindowFor, parseSpecialServiceDays, mergeSpecialServiceDays } from './lib/service.js';
+/*
+ * Distance rules live in shared/address.js so the browser and the server make
+ * the same decision from the same numbers — a basket that says R30 must be the
+ * basket the server charges R30 for.
+ */
+import { deliveryZoneFor, DELIVERY_ZONES, KITCHEN_ORIGIN } from '../shared/address.js';
 import { rateLimit, scaledMax } from './lib/rate-limit.js';
 import * as seed from './seed.js';
 import { HEAD_END, HEAD_START, headHtml, normaliseSiteUrl } from '../shared/seo.js';
@@ -257,6 +263,41 @@ function findMenu(id) {
 }
 
 /**
+ * The distance rules, assembled from settings with the shared defaults behind
+ * them.
+ *
+ * Every field is a plain number in `settings`, so the owner can change the fee
+ * or the radius without touching code — and the browser reads the same values
+ * from `/api/catalog`, which is why the basket total and the server's total
+ * cannot drift apart.
+ */
+function deliveryRules(settings = {}) {
+  return {
+    includedTo: Number(settings.includedRadiusKm ?? DELIVERY_ZONES.includedTo),
+    maxKm: Number(settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm),
+    fee: Number(settings.outsideFee ?? DELIVERY_ZONES.fee),
+    origin: settings.deliveryOrigin ?? KITCHEN_ORIGIN,
+  };
+}
+
+/**
+ * Coordinates for a delivery address.
+ *
+ * The checkout sends the map coordinates of the address the customer picked
+ * from the suggestion list, which is the only address form the map has already
+ * resolved. A hand-typed address has none, so the server falls back to the
+ * centre of the area the customer selected — deliberately generous to nobody:
+ * an unlocated address in Sandton is treated as Sandton, which is the same
+ * answer the old area rule gave. `null` means "cannot measure", never "far".
+ */
+function coordinatesFor(customer = {}) {
+  const lat = Number(customer.lat);
+  const lng = Number(customer.lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  return { lat: null, lng: null };
+}
+
+/**
  * Resolve a client basket into server-priced line items.
  * Option price deltas are taken from the server catalogue, never the client.
  */
@@ -280,6 +321,17 @@ function priceLines(clientLines) {
       }
       const chosen = [];
       let invalid = false;
+      /*
+       * Extra rand added on top of the plate price.
+       *
+       * A plate group is normally "included" — the plate price is the whole
+       * price and the component amounts mean nothing. A group marked `priced`
+       * is the exception: it is something sold *alongside* the plate (the soft
+       * drink), so its chosen item's own price is charged. Summing here, from
+       * the server's own catalogue, is what stops a tampered client adding a
+       * R25 drink for nothing.
+       */
+      let extras = 0;
       for (const group of plate.groups) {
         const picked = (raw.selections?.[group.id] ?? []).filter((id) => group.items.some((i) => i.id === id));
         if (group.required && picked.length === 0) {
@@ -292,18 +344,24 @@ function priceLines(clientLines) {
           invalid = true;
           continue;
         }
-        for (const id of picked) chosen.push({ label: group.items.find((i) => i.id === id).label });
+        for (const id of picked) {
+          const item = group.items.find((i) => i.id === id);
+          const delta = group.priced ? Number(item?.price) || 0 : 0;
+          extras += delta;
+          chosen.push({ label: item.label, priceDelta: delta });
+        }
       }
       if (invalid) continue;
 
       const qty = Math.max(1, Math.min(20, Number(raw.qty) || 1));
+      const unitPrice = Math.round((Number(plate.price) + extras) * 100) / 100;
       lines.push({
         itemId: `plate-${plate.id}`,
         name: plate.name,
-        unitPrice: plate.price,
+        unitPrice,
         qty,
         options: chosen,
-        lineTotal: Math.round(plate.price * qty * 100) / 100,
+        lineTotal: Math.round(unitPrice * qty * 100) / 100,
       });
       continue;
     }
@@ -340,9 +398,27 @@ function priceLines(clientLines) {
      * A menu card is always one complete plate. If it is linked to a plate
      * menu, the fixed plate price wins over the item price so a stale or edited
      * catalogue record cannot quietly under- or over-charge.
+     *
+     * The one exception is a `priced` option — the soft drink. It is sold
+     * alongside the plate, not included in it, so its delta is real money and
+     * must survive the plate-price override. Before this, the override wiped the
+     * whole option total and a R25 drink was charged at R0.
      */
     const plate = item.plateId ? (get('plateMenus') ?? seed.plateMenus).find((p) => p.id === item.plateId) : null;
-    if (plate) unitPrice = plate.price;
+    if (plate) {
+      const extras = (item.options ?? [])
+        .filter((opt) => opt.priced)
+        .reduce((sum, opt) => {
+          const pickedIds = raw.options?.[opt.id] ?? null;
+          if (!pickedIds) return sum;
+          const ids = Array.isArray(pickedIds) ? pickedIds : [pickedIds];
+          return (
+            sum +
+            ids.reduce((n, id) => n + (Number(opt.choices.find((c) => c.id === id)?.priceDelta) || 0), 0)
+          );
+        }, 0);
+      unitPrice = Math.round((Number(plate.price) + extras) * 100) / 100;
+    }
 
     lines.push({
       itemId: item.id,
@@ -358,28 +434,49 @@ function priceLines(clientLines) {
 }
 
 /** One place where totals are decided. Every money path goes through this. */
-function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
+function quote(clientLines, { fulfilment = 'delivery', code = '', customer = {} } = {}) {
   const { lines, errors } = priceLines(clientLines);
-  if (!['collection', 'delivery'].includes(fulfilment)) errors.push('Please choose collection or delivery.');
+  /*
+   * Delivery only (owner, 14 Nov 2026 — "there is no collection, it is delivery
+   * based"). Collection is gone rather than hidden, so a stale tab that still
+   * sends `collection` is corrected to delivery instead of being priced as a
+   * counter sale that no longer exists.
+   */
+  if (fulfilment !== 'delivery') fulfilment = 'delivery';
   const settings = getSettings();
   const subtotalCents = lines.reduce((s, l) => s + toCents(l.unitPrice) * l.qty, 0);
 
   const disc = applyDiscountCode(code, subtotalCents, get('discountCodes'));
 
   /*
-   * Collection is the plate price exactly; delivery adds the one flat fee for
-   * the Rosebank/Sandton run. It is charged on top of the plates rather than
-   * folded into them, so a customer who collects is never paying for a
-   * delivery they did not ask for. The R100 minimum and the two approved
-   * delivery areas still apply.
+   * Delivery is in the plate price inside Sandton/Rosebank. Outside that ring
+   * the order is still served — at a fee — and past the hard limit it is
+   * refused outright, because no fee makes a 60 km run make sense.
+   *
+   * The fee needs coordinates, and `/api/quote` is the only money path that can
+   * be called before an address exists. So: no coordinates means "assume the
+   * included ring" and charge nothing, while `/api/orders` — where a street
+   * address is mandatory and is geocoded — is where the surcharge and the
+   * refusal are actually applied. That keeps the running total in the basket
+   * honest for the common case and still stops an out-of-range order.
    */
   let deliveryCents = 0;
-  if (fulfilment === 'delivery') {
-    const fee = deliveryFeeCents(subtotalCents, settings);
-    if (fee < 0) {
-      errors.push(`Delivery orders start at R${Number(settings.minDeliveryOrder ?? 100).toFixed(2)}.`);
-    } else {
-      deliveryCents = fee;
+  /* Set when the address is out of range, so the API can answer with something
+     the checkout can act on and not only a sentence in `errors`. */
+  let outOfRange = null;
+  const minOrder = Number(settings.minDeliveryOrder ?? 100);
+  if (subtotalCents < toCents(minOrder)) {
+    errors.push(`The minimum order is R${minOrder.toFixed(2)}.`);
+  } else {
+    const rules = deliveryRules(settings);
+    const zone = deliveryZoneFor(customer?.lat, customer?.lng, rules);
+    if (zone.zone === 'refused') {
+      outOfRange = { distanceKm: zone.distanceKm, maxDeliveryKm: rules.maxKm };
+      errors.push(
+        `That address is ${zone.distanceKm} km away, and we only deliver within ${rules.maxKm} km. We would rather say no now than take your money for food we cannot bring you.`,
+      );
+    } else if (zone.zone === 'surcharge') {
+      deliveryCents = toCents(zone.fee);
     }
   }
 
@@ -389,7 +486,7 @@ function quote(clientLines, { fulfilment = 'collection', code = '' } = {}) {
   totals.totalCents = Math.max(0, totals.subtotalCents - totals.discountCents + deliveryCents);
   totals.total = fromCents(totals.totalCents);
 
-  return { lines, errors, totals, discount: disc };
+  return { lines, errors, totals, discount: disc, outOfRange };
 }
 
 function publicOrder(order) {
@@ -650,25 +747,30 @@ app.get('/api/search', LIMITS.search, (req, res) => {
 });
 
 app.post('/api/quote', LIMITS.quote, (req, res) => {
-  const { items, fulfilment, code } = req.body ?? {};
-  const { lines, errors, totals, discount } = quote(items, { fulfilment, code });
-  if (errors.length) return res.status(422).json({ errors });
+  const { items, code = '', customer = {} } = req.body ?? {};
+  const { lines, errors, totals, discount, outOfRange } = quote(items, { fulfilment: 'delivery', code, customer });
+  if (errors.length) {
+    return res.status(422).json({ errors, ...(outOfRange ? { outOfRange: true, ...outOfRange } : {}) });
+  }
   res.json({ lines, totals, discount: discount.ok ? discount.applied : null, discountError: discount.ok ? null : discount.message ?? discount.reason });
 });
 
 /* ------------------------------ Checkout ------------------------------ */
 
 /*
- * Cash on collection is the only cash option the business confirmed: it is a
- * shadow kitchen, so there is no counter to pay at and no cash-on-delivery
- * arrangement. Everything else is paid online through Yoco.
+ * Cash is paid to the driver, and card is paid on Yoco's hosted page.
  *
- * `card` is kept as the stored method name so existing orders still read
- * correctly, but nothing about a card is collected here any more — the customer
- * is sent to Yoco's hosted page, and a verified webhook is what marks the order
- * paid.
+ * `cash-on-collection` was the old stored name for cash, from when collection
+ * existed. Collection has been removed, so the method is stored as `cash` and
+ * the old name is still accepted from a cached client and normalised — a
+ * customer with a stale bundle is not refused over a string.
  */
-const PAYMENT_METHODS = ['card', 'cash-on-collection'];
+const PAYMENT_METHODS = ['card', 'cash', 'cash-on-collection'];
+
+/** The one method name the rest of the system sees. */
+function normalisePaymentMethod(method) {
+  return method === 'cash-on-collection' ? 'cash' : method;
+}
 
 /**
  * Card details must never arrive on this API.
@@ -682,15 +784,20 @@ function cardFieldsSent(payment) {
 }
 
 app.post('/api/orders', LIMITS.order, async (req, res) => {
-  const { items, fulfilment = 'collection', customer = {}, code = '', payment = {}, channel = 'card' } = req.body ?? {};
+  const { items, customer = {}, code = '', payment = {}, channel = 'card' } = req.body ?? {};
+  /* Delivery only. A client that still sends `collection` is corrected, not
+     rejected, so a cached tab does not strand a customer at a dead option. */
+  const fulfilment = 'delivery';
 
-  const { lines, errors, totals, discount } = quote(items, { fulfilment, code });
+  const { lines, errors, totals, discount, outOfRange } = quote(items, { fulfilment, code, customer });
   /*
    * Pricing errors come first: a basket whose only line is invalid has no
    * lines, and "your basket is empty" would hide the actual reason (an unknown
    * plate, a missing starch) from the customer.
    */
-  if (errors.length) return res.status(422).json({ errors });
+  if (errors.length) {
+    return res.status(422).json({ errors, ...(outOfRange ? { outOfRange: true, ...outOfRange } : {}) });
+  }
   if (!lines.length) return res.status(422).json({ errors: ['Your basket is empty.'] });
 
   /*
@@ -724,24 +831,45 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
   if (!customer.name?.trim() || !customer.phone?.trim()) {
     return res.status(422).json({ errors: ['Please add your name and a contact number.'] });
   }
-  if (fulfilment === 'delivery') {
-    if (!customer.address?.trim()) {
-      return res.status(422).json({ errors: ['Please add a delivery address.'] });
+  /*
+   * Every order is a delivery now, so the address is checked on every order.
+   *
+   * The boundary is a radius, not a suburb list (owner, 14 Nov 2026). Inside
+   * Sandton/Rosebank the plate price already covers the trip; outside it a fee
+   * is added; past the hard limit the order is refused. The suburb select is
+   * only a tie-breaker for the old copy — it can no longer refuse an order on
+   * its own, because a customer 20 km out in Bryanston is a paying delivery,
+   * not an error.
+   */
+  if (!customer.address?.trim()) {
+    return res.status(422).json({ errors: ['Please add a delivery address.'] });
+  }
+  {
+    const rules = deliveryRules(getSettings());
+    const points = coordinatesFor(customer);
+    const zone = deliveryZoneFor(points.lat, points.lng, rules);
+    if (zone.zone === 'refused') {
+      return res.status(422).json({
+        errors: [
+          `That address is about ${zone.distanceKm} km from the kitchen, and we deliver within ${rules.maxKm} km. We would rather say no now than take your money for food we cannot bring you.`,
+        ],
+        outOfRange: true,
+        distanceKm: zone.distanceKm,
+        maxDeliveryKm: rules.maxKm,
+      });
     }
     /*
-     * The delivery boundary is enforced, not just described. A Rosebank/Sandton
-     * kitchen cannot promise a delivery to Pretoria, so the order is refused
-     * with a route to collection rather than accepted and cancelled later.
+     * The suburb named in the typed address still has to match the one chosen —
+     * that check caught a real mistake and costs nothing to keep.
      *
-     * The typed address is checked against the area the customer *selected*,
-     * not merged with it. Matching the whole string used to answer "which area
-     * is this" by first match, so an address that said Rosebank was silently
-     * relabelled to Rosebank while the customer believed they had chosen
-     * Sandton — a delivery outside the boundary they thought they were inside.
+     * It does NOT apply to the "outside Sandton & Rosebank" choice: that is the
+     * honest answer for anyone the two-suburb list does not cover, and refusing
+     * it would refuse every customer the outside fee exists for. Their distance,
+     * already checked above, is what decides whether they can be served.
      */
     const chosen = String(customer.suburb ?? '').trim();
     const named = areasNamedIn(customer.address, getSettings());
-    if (chosen && named.length && !named.some((area) => area.toLowerCase() === chosen.toLowerCase())) {
+    if (!isOutsideAreaChoice(chosen) && chosen && named.length && !named.some((area) => area.toLowerCase() === chosen.toLowerCase())) {
       return res.status(422).json({
         errors: [
           `That address is in ${named.join(' and ')}, but you chose ${chosen}. Change the delivery area, or give us a ${chosen} address.`,
@@ -749,20 +877,21 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
         deliveryAreas: getSettings()?.deliveryAreas ?? [],
       });
     }
-    /* The address itself decides where the food goes; the select only breaks a tie
-       when the address carries no suburb at all (plenty of real ones do not). */
-    const area = deliveryAreaFor(customer.address, getSettings()) ?? deliveryAreaFor(chosen, getSettings());
-    if (!area) {
-      return res.status(422).json({
-        errors: [`We deliver in ${deliveryAreasLabel(getSettings())} only. Choose collection, or contact us on WhatsApp to arrange something else.`],
-        deliveryAreas: getSettings()?.deliveryAreas ?? [],
-      });
+    /*
+     * Keep the customer's own answer. The address can refine it to one of the
+     * named areas when it clearly names one; otherwise "other" stays, because it
+     * is the truth and the delivery fee was already priced from the distance.
+     */
+    if (!isOutsideAreaChoice(chosen)) {
+      const area = deliveryAreaFor(customer.address, getSettings()) ?? deliveryAreaFor(chosen, getSettings());
+      if (area) customer.suburb = area;
     }
-    customer.suburb = area;
   }
   if (!PAYMENT_METHODS.includes(payment.method)) {
     return res.status(422).json({ errors: ['Unknown payment method.'] });
   }
+  /* From here down there is one name for cash, whatever the client called it. */
+  payment.method = normalisePaymentMethod(payment.method);
   /*
    * Cash is accepted on delivery too. The kitchen carries a Yoco card machine
    * and a cash float, so a delivery customer can choose either — the old rule
@@ -880,7 +1009,7 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
         errors: [started.message],
         code: started.code,
         /* The customer can still be paid-up another way; say so. */
-        fallback: { whatsapp: true, cashOnCollection: fulfilment === 'collection' },
+        fallback: { whatsapp: true, cashOnDelivery: true },
       });
     }
     order.payment.redirectUrl = started.redirectUrl;
@@ -888,7 +1017,7 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
     order.payment.mode = started.mode;
     appendTimeline(order, 'pending', `Payment started on Yoco (${order.code})`);
   } else {
-    appendTimeline(order, 'pending', 'Payment method: cash on collection');
+    appendTimeline(order, 'pending', 'Payment method: cash on delivery');
   }
 
   const settings = getSettings();

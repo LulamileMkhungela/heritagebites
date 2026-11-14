@@ -116,13 +116,13 @@ describe('order lifecycle', () => {
   test('timeline marks progress and honours fulfilment', () => {
     const order = {
       status: 'preparing',
-      fulfilment: 'collection',
+      fulfilment: 'delivery',
       timeline: [{ status: 'pending', at: 'x' }, { status: 'accepted', at: 'y' }, { status: 'preparing', at: 'z' }],
     };
     const tl = buildTimeline(order);
     assert.equal(tl.filter((s) => s.done).length, 3);
     assert.equal(tl.find((s) => s.current).status, 'preparing');
-    assert.equal(tl.some((s) => s.status === 'out-for-delivery'), false, 'collection timelines omit delivery stages');
+    assert.equal(tl.some((s) => s.status === 'out-for-delivery'), false, 'a non-delivery timeline omits delivery stages');
     assert.deepEqual(tl.map((s) => s.status), ['pending', 'accepted', 'preparing'], 'only reached statuses are shown');
   });
 

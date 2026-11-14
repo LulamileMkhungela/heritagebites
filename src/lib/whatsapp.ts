@@ -50,7 +50,7 @@ const MAX_LINES = 12;
 export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {}): string {
   const count = lines.reduce((n, l) => n + l.qty, 0);
   const subtotal = lines.reduce((n, l) => n + l.unitPrice * l.qty, 0);
-  const fulfilment = opts.fulfilment ?? 'collection';
+  const fulfilment = opts.fulfilment ?? 'delivery';
 
   const rows = lines.slice(0, MAX_LINES).map((l) => {
     const picks = l.picks.length ? `\n   ${l.picks.map((p) => p.label).join(', ')}` : '';
@@ -66,20 +66,13 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
   parts.push(rows.join('\n'));
   parts.push('');
   /*
-   * Delivery is charged on top of the plates now, so the message must not claim
-   * it is included. The fee is added by the kitchen on the quote it confirms in
-   * this chat; the basket line stays the plate subtotal.
+   * Every order is a delivery now (owner, 14 Nov 2026). Inside Sandton and
+   * Rosebank the plate price already covers the trip, so the message states the
+   * plates and names the address; the kitchen adds any out-of-area fee on the
+   * quote it confirms in this same chat.
    */
-  parts.push(
-    fulfilment === 'delivery'
-      ? `Plates: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'}) + delivery`
-      : `Total: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'}, collection)`,
-  );
-  parts.push(
-    fulfilment === 'delivery'
-      ? `I would like it delivered${opts.customer?.suburb ? ` in ${opts.customer.suburb}` : ''}.`
-      : 'I would like to collect it.',
-  );
+  parts.push(`Plates: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'})`);
+  parts.push(`I would like it delivered${opts.customer?.suburb ? ` in ${opts.customer.suburb}` : ''}.`);
 
   const name = opts.customer?.name?.trim();
   const phone = opts.customer?.phone?.trim();
@@ -108,9 +101,7 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
    */
   parts.push(
     opts.payment === 'cash'
-      ? fulfilment === 'delivery'
-        ? 'I will pay cash on delivery — please confirm this order.'
-        : 'I will pay cash on collection — please confirm this order.'
+      ? 'I will pay cash on delivery — please confirm this order.'
       : 'I will pay by Yoco — please confirm this order and send me the payment link.',
   );
 
@@ -163,12 +154,12 @@ export function loyaltyEnquiry(phone?: string): string {
 }
 
 /**
- * Asked from a collection order: the kitchen is a shadow kitchen with no public
- * street address, so "where do I collect?" is answered by a person, on WhatsApp,
- * with the exact point. Every collection surface links here.
+ * Asked from an order placed before collection was removed (owner, 14 Nov
+ * 2026). No surface offers collection any more, but a stored order's tracking
+ * page still needs a way to ask where to meet the kitchen.
  */
 export const COLLECTION_POINT_ENQUIRY =
-  'Hi Heritage Bites! Please confirm the exact collection point for my order.';
+  'Hi Heritage Bites! My order was placed for collection before you moved to delivery — please confirm where to meet you.';
 
 /** Asked from the WhatsApp channel card, and from the footer. */
 export const CHANNEL_ENQUIRY =

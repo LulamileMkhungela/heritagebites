@@ -19,7 +19,7 @@ import { basketHref } from '../lib/whatsapp';
  * inside the order tracking page (that basket is already an order), or while
  * the basket drawer is open (the drawer is showing the same numbers).
  *
- * Collection is the plate price; delivery adds one flat fee, so there
+ * Delivery is in the plate price inside Sandton/Rosebank, so there
  * is no extra delivery line to add — the bar says so rather than leaving the
  * customer to wonder what will be added at the next step.
  */
@@ -63,10 +63,8 @@ export function BasketBar() {
   if (hidden) return null;
 
   const settings = catalog?.settings;
-  /* Delivery has a minimum order; collection has none. Say which one applies. */
-  const belowMinimum = fulfilment === 'delivery' && subtotal < (settings?.minDeliveryOrder ?? 100);
-  /* The fee itself is added at checkout, where the address is known. */
-  const deliveryFee = Number(settings?.deliveryFlat ?? 0);
+  /* Every order is a delivery now, so the minimum always applies. */
+  const belowMinimum = subtotal < (settings?.minDeliveryOrder ?? 100);
 
   return (
     <>
@@ -86,24 +84,21 @@ export function BasketBar() {
                 <span className="text-ochre-deep" role="status">✓ {flash}</span>
               ) : (
                 <>
-                  {count} {count === 1 ? 'plate' : 'plates'} · {fulfilment === 'delivery' ? 'delivery' : 'collection'}
+                  {count} {count === 1 ? 'plate' : 'plates'} · delivery
                 </>
               )}
             </span>
             <span className="flex flex-wrap items-baseline gap-x-2">
               <span className="font-display text-xl font-bold leading-tight text-ochre-deep tabular-nums">{zar(subtotal)}</span>
               {/*
-                The second line follows the basket, not the business. It used to
-                say "Delivery included" whatever the customer had chosen, which
-                reads as nonsense on a collection order — the delivery is not
-                included in anything they are collecting.
+                One line, always true: delivery is in the plate price for the
+                Sandton/Rosebank run, and the fee for anywhere further is worked
+                out at checkout where the address is known.
               */}
               <span className="text-xs text-ink/55">
-                {fulfilment === 'delivery'
-                  ? belowMinimum
-                    ? `Add ${zar((settings?.minDeliveryOrder ?? 100) - subtotal)} for delivery`
-                    : `${deliveryFee > 0 ? `+ ${zar(deliveryFee)} delivery` : 'Delivery included'} at checkout`
-                  : 'Collection — nothing extra'}
+                {belowMinimum
+                  ? `Add ${zar((settings?.minDeliveryOrder ?? 100) - subtotal)} to reach the R${settings?.minDeliveryOrder ?? 100} minimum`
+                  : 'Delivery included in Sandton & Rosebank'}
               </span>
             </span>
           </button>

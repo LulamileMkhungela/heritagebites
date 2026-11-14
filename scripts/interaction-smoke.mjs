@@ -107,6 +107,41 @@ function boot(path, { seedCart } = {}) {
   };
   w.confirm = () => true;
   w.alert = () => {};
+  /*
+   * Geolocation, answered instantly.
+   *
+   * jsdom has none, and a real browser would show a permission prompt a test
+   * cannot click. The checkout's location button is what makes the 50 km rule
+   * enforceable, so the suite has to be able to exercise it: the stub resolves
+   * to Sandton unless a test stages a different position or a refusal.
+   */
+  w.__geo = { lat: -26.1075, lng: 28.055 };
+  w.__geoDenied = false;
+  /*
+   * Every call's options, in order. The site's claim is that it asks for a
+   * *precise* fix — that is what the radius needs — and "does it really" is only
+   * answerable by looking at what was passed to the browser.
+   */
+  w.__geoCalls = [];
+  /* Simulates a device that cannot answer a high-accuracy request at all. */
+  w.__geoHighAccurateUnavailable = false;
+  Object.defineProperty(w.navigator, 'geolocation', {
+    configurable: true,
+    value: {
+      getCurrentPosition: (ok, fail, options) => {
+        w.__geoCalls.push({ ...options });
+        setTimeout(() => {
+          if (w.__geoDenied) fail?.({ code: 1, message: 'denied', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 });
+          else if (options?.enableHighAccuracy && w.__geoHighAccurateUnavailable) {
+            fail?.({ code: 3, message: 'timeout', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 });
+          } else {
+            /* A high-accuracy fix is metres; a coarse one is the suburb centre. */
+            ok({ coords: { latitude: w.__geo.lat, longitude: w.__geo.lng, accuracy: options?.enableHighAccuracy ? 12 : 2000 } });
+          }
+        }, 0);
+      },
+    },
+  });
   if (seedCart) w.localStorage.setItem('hb.cart', JSON.stringify(seedCart));
 
   w.eval(bundle);
@@ -151,7 +186,7 @@ function boot(path, { seedCart } = {}) {
     return d ? d.contains(doc.activeElement) : false;
   };
 
-  return { w, doc, text, all, byText, byLabel, click, waitFor, setInput, scrolls, press, dialogs, focusInsideDialog, errors, close: () => w.close() };
+  return { w, doc, text, all, byText, byLabel, click, waitFor, setInput, scrolls, press, dialogs, focusInsideDialog, errors, seedCart, close: () => w.close() };
 }
 
 /* ------------------------------------------------------------------ */
@@ -162,7 +197,7 @@ const s1 = boot('/menu');
 await s1.waitFor(() => /The full menu/i.test(s1.text()), 'menu page');
 
 const arch = boot('/menu');
-await arch.waitFor(() => /Heritage Pots/i.test(arch.text()), 'archive sections', 15000);
+await arch.waitFor(() => /Kasi Fast Food/i.test(arch.text()), 'archive sections', 15000);
 
 await step('the menu sells exactly the two approved plate categories', async () => {
   for (const c of ['Traditional Plates', 'Contemporary Plates']) {
@@ -176,9 +211,15 @@ await step('the menu sells exactly the two approved plate categories', async () 
    */
   const nav = s1.doc.querySelector('nav[aria-label="Meal categories"]');
   const navText = nav?.textContent ?? '';
-  for (const name of [/Heritage Pots/, /Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
+  /*
+   * Owner, 14 Nov 2026: Heritage Pots is hidden — commented out in the seed, not
+   * deleted, so the section and its copy are one uncomment away. The remaining
+   * archive chips must still be there and the hidden one must NOT be.
+   */
+  for (const name of [/Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
     if (!name.test(navText)) throw new Error(`the archive category chip is missing from the menu nav: ${name}`);
   }
+  if (/Heritage Pots/i.test(arch.text())) throw new Error('Heritage Pots is still on the page after being hidden');
   /*
    * Modern Favourites was dropped by the owner: every dish in it — short ribs,
    * wings — is already a Contemporary plate, and a "coming soon" tag on food
@@ -194,10 +235,10 @@ await step('the menu sells exactly the two approved plate categories', async () 
   const archiveSections = [...arch.doc.querySelectorAll('main > section')].filter((section) =>
     section.querySelector('[data-coming-soon]'),
   );
-  if (archiveSections.length !== 4) {
-    throw new Error(`expected 4 archive sections, found ${archiveSections.length}`);
+  if (archiveSections.length !== 3) {
+    throw new Error(`expected 3 archive sections, found ${archiveSections.length}`);
   }
-  return '2 sellable sections plus 4 archive chips';
+  return '2 sellable sections plus 3 archive chips, Heritage Pots hidden';
 });
 
 await step('a category heading carries its plate count inline and folds its section', async () => {
@@ -382,7 +423,7 @@ await step('About Us contains vision, mission and story without separate nav lin
 await step('the kitchen archive reads like the menu but cannot be ordered', async () => {
   const blocks = [...arch.doc.querySelectorAll('[data-coming-soon]')];
   if (!blocks.length) throw new Error('the archive sections are missing');
-  if (blocks.length !== 4) throw new Error(`expected 4 archive sections, found ${blocks.length}`);
+  if (blocks.length !== 3) throw new Error(`expected 3 archive sections (Heritage Pots is hidden), found ${blocks.length}`);
   const block = blocks[0];
   const archiveSections = blocks.map((grid) => grid.closest('section'));
 
@@ -402,9 +443,11 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
   if (arch.doc.querySelectorAll('[data-coming-soon] a').length) throw new Error('an archive card contains a link');
 
   const body = archiveSections.map((section) => section?.textContent ?? '').join(' ');
-  for (const name of [/Heritage Pots/, /Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
+  for (const name of [/Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
     if (!name.test(body)) throw new Error(`archive category missing: ${name}`);
   }
+  /* Hidden by the owner (14 Nov 2026), commented out in the seed, not deleted. */
+  if (/Heritage Pots/i.test(body)) throw new Error('Heritage Pots is still rendered after being hidden');
   if (/Cold & Warm|Mageu|Rooibos/i.test(body)) throw new Error('unapproved drinks must stay commented out');
   /*
    * Dishes that are already on sale have no business in a "coming soon"
@@ -432,17 +475,26 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
   const placeholders = [...block.querySelectorAll('img')].filter((img) => img.getAttribute('src')?.includes('placeholder'));
   if (placeholders.length) throw new Error('archive cards are showing placeholder images instead of photos');
 
-  return '4 categories, priced cards, 0 order controls';
+  return '3 categories, priced cards, 0 order controls';
 });
 
 await step('clicking an archive category chip jumps to its section', async () => {
-  const chip = arch.byText('nav[aria-label="Meal categories"] button', /Heritage Pots/i)[0];
-  if (!chip) throw new Error('no Heritage Pots chip in the category nav');
+  /*
+   * Heritage Pots used to be the chip under test; the owner hid that category on
+   * 14 Nov 2026, so the behaviour is asserted on the first archive chip that is
+   * still published. The behaviour is the same one: the chip becomes active and
+   * its section exists to jump to.
+   */
+  const chip = arch.byText('nav[aria-label="Meal categories"] button', /Kasi Fast Food/i)[0];
+  if (!chip) throw new Error('no archive chip in the category nav');
   arch.click(chip);
   await new Promise((r) => setTimeout(r, 200));
   if (chip.getAttribute('aria-pressed') !== 'true') throw new Error('the chip did not become the active category');
-  if (!arch.doc.getElementById('menu-category-heritage-pots')) throw new Error('the archive section has no anchor to jump to');
-  return 'chip selects Heritage Pots and its section exists';
+  if (!arch.doc.getElementById('menu-category-kasi-fast-food')) throw new Error('the archive section has no anchor to jump to');
+  if (arch.byText('nav[aria-label="Meal categories"] button', /Heritage Pots/i)[0]) {
+    throw new Error('a chip for the hidden Heritage Pots category is still in the nav');
+  }
+  return 'chip selects the archive section, and the hidden category is absent';
 });
 
 await step('scrolling to a meal category highlights its sticky category chip', async () => {
@@ -598,8 +650,11 @@ const s7 = boot('/checkout', {
  *  - "oxf" on its own resolves to the street Oxford Road, which has no `suburb`
  *    tag, only a city. Placing it needs the coordinates.
  *
- * Plus a Pretoria street, which the kitchen does not deliver to, to prove
- * out-of-area results never reach the list.
+ * Plus Bryanston (9 km — outside the two included suburbs, inside the radius),
+ * Heidelberg (52 km — just outside it) and a Polokwane street (280 km), to prove
+ * the list is cut by distance rather than by suburb name. Pretoria would not do:
+ * it is 44 km out, so under the owner's rule it is genuinely deliverable with a
+ * fee, and a test that expected it dropped would be asserting the old rule.
  */
 const house = (osmId, lon, lat, housenumber, street, suburb, city) => ({
   type: 'Feature',
@@ -612,7 +667,15 @@ const PHOTON_FIXTURE = {
   features: [
     house(111, 28.05, -26.1, '12', 'Oxford Road', 'Illovo', 'Sandton'),
     house(222, 28.04, -26.14, '15', 'Oxford Road', 'Rosebank', 'Johannesburg'),
-    house(333, 28.19, -25.75, '9', 'Church Street', 'Pretoria Central', 'Pretoria'),
+    /*
+     * Bryanston: outside the two included suburbs, 8.8 km from the kitchen. The
+     * owner's rule is a 50 km radius with a fee outside Sandton/Rosebank, so this
+     * must be offered and priced — not hidden. It used to be absent entirely,
+     * because the geocoder was bounded to the two suburbs.
+     */
+    house(444, 28.0207, -26.0515, '1', 'Bryanston Drive', 'Bryanston', 'Johannesburg'),
+    /* Heidelberg: 52 km. Inside the square search box, outside the circle. */
+    house(555, 28.3586, -26.5047, '1', 'Church Street', 'Heidelberg', 'Heidelberg'),
   ],
 };
 
@@ -627,8 +690,8 @@ const PHOTON_STREET_FIXTURE = {
     },
     {
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: [28.19, -25.75] },
-      properties: { osm_type: 'W', osm_id: 555, name: 'Church Street', city: 'Pretoria', postcode: '0002', osm_key: 'highway' },
+      geometry: { type: 'Point', coordinates: [29.4689, -23.9045] },
+      properties: { osm_type: 'W', osm_id: 555, name: 'Church Street', city: 'Polokwane', postcode: '0699', osm_key: 'highway' },
     },
     /*
      * The owner's complaint: a Johannesburg CBD result with no suburb tag used to
@@ -698,14 +761,17 @@ await step('typing a delivery address offers OpenStreetMap suggestions', async (
   await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Address suggestions"]'), 'the suggestion list', 6000);
   const options = [...s7.doc.querySelectorAll('[role="option"]')];
   /*
-   * The fixture holds three results — Sandton, Rosebank and Pretoria. Only the
-   * two the kitchen can drive to may be offered: an out-of-area address must not
-   * appear and then be rejected after the customer has picked it.
+   * The fixture holds four places: Sandton, Rosebank, Bryanston and Heidelberg.
+   * Everything inside 50 km is offered — including Bryanston, which is neither of
+   * the two included suburbs — because delivery there costs a fee, and refusing
+   * to offer it hid the fee customers from the rule that prices them. Heidelberg
+   * (52 km) must not be offered: the list stops where the kitchen stops.
    */
-  if (options.length !== 2) throw new Error(`expected the 2 in-area suggestions, saw ${options.length}`);
-  if (/Pretoria/.test(s7.doc.querySelector('[role="listbox"]').textContent ?? '')) {
-    throw new Error('an address outside Rosebank and Sandton was offered');
-  }
+  if (options.length !== 3) throw new Error(`expected the 3 reachable suggestions, saw ${JSON.stringify(options.map((o) => o.textContent))}`);
+  const listed = s7.doc.querySelector('[role="listbox"]').textContent ?? '';
+  if (/Polokwane/.test(listed)) throw new Error('an address 280 km away was offered');
+  if (/Heidelberg/.test(listed)) throw new Error('an address past the 50 km limit was offered');
+  if (!/Bryanston/.test(listed)) throw new Error('a Bryanston address inside the radius was not offered');
   if (!/Sandton delivery/.test(options[0].textContent ?? '')) throw new Error('the suggestions do not say which are inside the delivery area');
   if (!/OpenStreetMap/.test(s7.doc.querySelector('[role="listbox"]')?.parentElement?.textContent ?? '')) {
     throw new Error('OpenStreetMap attribution is missing');
@@ -723,10 +789,17 @@ await step('Rosebank is preselected, and there is no empty "choose an area" row'
   if (!select) throw new Error('no delivery area select');
 
   const values = [...select.options].map((o) => o.value);
-  if (values.join(',') !== 'Rosebank,Sandton') throw new Error(`unexpected area options: ${JSON.stringify(values)}`);
+  /*
+   * Two included suburbs plus "somewhere else". The third option is what makes the
+   * radius usable: with only two, a Bryanston customer had to claim Sandton and
+   * was then refused for contradicting themselves.
+   */
+  if (values.length !== 3) throw new Error(`unexpected area options: ${JSON.stringify(values)}`);
+  if (values[0] !== 'Rosebank' || values[1] !== 'Sandton') throw new Error(`unexpected area options: ${JSON.stringify(values)}`);
+  if (!/^other/i.test(values[2])) throw new Error(`no "somewhere else" option: ${JSON.stringify(values)}`);
   if (values.includes('')) throw new Error('an empty "Choose an area" option is still offered');
   if (select.value !== 'Rosebank') throw new Error(`the checkout opens on "${select.value}", not Rosebank`);
-  return 'Rosebank preselected, two areas, no empty row';
+  return 'Rosebank preselected, two included suburbs + Other, no empty row';
 });
 
 await step('the other delivery area is still searchable while Rosebank is selected', async () => {
@@ -748,8 +821,9 @@ await step('the other delivery area is still searchable while Rosebank is select
   const shown = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
   if (!shown.some((text) => /Illovo, Sandton/.test(text))) throw new Error('the Sandton address is missing while Rosebank is selected');
   if (!shown.some((text) => /Rosebank/.test(text))) throw new Error('the Rosebank address is missing');
-  if (shown.some((text) => /Pretoria/.test(text))) throw new Error('an address outside the delivery areas was offered');
-  return `${shown.length} in-area result(s), both areas`;
+  if (shown.some((text) => /Polokwane/.test(text))) throw new Error('an address outside the delivery radius was offered');
+  if (shown.some((text) => /Heidelberg/.test(text))) throw new Error('an address past the 50 km limit was offered');
+  return `${shown.length} reachable result(s), both included areas`;
 });
 
 await step('typing a house number and a half-typed street still finds the address', async () => {
@@ -784,9 +858,17 @@ await step('typing a house number and a half-typed street still finds the addres
   if (!rosebank) throw new Error(`no Rosebank suggestion for "173 oxf": ${JSON.stringify(options)}`);
   /* The number the customer typed must survive the fallback. */
   if (!/^\s*173 Oxford Road/.test(rosebank)) throw new Error(`the house number was dropped: ${rosebank}`);
-  if (/Pretoria/.test(options.join(' '))) throw new Error('an address outside the delivery areas was offered');
+  if (/Polokwane/.test(options.join(' '))) throw new Error(`an address outside the delivery radius was offered: ${JSON.stringify(options)}`);
+  if (/Heidelberg/.test(options.join(' '))) throw new Error(`an address past the 50 km limit was offered: ${JSON.stringify(options)}`);
   /* Nor a Johannesburg CBD street that the map left untagged. */
-  if (/2001|Johannesburg · 2001/.test(options.join(' '))) throw new Error('a Johannesburg CBD address was offered');
+  if (/2001|Johannesburg · 2001/.test(options.join(' '))) throw new Error(`a Johannesburg CBD address was offered: ${JSON.stringify(options)}`);
+  /*
+   * Exactly the Rosebank street and nothing else.
+   *
+   * The CBD street (no suburb tag alike) is now rejected by distance as well as
+   * by tag, but the street fixture also carries a Pretoria result — this asserts
+   * the radius, not merely the old suburb list.
+   */
   if (options.length !== 1) throw new Error(`expected exactly the Rosebank street, saw ${JSON.stringify(options)}`);
 
   const button = [...s7.doc.querySelectorAll('[role="option"]')]
@@ -810,9 +892,15 @@ await step('picking a suggestion moves the delivery area to match the address', 
   const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Oxfor');
-  await s7.waitFor(() => (s7.doc.querySelectorAll('[role="option"]').length ?? 0) >= 2, 'both areas offered again', 6000);
+  await s7.waitFor(
+    () => [...s7.doc.querySelectorAll('[role="option"]')].some((o) => /Illovo, Sandton/.test(o.textContent ?? '')),
+    'both areas offered again',
+    6000,
+  );
 
-  const [sandton] = [...s7.doc.querySelectorAll('[role="option"]')];
+  /* Find the Sandton result by its text: the list order is the map's, not ours. */
+  const sandton = [...s7.doc.querySelectorAll('[role="option"]')].find((o) => /Illovo, Sandton/.test(o.textContent ?? ''));
+  if (!sandton) throw new Error('the Sandton suggestion disappeared');
   const button = sandton.querySelector('button');
   button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));
 
@@ -825,6 +913,242 @@ await step('picking a suggestion moves the delivery area to match the address', 
   if (!select) throw new Error('no delivery area select');
   if (select.value !== 'Sandton') throw new Error(`the area was not autofilled, it is "${select.value}"`);
   return 'address and area autofilled from the picked result';
+});
+
+
+await step('a Bryanston address is offered, sets the area to "Other", and is priced', async () => {
+  /*
+   * The owner's fix, end to end: "delivery area add other so the 50km radius can
+   * apply". This is the customer who had no path through the form before — a real
+   * address outside Rosebank and Sandton. It must be findable, must move the select
+   * to "Other" rather than leaving a lie in it, and must show the fee rather than
+   * silently treating the delivery as included.
+   */
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
+  s7.setInput(input, '1 Bryanston');
+  await s7.waitFor(() => {
+    const list = s7.doc.querySelector('[role="listbox"]');
+    return list && /Bryanston/.test(list.textContent ?? '');
+  }, 'a Bryanston suggestion', 6000);
+
+  const option = [...s7.doc.querySelectorAll('[role="option"]')].find((o) => /Bryanston/.test(o.textContent ?? ''));
+  if (!option) throw new Error('no Bryanston result to pick');
+  option.querySelector('button').dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));
+
+  await s7.waitFor(() => {
+    const field = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+    return /Bryanston/.test(field?.value ?? '');
+  }, 'the Bryanston address to autofill', 4000);
+
+  const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
+  if (!select) throw new Error('no delivery area select');
+  if (!/^other/i.test(select.value)) throw new Error(`the area was left on "${select.value}" for a Bryanston address`);
+
+  /* 8.8 km: outside the included ring, so the fee must be stated on screen. */
+  const said = [...s7.doc.querySelectorAll('[role="status"]')].map((el) => el.textContent ?? '').join(' ');
+  if (!/8\.8 km/.test(said)) throw new Error(`the distance is not shown: ${said}`);
+  if (!/R30,00 delivery fee (added|applies)/i.test(said)) throw new Error(`the fee is not stated: ${said}`);
+  return `Bryanston offered, area set to "Other", 8.8 km with a fee`;
+});
+
+
+/**
+ * Pick a real suggestion from the address list.
+ *
+ * The checkout now requires the address to be *located* before an order can
+ * leave — typed text alone carries no coordinates, so the 50 km rule cannot be
+ * checked against it. This is what a customer does: type, then tap a result.
+ */
+async function pickAddressSuggestion(session, text) {
+  const field = [...session.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  if (!field) throw new Error('no address field on the checkout');
+  field.dispatchEvent(new session.w.FocusEvent('focus', { bubbles: true }));
+  session.setInput(field, text);
+  await session.waitFor(() => (session.doc.querySelectorAll('[role="option"]').length ?? 0) >= 1, 'address suggestions', 8000);
+  const option = session.doc.querySelectorAll('[role="option"]')[0];
+  const button = option.querySelector('button') ?? option;
+  button.dispatchEvent(new session.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: session.w }));
+  await sleep(500);
+}
+
+
+/** Tap "Use my current location" — the no-network way to locate the customer. */
+async function useMyLocation(session) {
+  const button = [...session.doc.querySelectorAll('button')]
+    .find((b) => /Use my current location|Checking…|Location checked/i.test(b.textContent ?? ''));
+  if (!button) throw new Error('no "Use my current location" button on the checkout');
+  session.click(button);
+  /*
+   * Any of the three endings counts as "the check came back": a fix with a
+   * distance, a stated distance in the basket copy, or a refusal that explains
+   * itself. Waiting only for success made a denied-location test look like a
+   * hang, which is the opposite of what it was asserting.
+   */
+  await session.waitFor(
+    () => /Location checked/i.test(session.text())
+      || /km away/i.test(session.text())
+      || /Location is blocked|could not get a location|This browser cannot share/i.test(session.text()),
+    'the location check to come back',
+    8000,
+  );
+}
+
+await step('a typed address with no location is not enough to reach WhatsApp', async () => {
+  /*
+   * The owner's rule: no order may leave without the 50 km check being possible.
+   * A typed address carries no coordinates, so the checkout must refuse to send
+   * the order until the customer either picks a suggestion or shares a location.
+   * This is the gate that makes the radius mean something on the WhatsApp path,
+   * which is a link rather than a server request.
+   */
+  const field = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  if (!field) throw new Error('no address field');
+  s7.w.__geoDenied = true;
+  field.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
+  s7.setInput(field, '9 Nowhere Street');
+  await sleep(800);
+
+  const page = s7.text();
+  if (!/could not work out where that address is|Use my current location|cannot confirm/i.test(page)) {
+    throw new Error(`the checkout does not explain that the address is unlocated: ${page.slice(0, 300)}`);
+  }
+  const wa = [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')]
+    .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+  if (wa) throw new Error('an order can still reach WhatsApp from an address nobody located');
+
+  /*
+   * Put the session back the way the later steps expect it: the address they
+   * assert on, and a location that makes it measurable.
+   */
+  s7.w.__geoDenied = false;
+  s7.setInput(field, '12 Oxford Road, Illovo, Sandton');
+  await sleep(300);
+  await useMyLocation(s7);
+  s7.__geoRestored = true;
+  return 'an unlocated address blocks the handoff, with a reason';
+});
+
+await step('"Use my current location" asks the browser for a precise fix', async () => {
+  /*
+   * The owner's question, answered by the code rather than by a promise: does the
+   * button let the site collect a location precise enough to calculate the radius?
+   *
+   * The answer used to be no — the call passed `enableHighAccuracy: false`, so a
+   * browser was entitled to answer with a cell-tower or suburb-centre position
+   * kilometres out. On a 6 km included ring and a 50 km limit that decides money
+   * and refusal, so a coarse fix is not good enough. The last call this step is
+   * looking at must have asked for accuracy.
+   */
+  const s7c = boot('/checkout', { seedCart: s7.seedCart });
+  await s7c.waitFor(() => /Almost there/i.test(s7c.text()), 'checkout', 20000);
+  s7c.w.__geoCalls.length = 0;
+  await useMyLocation(s7c);
+
+  const asked = s7c.w.__geoCalls[0];
+  if (!asked) throw new Error('the button never asked the browser for a location');
+  if (asked.enableHighAccuracy !== true) throw new Error(`the browser was asked for a coarse fix: ${JSON.stringify(asked)}`);
+  if (!(Number(asked.timeout) > 0)) throw new Error(`no timeout was given: ${JSON.stringify(asked)}`);
+
+  /* A precise answer must not be described as approximate. */
+  if (/Approximate fix/i.test(s7c.text())) throw new Error('a high-accuracy fix is being reported as approximate');
+  if (!/km away/i.test(s7c.text())) throw new Error('the location was collected but no distance was calculated');
+  return `enableHighAccuracy: true, ${asked.timeout} ms timeout, distance calculated`;
+});
+
+await step('when a precise fix is unavailable, the coarse answer is labelled as approximate', async () => {
+  /*
+   * Precision cannot be guaranteed — indoors, in a car park, with GPS off — and a
+   * button that never completes is worse than a rough answer. The fallback must
+   * still happen, and the customer must be able to see that the number is rough
+   * and act on it, rather than trusting a guess to decide a fee.
+   */
+  const s7d = boot('/checkout', { seedCart: s7.seedCart });
+  await s7d.waitFor(() => /Almost there/i.test(s7d.text()), 'checkout', 20000);
+  s7d.w.__geoHighAccurateUnavailable = true;
+  s7d.w.__geoCalls.length = 0;
+  await useMyLocation(s7d);
+
+  const [first, second] = s7d.w.__geoCalls;
+  if (!first?.enableHighAccuracy) throw new Error('the precise attempt was skipped');
+  if (!second) throw new Error('there was no fallback attempt, so indoors the button would hang');
+  if (second.enableHighAccuracy !== false) throw new Error(`the fallback asked for precision again: ${JSON.stringify(second)}`);
+  if (!/Approximate fix/i.test(s7d.text())) throw new Error('a coarse fix is not labelled as approximate');
+  if (!/km away/i.test(s7d.text())) throw new Error('the coarse fix produced no distance');
+  return 'precise attempt, coarse fallback, labelled approximate';
+});
+
+await step('a blocked location says where the switch is, and still lets the customer order', async () => {
+  /*
+   * Denial is the common case — most people tap Block on reflex — so it cannot be
+   * a dead end. The message must point at the browser setting, and the typed
+   * address must still be a route to an order.
+   */
+  const s7e = boot('/checkout', { seedCart: s7.seedCart });
+  await s7e.waitFor(() => /Almost there/i.test(s7e.text()), 'checkout', 20000);
+  s7e.w.__geoCalls.length = 0;
+  s7e.w.__geoDenied = true;
+  await useMyLocation(s7e);
+
+  if (s7e.w.__geoCalls.length !== 1) {
+    throw new Error(`a blocked browser was asked again (${s7e.w.__geoCalls.length} calls) — the prompt must appear once`);
+  }
+  const page = s7e.text();
+  if (!/blocked/i.test(page) || !/site settings/i.test(page)) {
+    throw new Error(`the refusal does not say where to fix it: ${page.slice(0, 400)}`);
+  }
+  if (!/pick it from the list/i.test(page)) throw new Error('the refusal offers no way forward');
+  return 'one prompt, blocked message with the browser switch, address still offered';
+});
+
+await step('a customer outside the 50 km radius is refused, and told how far out they are', async () => {
+  /*
+   * Germiston is roughly 30 km out; Polokwane is 280 km. Staging a position well
+   * past the limit must produce a refusal with the actual distance in it — not a
+   * generic "we do not deliver there", which leaves the customer guessing
+   * whether they typed their address wrong.
+   */
+  const s7b = boot('/checkout', {
+    seedCart: {
+      state: {
+        fulfilment: 'delivery',
+        lines: [{
+          key: 'mogodu-plate::starch=pap|veg=chakalaka',
+          itemId: 'mogodu-plate',
+          name: 'Mogodu Plate',
+          image: '/img/plate-mogodu.jpg',
+          unitPrice: 100,
+          qty: 1,
+          picks: [
+            { optionId: 'starch', choiceId: 'pap', label: 'Pap', priceDelta: 0 },
+            { optionId: 'veg', choiceId: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
+          ],
+          kind: 'menu',
+        }],
+      },
+      version: 2,
+    },
+  });
+  await s7b.waitFor(() => /Almost there/i.test(s7b.text()), 'checkout', 20000);
+  const byPh = (re) => [...s7b.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
+  s7b.setInput(byPh(/Thabo Mahlangu/), 'Far Customer');
+  s7b.setInput(byPh(/\+27 82/), '+27 82 000 4321');
+  s7b.setInput(byPh(/12 Oxford Road/), '1 Church Street, Polokwane');
+  await sleep(300);
+
+  s7b.w.__geo = { lat: -23.9045, lng: 29.4689 }; /* Polokwane */
+  await useMyLocation(s7b);
+
+  const page = s7b.text();
+  if (!/km away/i.test(page)) throw new Error(`no distance reported: ${page.slice(0, 400)}`);
+  if (!/outside our 50 km delivery area/i.test(page)) {
+    throw new Error(`an out-of-range address was not refused with the limit named: ${page.slice(0, 400)}`);
+  }
+  if (!/We cannot deliver/i.test(page)) throw new Error('the refusal does not tell the customer we cannot deliver');
+  const wa = [...s7b.doc.querySelectorAll('a[href^="https://wa.me/"]')]
+    .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+  if (wa) throw new Error('WhatsApp still carries an order past the 50 km limit');
+  return 'refused with the distance and the limit named';
 });
 
 await step('the WhatsApp order is blocked until the customer details are filled', async () => {
@@ -1085,7 +1409,7 @@ await step('the customer-quest reference lists both menus and opens nothing', as
 });
 
 await step('an incomplete quest is refused with a reason', async () => {
-  const submit = quest.byText('button[type="submit"]', /Send my quest/i)[0];
+  const submit = quest.byText('button[type="submit"]', /Send my request/i)[0];
   if (!submit) throw new Error('no submit button on the quest form');
   quest.click(submit);
   await quest.waitFor(() => /Please tell us your name/i.test(quest.text()), 'quest validation message', 8000);
@@ -1097,18 +1421,19 @@ await step('a complete quest is accepted and promises a person, not an order', a
   quest.setInput(field(/Thabo Mahlangu/), 'Smoke Quest');
   quest.setInput(field(/\+27 82 000 0000/), '+27 82 111 2233');
   quest.setInput(field(/Dombolo with tshotlo/), 'Dombolo with tshotlo and morogo for eight');
-  quest.click(quest.byText('button[type="submit"]', /Send my quest/i)[0]);
+  quest.click(quest.byText('button[type="submit"]', /Send my request/i)[0]);
 
-  // "Quest sent" when the inbox forward worked, "Quest received" when only the
-  // local copy was kept — the sandbox cannot reach formspree.io.
-  await quest.waitFor(() => /Quest sent|Quest received/i.test(quest.text()), 'quest success state', 15000);
+  // "Request sent" when the inbox forward worked, "Request received" when only
+  // the local copy was kept — the sandbox cannot reach formspree.io. (The words
+  // moved from "quest" to "request" on the owner's instruction, 14 Nov 2026.)
+  await quest.waitFor(() => /Request sent|Request received/i.test(quest.text()), 'request success state', 15000);
   if (!/not an order|nothing has been charged/i.test(quest.text())) {
     throw new Error('the quest success state must not read like an order');
   }
 
-  const again = quest.byText('button', /Send another quest/i)[0];
+  const again = quest.byText('button', /Send another request/i)[0];
   const openWhatsApp = quest.byText('a', /Open WhatsApp/i)[0];
-  if (!again || !openWhatsApp) throw new Error('quest success actions are missing');
+  if (!again || !openWhatsApp) throw new Error('request success actions are missing');
   const row = again.parentElement;
   if (!row || row !== openWhatsApp.parentElement || !row.className.includes('flex')) {
     throw new Error('quest success actions are not in one flex row');
@@ -1149,15 +1474,18 @@ await step('the loyalty card looks up stamps by cell number', async () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       channel: 'web',
-      fulfilment: 'collection',
-      customer: { name: 'Passport Test', phone: loyal, email: 'passport@example.co.za' },
+      fulfilment: 'delivery',
+      customer: {
+        name: 'Passport Test', phone: loyal, email: 'passport@example.co.za',
+        address: '1 Maude Street, Sandton', suburb: 'Sandton', lat: -26.1075, lng: 28.055,
+      },
       items: [{ itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } }],
       /*
        * Cash, not card: the passport check is about stamps, not payment plumbing,
        * and cash works on every host — a card order is refused outright where no
        * Yoco keys are configured, which has nothing to do with loyalty stamps.
        */
-      payment: { method: 'cash-on-collection' },
+      payment: { method: 'cash' },
     }),
   }).then((r) => r.json());
   if (!placed.order?.code) throw new Error('could not seed an order for the passport check');
@@ -1282,6 +1610,14 @@ await step('email is optional, the checkout has no card fields, and the WhatsApp
   const byPlaceholder = (re) => [...s1.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s1.setInput(byPlaceholder(/Thabo Mahlangu/), 'Interaction Test');
   s1.setInput(byPlaceholder(/\+27 82/), '+27 82 000 7777');
+  /*
+   * Delivery only: there is no collection fallback, so the address is required
+   * on every order and the WhatsApp button stays blocked without it.
+   */
+  /* The address is typed; the location button is what makes it measurable. */
+  s1.setInput(byPlaceholder(/12 Oxford Road/), '12 Oxford Road');
+  await sleep(300);
+  await useMyLocation(s1);
 
   /* No card field may exist: money is taken on Yoco's own page. */
   const cardFields = [...s1.doc.querySelectorAll('input')].filter((f) => /4242 4242|MM\/YY|^123$|T MAHLANGU/.test(f.placeholder ?? ''));
@@ -1424,10 +1760,13 @@ async function ensureTrackedOrder() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       channel: 'web',
-      fulfilment: 'collection',
-      customer: { name: 'Tracking Test', phone: loyal, email: 'interaction@example.co.za' },
+      fulfilment: 'delivery',
+      customer: {
+        name: 'Tracking Test', phone: loyal, email: 'interaction@example.co.za',
+        address: '1 Maude Street, Sandton', suburb: 'Sandton', lat: -26.1075, lng: 28.055,
+      },
       items: [{ itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } }],
-      payment: { method: 'cash-on-collection' },
+      payment: { method: 'cash' },
     }),
   }).then((r) => r.json());
   if (!placed.order?.code) throw new Error('could not seed an order for the tracking-page checks');
@@ -1615,13 +1954,27 @@ await step('a cash order can be placed with no card details at all', async () =>
   const byPh = (re) => [...s6.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s6.setInput(byPh(/Thabo Mahlangu/), 'Cash Customer');
   s6.setInput(byPh(/\+27 82/), '+27 82 000 6600');
-  await sleep(400);
+  /*
+   * Delivery only (owner, 14 Nov 2026): there is no collection to fall back on,
+   * so every order needs a street address. The address field is typed into the
+   * way a customer would — the suggestion list is an assist, not a requirement.
+   */
+  /*
+   * Type the address, then locate it with the button. The order cannot leave the
+   * form until one of the two location routes has been used — a typed address
+   * carries no coordinates, so the 50 km rule cannot be checked against it.
+   */
+  const addressField = byPh(/12 Oxford Road/);
+  if (!addressField) throw new Error('checkout has no delivery address field');
+  s6.setInput(addressField, '15 Oxford Road, Rosebank');
+  await sleep(300);
+  await useMyLocation(s6);
 
   /*
    * The WhatsApp handoff used to open an empty chat: the link carried the
    * number and nothing else, so the customer had to retype the order. It now
    * has to carry the basket itself — dishes, quantities, line totals, the total
-   * and the collection choice — pre-typed into the message.
+   * and the delivery address — pre-typed into the message.
    */
   const waLink = [...s6.doc.querySelectorAll('a[href^="https://wa.me/"]')]
     .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
@@ -1637,7 +1990,7 @@ await step('a cash order can be placed with no card details at all', async () =>
    * will be paid — cash here, because the customer chose it — and ask for a
    * reply.
    */
-  if (!/I will pay cash on collection/.test(waText) || !/confirm this order/.test(waText)) {
+  if (!/I will pay cash on delivery/.test(waText) || !/confirm this order/.test(waText)) {
     throw new Error(`the WhatsApp message does not close with the cash confirm ask: ${waText.slice(-160)}`);
   }
   if (/I will send it through/.test(waText)) {
@@ -1646,16 +1999,20 @@ await step('a cash order can be placed with no card details at all', async () =>
 
   const submit = s6.byText('button[type="submit"]', /Place order/i)[0];
   if (!submit) throw new Error('no submit button on a cash checkout');
-  if (submit.disabled) throw new Error('cash checkout is locked without a card');
+  if (submit.disabled) throw new Error(`cash checkout is locked without a card (page input: ${s6.text().replace(/\s+/g, ' ').slice(0, 700)})`);
   s6.click(submit);
 
-  await s6.waitFor(() => /Order tracking/i.test(s6.text()), 'tracking page for the cash order', 25000);
+  await s6.waitFor(
+    () => /Order tracking/i.test(s6.text()),
+    `tracking page for the cash order — page says: ${s6.text().replace(/\s+/g, ' ').slice(0, 900)}`,
+    25000,
+  );
   const code = s6.w.location.pathname.split('/').pop();
   if (!/^HB-\d{4}[A-Z]$/.test(code)) throw new Error(`unexpected order code: ${code}`);
 
   // The customer must be told they have not paid yet.
-  if (!/Payment on collection/i.test(s6.text())) {
-    throw new Error('tracking page does not say payment is due on collection');
+  if (!/Payment on delivery/i.test(s6.text())) {
+    throw new Error('tracking page does not say payment is due on delivery');
   }
 
   // And the kitchen must agree, server-side.
@@ -1665,10 +2022,10 @@ await step('a cash order can be placed with no card details at all', async () =>
   if (order.order.payment.status !== 'pending') {
     throw new Error(`cash order recorded as ${order.order.payment.status}, expected pending`);
   }
-  if (order.order.payment.method !== 'cash-on-collection') {
+  if (order.order.payment.method !== 'cash') {
     throw new Error(`payment method recorded as ${order.order.payment.method}`);
   }
-  return `${code} unpaid, due on collection`;
+  return `${code} unpaid, due on delivery`;
 });
 
 /* ------------------------------------------------------------------ */
@@ -1714,36 +2071,43 @@ const s8 = boot('/menu', {
 
 await s8.waitFor(() => /3 plates/.test(s8.text()), 'the pinned basket bar', 20000);
 
-await step('the basket bar describes the fulfilment that is actually chosen', async () => {
-  if (!/3 plates · delivery/.test(s8.text())) throw new Error('the bar does not show the plate count and delivery');
-  if (!/delivery/i.test(s8.text())) throw new Error('a delivery basket should name the delivery fee');
-
+await step('the basket bar states the one arrangement there is: delivery', async () => {
   /*
-   * Switching to collection must change the second line too. It used to keep
-   * saying "Delivery included", which is nonsense on a collection order — the
-   * owner spotted exactly that on a three-plate basket.
+   * Owner, 14 Nov 2026 — collection is gone. The bar and the drawer used to
+   * carry a collection/delivery switch and warn about a flat fee; both are
+   * replaced by a single true sentence, and the check is that no collection
+   * wording survives anywhere in the basket.
    */
+  if (!/3 plates · delivery/.test(s8.text())) throw new Error('the bar does not show the plate count and delivery');
+  /*
+   * "Collection" may only survive in the stamp counter ("Stamps collected"),
+   * which is a different word doing a different job. What must be gone is the
+   * fulfilment wording: "Collection — nothing extra", "· collection".
+   */
+  if (/·\s*collection\b/i.test(s8.text())) {
+    throw new Error('a collection mode is still advertised in the basket bar');
+  }
+  if (/Collection — nothing/.test(s8.text())) {
+    throw new Error('the old collection price line is still in the basket bar');
+  }
+
   const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
   s8.click(open);
   await s8.waitFor(() => /Your basket/i.test(s8.text()), 'the basket drawer', 15000);
 
-  const collection = [...s8.doc.querySelectorAll('button')].find((b) => /^collection$/i.test((b.textContent ?? '').trim()));
-  if (!collection) throw new Error('no collection switch in the basket');
-  s8.click(collection);
-  await sleep(300);
-  if (/Delivery \d/.test(s8.text())) throw new Error('the drawer still charges delivery on a collection basket');
-  if (!/Collection — nothing is added at checkout/.test(s8.text())) {
-    throw new Error('the drawer does not say what a collection basket is charged');
-  }
+  /* There is no switch left to click: one option is not a choice. */
+  const switchBtn = [...s8.doc.querySelectorAll('button')].find((b) => /^collection$/i.test((b.textContent ?? '').trim()));
+  if (switchBtn) throw new Error('the basket still offers a collection switch');
 
-  /* Close the drawer: the bar must agree with it. */
+  const drawer = s8.text();
+  if (!/Delivered/i.test(drawer)) throw new Error('the drawer does not state that the order is delivered');
+  if (!/included in Sandton/i.test(drawer)) throw new Error('the drawer does not say delivery is included in the two suburbs');
+  if (/^Collection point/m.test(drawer)) throw new Error('the drawer still points at a collection point');
+
   const close = [...s8.doc.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Close');
   s8.click(close);
   await sleep(300);
-  if (/\+ R\d+ delivery/.test(s8.text())) throw new Error('a collection basket still charges delivery');
-  if (!/Collection — nothing extra/.test(s8.text())) throw new Error('a collection basket does not say what applies');
-  if (!/3 plates · collection/.test(s8.text())) throw new Error('the bar does not show the collection choice');
-  return 'delivery and collection each described correctly';
+  return 'delivery stated plainly, no collection switch, no collection point';
 });
 
 await step('the basket can be cleared from the bottom of the drawer', async () => {
@@ -1807,6 +2171,12 @@ const RELOAD_CART = {
         kind: 'menu',
       },
     ],
+    /*
+     * A cart saved by the OLD build, still saying `collection`. The store
+     * migrates it to delivery on load (version 3), which is the point of this
+     * fixture: a returning customer must not be shown a collection screen that
+     * no longer exists.
+     */
     fulfilment: 'collection',
   },
   version: 2,
@@ -1816,7 +2186,8 @@ const s9 = boot('/menu', { seedCart: RELOAD_CART });
 await s9.waitFor(() => /3 plates/.test(s9.text()), 'the basket bar after a reload', 20000);
 
 await step('a page load still shows the plates that were already picked', async () => {
-  if (!/3 plates · collection/.test(s9.text())) throw new Error('the bar lost the plates on reload');
+  /* The saved `collection` cart must read as delivery after the version-3 migration. */
+  if (!/3 plates · delivery/.test(s9.text())) throw new Error(`the bar lost the plates or kept the retired collection mode: ${s9.text().slice(0, 200)}`);
   if (!/R330/.test(s9.text())) throw new Error(`the bar lost the running total: ${s9.text().slice(0, 200)}`);
 
   const open = [...s9.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
@@ -1877,7 +2248,7 @@ await step('the footer keeps ordering behind one "Meals" toggle', async () => {
    */
   const items = [...footer.querySelectorAll('li')].map((li) => (li.querySelector(':scope > a')?.textContent ?? '').trim());
   if (!items.includes('Loyalty card')) throw new Error('Loyalty card is not a top-level footer item');
-  if (!items.includes('Customer quest')) throw new Error('Customer quest is not a top-level footer item');
+  if (!items.includes('Customer request')) throw new Error('Customer request is not a top-level footer item');
 
   s9.click(toggle);
   await sleep(150);

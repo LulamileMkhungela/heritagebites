@@ -239,8 +239,16 @@ const trackingResponse = await fetch(`${BASE}/api/orders`, {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     channel: 'cash-on-collection',
-    fulfilment: 'collection',
-    customer: { name: 'Render Smoke', phone: `+27 82 ${String(Date.now()).slice(-8)}` },
+    /* Delivery only (owner, 14 Nov 2026): the smoke order is a normal order. */
+    fulfilment: 'delivery',
+    customer: {
+      name: 'Render Smoke',
+      phone: `+27 82 ${String(Date.now()).slice(-8)}`,
+      address: '1 Maude Street, Sandton',
+      suburb: 'Sandton',
+      lat: -26.1075,
+      lng: 28.055,
+    },
     items: [{ itemId: 'wings-plate', qty: 1, options: { baste: 'honey-soy', starch: 'potato-mash', veg: 'green-salad' } }],
     payment: { method: 'cash-on-collection' },
   }),
@@ -267,14 +275,14 @@ const ROUTES = [
    * underneath, and the robots instruction keeps private screens out.
    */
   { path: '/', expect: [/A taste of South African heritage/i, /Cooked Thursdays/i], title: /^South African Plates in Rosebank & Sandton — Heritage Bites$/, description: /^South African plates from R100/ },
-  { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/, /Heritage Pots/, /Coming soon/i], title: /^The Menu & Prices — Heritage Bites$/, description: /^Every plate on the Heritage Bites menu/ },
+  { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/], title: /^The Menu & Prices — Heritage Bites$/, description: /^Every plate on the Heritage Bites menu/ },
   { path: '/specials', expect: [/Thursdays & Fridays/i, /R100|R130/], title: /^This Week's Cooking & Delivery — Heritage Bites$/, description: /^What is cooking this week/ },
-  { path: '/policies', expect: [/Privacy Policy/i, /Refund Policy/i, /Order Cancellation Policy/i], title: /^Policies & Terms — Heritage Bites$/, description: /^Delivery and collection, refunds/ },
+  { path: '/policies', expect: [/Privacy Policy/i, /Refund Policy/i, /Order Cancellation Policy/i], title: /^Policies & Terms — Heritage Bites$/, description: /^Delivery, refunds/ },
   { path: '/about', expect: [/Every bite tells a story/i, /Vision/i, /Mission/i, /How we started/i], title: /^Our Story, Vision & Mission — Heritage Bites$/, description: /^Heritage Bites began in a family kitchen/ },
   { path: '/contact', expect: [/Talk to a human/i], title: /^Contact & WhatsApp — Heritage Bites$/, description: /^Call or WhatsApp \+27 67 013 7587/ },
   { path: '/checkout', expect: [/basket is empty/i], title: /^Checkout — Heritage Bites$/, noindex: true },
   { path: '/passport', expect: [/Your loyalty card/i], title: /^Loyalty Card — Heritage Bites$/, description: /^Look up your Heritage Bites loyalty card/ },
-  { path: '/quest', expect: [/Ask us to cook it/i, /What the kitchen cooks/i, /Send your quest/i], title: /^Ask Us to Cook It — Heritage Bites$/, description: /^Ask the Heritage Bites kitchen/ },
+  { path: '/quest', expect: [/Ask us to cook it/i, /What the kitchen cooks/i, /Send your request/i], title: /^Ask Us to Cook It — Heritage Bites$/, description: /^Ask the Heritage Bites kitchen/ },
   { path: trackingPath, displayPath: '/order/[secure-link]', expect: [new RegExp(orderCode), /Order received/i], title: new RegExp(`^Order ${orderCode} — Heritage Bites$`), noindex: true },
   /* Owner enrolment. jsdom has no PushManager, so this also proves the page
      degrades to an explanation instead of throwing. */

@@ -180,9 +180,7 @@ export default function OrderStatus() {
                 : 'Paid'
               : order.payment.status === 'awaiting_payment'
                 ? 'Awaiting payment'
-                : order.fulfilment === 'delivery'
-                  ? 'Payment on delivery'
-                  : 'Payment on collection'}
+                : 'Payment on delivery'}
           </p>
         </div>
       </div>
@@ -237,6 +235,28 @@ export default function OrderStatus() {
         </ol>
       </div>
 
+      {/*
+        The review ask, at the one moment it is honest: after the food has
+        arrived. It is hidden entirely until the Google Business Profile Place ID
+        is supplied — `googleReviewUrl` empty means no button, not a broken one.
+      */}
+      {order.status === 'completed' && settings?.googleReviewUrl?.trim() && (
+        <div className="mt-6 rounded-3xl border-2 border-ochre bg-ochre/10 p-6">
+          <p className="font-display text-xl font-semibold">Did we get it right?</p>
+          <p className="mt-1 text-sm text-ink/65">
+            A Google review is how the next person finds us. It takes a minute, and it genuinely helps.
+          </p>
+          <a
+            href={settings.googleReviewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 py-2.5 text-xs font-bold uppercase tracking-wide text-bone hover:bg-ink-3"
+          >
+            Review us on Google
+          </a>
+        </div>
+      )}
+
       <div className="mt-6 grid gap-6 md:grid-cols-[1.3fr_1fr]">
         {/* Items */}
         <div className="rounded-3xl border-2 border-ink/10 bg-white p-6">
@@ -263,11 +283,16 @@ export default function OrderStatus() {
         {/* Actions */}
         <div className="space-y-4">
           <div className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <h2 className="font-display text-xl font-semibold">{order.fulfilment === 'delivery' ? 'Delivery details' : 'Collection details'}</h2>
+            <h2 className="font-display text-xl font-semibold">Delivery details</h2>
+            {/*
+              An order placed before collection was removed still has to render.
+              Its tracking page says plainly that it was a collection order
+              rather than inventing a delivery address it never had.
+            */}
             <p className="mt-2 text-sm leading-relaxed text-ink/70">
-              {order.fulfilment === 'delivery'
-                ? `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout.`
-                : 'Collection is from our shadow kitchen at Standard Bank, Rosebank and Sandton. We confirm the exact collection point by WhatsApp.'}
+              {order.fulfilment === 'collection'
+                ? 'This order was placed for collection, before we moved to delivery only. The kitchen will confirm where to meet you on WhatsApp.'
+                : `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout.`}
             </p>
             {order.fulfilment === 'collection' && (
               <a
@@ -276,7 +301,7 @@ export default function OrderStatus() {
                 rel="noreferrer"
                 className="mt-3 inline-flex min-h-11 items-center font-semibold text-ochre-deep hover:underline"
               >
-                Get the exact collection point →
+                Ask the kitchen where to meet →
               </a>
             )}
             <p className="mt-3 text-sm text-ink/70">

@@ -157,14 +157,14 @@ export default function Passport() {
       )}
 
       {/*
-        Customer quest: the loyalty card answers "what have I earned?"; a quest
+        Customer request: the loyalty card answers "what have I earned?"; a quest
         answers "can you cook this?". They are adjacent needs for the same
         person, so the invitation to ask for a specific meal sits on this page
         instead of hiding in the footer.
       */}
       <div className="mt-10 flex flex-wrap items-center justify-between gap-5 rounded-3xl border-2 border-ink/10 bg-white p-6">
         <div className="max-w-xl">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Customer quest</p>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Customer request</p>
           <h2 className="mt-1 font-display text-2xl font-semibold">Craving something that is not on the menu?</h2>
           <p className="mt-1.5 text-[13px] leading-relaxed text-ink/60">
             Look through what the kitchen cooks, then ask us for the dish you actually want. A person reads it and replies

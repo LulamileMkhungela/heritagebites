@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Field, inputCls } from './ui';
-import { MIN_QUERY_LENGTH, suggestAddresses, type AddressSuggestion } from '../lib/address';
+import { DELIVERY_ZONES, MIN_QUERY_LENGTH, suggestAddresses, type AddressSuggestion } from '../lib/address';
 import { deliveryAreasLabel, deliveryAddressProblem } from '../../shared/service.js';
 import type { Settings } from '../lib/types';
 
@@ -13,9 +13,11 @@ import type { Settings } from '../lib/types';
  *      `src/lib/address.ts`), and autofill the suburb when the picked address
  *      belongs to one the kitchen delivers to.
  *   2. Check the address against the delivery area the customer chose. An
- *      address that names another area is a hard error — the kitchen would be
- *      sent outside the boundary the customer believes they ordered inside. An
- *      address that names no area at all only warrants a "check the suburb"
+ *      address that names the *other* one of the two included suburbs is a hard
+ *      error — the kitchen would be sent outside the boundary the customer
+ *      believes they ordered inside. "Other — outside Sandton & Rosebank" is
+ *      never a contradiction; the distance check prices that order instead. And
+ *      an address that names no area at all only warrants a "check the suburb"
  *      note, because plenty of real addresses are just a street and a number.
  *
  * The combobox is hand-built rather than a `<datalist>`: datalist gives no
@@ -46,6 +48,8 @@ export function AddressField({
   onPick: (suggestion: AddressSuggestion) => void;
 }) {
   const listId = useId();
+  /* The reach the suggestions are cut at, from the same settings the server prices with. */
+  const maxKm = Number(settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm);
   const inputRef = useRef<HTMLInputElement>(null);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -81,9 +85,10 @@ export function AddressField({
        * The checkout now opens with Rosebank already selected, and filtering the
        * geocoder by that choice would leave a Sandton customer typing a real
        * Sandton street into an empty list — the one outcome worse than the
-       * "Choose an area" select this replaced. Both delivery areas are searched;
-       * everything outside them is still dropped (see `filterSuggestions`), and
-       * picking a result moves the area select to match.
+       * "Choose an area" select this replaced. The whole delivery radius is
+       * searched; results past the 50 km limit are dropped (see
+       * `filterSuggestions`), and picking a result moves the area select to match
+       * or leaves it on "Other" for a suburb outside the two.
        */
       const found = await suggestAddresses(q, { signal: controller.signal, settings });
       if (!alive) return;
@@ -142,7 +147,7 @@ export function AddressField({
 
   return (
     <div className="relative">
-      <Field label="Delivery address" error={shownError} hint="house number, street and suburb">
+      <Field label="Delivery address" error={shownError} hint="house number, street and suburb — then pick it from the list">
         <input
           ref={inputRef}
           className={inputCls}
@@ -210,8 +215,8 @@ export function AddressField({
             {busy && !suggestions.length
               ? 'Looking up addresses…'
               : searched && !suggestions.length
-                ? `No address in ${deliveryAreasLabel(settings)} found — type it in full.`
-                : `${deliveryAreasLabel(settings)} addresses only`}
+                ? `No address within ${maxKm} km of the kitchen found — type it in full.`
+                : `Anywhere within ${maxKm} km · delivery included in ${deliveryAreasLabel(settings)}`}
             {' · '}
             <a
               href="https://www.openstreetmap.org/copyright"

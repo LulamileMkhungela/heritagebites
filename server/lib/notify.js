@@ -34,8 +34,14 @@ export function buildWhatsAppMessage({ code, items, totals, fulfilment, customer
   return lines.join('\n');
 }
 
+/**
+ * Collection has been retired (owner, 14 Nov 2026), but orders already stored
+ * during its lifetime still carry `fulfilment: 'collection'` and are still
+ * readable from the tracking page. Labelling them truthfully is the one place
+ * the old value has to survive.
+ */
 export function fulfilmentLabel(f) {
-  return { delivery: 'Delivery', collection: 'Collection' }[f] ?? 'Collection';
+  return f === 'collection' ? 'Collection (legacy)' : 'Delivery';
 }
 
 export function whatsappLink(msisdn, message) {

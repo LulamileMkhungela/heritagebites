@@ -4,7 +4,7 @@
       "id": "traditional",
       "name": "Traditional Plates",
       "tagline": "Slow-cooked, the traditional way",
-      "blurb": "Starch, protein and a vegetable side. Pap, mabele, samp or dumpling with the pots that carry memory.",
+      "blurb": "Starch, protein and a vegetable side. Pap, mabele, samp or dumpling, cooked the way a Sunday kitchen does it.",
       "accent": "chili"
     },
     {
@@ -16,39 +16,6 @@
     }
   ],
   "comingSoon": [
-    {
-      "id": "heritage-pots",
-      "name": "Heritage Pots",
-      "tagline": "Slow-cooked the way grandmothers taught us",
-      "blurb": "Samp, beans and grains — the pots that carry memory.",
-      "accent": "chili",
-      "items": [
-        {
-          "id": "archive-isistambu",
-          "name": "Isistambu — Samp & Beans",
-          "price": 100,
-          "image": "/img/samp-beans.jpg",
-          "description": "Samp and sugar beans slow-cooked until creamy, finished with a little butter.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-dombolo",
-          "name": "Dombolo",
-          "price": 100,
-          "image": "/img/dumplings.jpg",
-          "description": "Steamed bread, soft in the middle, made to soak up the gravy on the plate.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-motogo",
-          "name": "Motogo wa Mabele",
-          "price": 100,
-          "image": "/img/mabele.jpg",
-          "description": "Sorghum porridge cooked the old way and served warm, the way it is made at home.",
-          "status": "coming-soon"
-        }
-      ]
-    },
     {
       "id": "kasi-fast-food",
       "name": "Kasi Fast Food",
@@ -86,7 +53,7 @@
       "id": "morning-heritage",
       "name": "Morning Heritage",
       "tagline": "For the early start",
-      "blurb": "Warm porridge and fresh fat cakes, made the way they are made at home.",
+      "blurb": "Warm sorghum porridge and golden fat cakes, fried at dawn.",
       "accent": "morogo",
       "items": [
         {
@@ -215,6 +182,34 @@
               "id": "salsa",
               "label": "Salsa",
               "priceDelta": 0
+            },
+            {
+              "id": "chakalaka",
+              "label": "Chakalaka",
+              "priceDelta": 0
+            },
+            {
+              "id": "atchaar",
+              "label": "Atchaar",
+              "priceDelta": 0
+            },
+            {
+              "id": "green-salad",
+              "label": "Green salad",
+              "priceDelta": 0
+            }
+          ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "priced": true,
+          "choices": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "priceDelta": 25
             }
           ]
         }
@@ -293,6 +288,34 @@
               "id": "salsa",
               "label": "Salsa",
               "priceDelta": 0
+            },
+            {
+              "id": "chakalaka",
+              "label": "Chakalaka",
+              "priceDelta": 0
+            },
+            {
+              "id": "atchaar",
+              "label": "Atchaar",
+              "priceDelta": 0
+            },
+            {
+              "id": "green-salad",
+              "label": "Green salad",
+              "priceDelta": 0
+            }
+          ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "priced": true,
+          "choices": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "priceDelta": 25
             }
           ]
         }
@@ -371,6 +394,34 @@
               "id": "salsa",
               "label": "Salsa",
               "priceDelta": 0
+            },
+            {
+              "id": "chakalaka",
+              "label": "Chakalaka",
+              "priceDelta": 0
+            },
+            {
+              "id": "atchaar",
+              "label": "Atchaar",
+              "priceDelta": 0
+            },
+            {
+              "id": "green-salad",
+              "label": "Green salad",
+              "priceDelta": 0
+            }
+          ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "priced": true,
+          "choices": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "priceDelta": 25
             }
           ]
         }
@@ -450,6 +501,34 @@
               "id": "salsa",
               "label": "Salsa",
               "priceDelta": 0
+            },
+            {
+              "id": "chakalaka",
+              "label": "Chakalaka",
+              "priceDelta": 0
+            },
+            {
+              "id": "atchaar",
+              "label": "Atchaar",
+              "priceDelta": 0
+            },
+            {
+              "id": "green-salad",
+              "label": "Green salad",
+              "priceDelta": 0
+            }
+          ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "priced": true,
+          "choices": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "priceDelta": 25
             }
           ]
         }
@@ -529,6 +608,34 @@
               "id": "salsa",
               "label": "Salsa",
               "priceDelta": 0
+            },
+            {
+              "id": "chakalaka",
+              "label": "Chakalaka",
+              "priceDelta": 0
+            },
+            {
+              "id": "atchaar",
+              "label": "Atchaar",
+              "priceDelta": 0
+            },
+            {
+              "id": "green-salad",
+              "label": "Green salad",
+              "priceDelta": 0
+            }
+          ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "priced": true,
+          "choices": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "priceDelta": 25
             }
           ]
         }
@@ -642,6 +749,19 @@
               "priceDelta": 0
             }
           ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "priced": true,
+          "choices": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "priceDelta": 25
+            }
+          ]
         }
       ]
     },
@@ -736,6 +856,19 @@
               "priceDelta": 0
             }
           ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "priced": true,
+          "choices": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "priceDelta": 25
+            }
+          ]
         }
       ]
     },
@@ -828,6 +961,19 @@
               "id": "glazed-carrots",
               "label": "Glazed carrots",
               "priceDelta": 0
+            }
+          ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "priced": true,
+          "choices": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "priceDelta": 25
             }
           ]
         }
@@ -928,6 +1074,35 @@
               "id": "salsa",
               "label": "Salsa",
               "price": 100
+            },
+            {
+              "id": "chakalaka",
+              "label": "Chakalaka",
+              "price": 100
+            },
+            {
+              "id": "atchaar",
+              "label": "Atchaar",
+              "price": 100
+            },
+            {
+              "id": "green-salad",
+              "label": "Green salad",
+              "price": 100
+            }
+          ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "max": 1,
+          "priced": true,
+          "items": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "price": 25
             }
           ]
         }
@@ -1033,6 +1208,20 @@
               "price": 130
             }
           ]
+        },
+        {
+          "id": "drink",
+          "label": "Add a soft drink",
+          "required": false,
+          "max": 1,
+          "priced": true,
+          "items": [
+            {
+              "id": "ginger-gemere",
+              "label": "Ginger gemere — home-made ginger beer, 500 ml",
+              "price": 25
+            }
+          ]
         }
       ]
     }
@@ -1096,9 +1285,9 @@
     },
     {
       "id": "delivery-collection",
-      "title": "Delivery & Collection",
-      "updated": "2026-10-27",
-      "intro": "Heritage Bites is a shadow kitchen serving Thursdays and Fridays between 12:00 and 13:30.",
+      "title": "Delivery",
+      "updated": "2026-11-14",
+      "intro": "Heritage Bites is a delivery-only kitchen serving Thursdays and Fridays between 12:00 and 13:30.",
       "sections": [
         {
           "heading": "Service days and times",
@@ -1106,15 +1295,15 @@
         },
         {
           "heading": "Delivery areas",
-          "body": "We deliver in Rosebank and Sandton only. If your address falls outside those areas we will contact you to arrange collection instead."
+          "body": "We deliver everywhere within 50 km of our kitchen in Sandton. Delivery is included in the plate price in Sandton and Rosebank; anywhere further out up to 50 km carries a delivery fee, confirmed on WhatsApp before you pay. Beyond 50 km we do not deliver, and the checkout will tell you so before you order."
         },
         {
           "heading": "Minimum order and delivery fee",
-          "body": "The minimum order is R100 for plated meals. There is no separate delivery fee — the Rosebank and Sandton run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one whether you collect or have it delivered."
+          "body": "The minimum order is R100 for plated meals. Inside Sandton and Rosebank there is no separate delivery fee — the run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one. Outside those areas a delivery fee applies; the exact amount is confirmed on WhatsApp before payment."
         },
         {
-          "heading": "Collection",
-          "body": "Collection is from our kitchen point at Standard Bank, Rosebank and Sandton. No public street address is published because we operate as a shadow kitchen; we confirm the exact collection point by WhatsApp when your order is placed."
+          "heading": "No collection",
+          "body": "We are a delivery-only kitchen. There is no counter to collect from and no collection point; every order is brought to the address you gave at checkout, within the service window."
         },
         {
           "heading": "Preparation and delivery estimates",
@@ -1180,9 +1369,17 @@
       "Rosebank",
       "Sandton"
     ],
-    "collectionArea": "Rosebank & Sandton",
-    "collectionPoint": "Standard Bank, Rosebank and Sandton — exact collection point to be confirmed",
-    "collectionNote": "We will confirm the exact collection point by WhatsApp when your order is placed.",
+    "outsideFee": 30,
+    "outsideFeeNote": "Outside Sandton and Rosebank we add a delivery fee, confirmed on WhatsApp before you pay.",
+    "maxDeliveryKm": 50,
+    "deliveryOrigin": {
+      "lat": -26.126,
+      "lng": 28.049
+    },
+    "includedRadiusKm": 6,
+    "collectionArea": "",
+    "collectionPoint": "",
+    "collectionNote": "",
     "serviceWindow": {
       "open": "12:00",
       "close": "13:30"
@@ -1191,6 +1388,9 @@
     "deliveryEstimateMins": 30,
     "contactFormspreeUrl": "https://formspree.io/f/xvkkkwve",
     "loyaltyRateCents": 5000,
+    "googlePlaceId": "",
+    "googlePlaceName": "Heritage Bites",
+    "googleReviewUrl": "",
     "channels": {
       "ubereats": {
         "label": "Uber Eats",
@@ -1258,7 +1458,7 @@
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Saturday",
-    "timeLabel": "12:13",
+    "timeLabel": "21:52",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Saturday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",

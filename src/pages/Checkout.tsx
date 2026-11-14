@@ -7,19 +7,21 @@ import { normalisePhone, zar } from '../lib/format';
 import { Button, ContactText, Field, HeritageMark, LinkButton, SectionLabel, WovenRule, inputCls } from '../components/ui';
 import { asset } from '../lib/assets';
 import { usePageSeo } from '../lib/seo';
-import { basketHref, waChatHref } from '../lib/whatsapp';
+import { basketHref } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
-import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
-import type { AddressSuggestion } from '../lib/address';
+import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaOptions } from '../../shared/service.js';
+import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, type AddressSuggestion } from '../lib/address';
+import { deniedMessage, requestLocation } from '../lib/geolocation';
 
 /*
- * 'cash-on-collection' is a stored value, not a label: it is what the API and
- * existing orders carry, and the customer never sees it. Cash is also accepted
- * at the door now, so the name under-describes the behaviour — but renaming it
- * is a data migration across server, tests and saved orders, not a copy change.
- * The wording the customer reads is what branches on fulfilment below.
+ * `cash` is the stored value, and it means cash to the driver.
+ *
+ * It was `cash-on-collection`, from when collection existed. Collection has
+ * been removed, so the value was renamed with it — the server still accepts the
+ * old name from a cached client and normalises it, which is why a returning
+ * customer with an old bundle is not refused over a string.
  */
-type PayMethod = 'card' | 'cash-on-collection';
+type PayMethod = 'card' | 'cash';
 
 type CheckoutCustomer = { name: string; phone: string; email: string; address: string; suburb: string; notes: string };
 
@@ -50,6 +52,12 @@ export function waValidationProblem(
     if (!customer.suburb.trim()) return 'Choose a delivery area first';
     if (!customer.address.trim()) return 'Add a delivery address first';
     /*
+     * A picked suggestion may fill the address without a suburb name the map
+     * recognises — Bryanston is a real place with no entry in `deliveryAreas`.
+     * That is fine: the area select already says "outside Sandton & Rosebank",
+     * and `deliveryAddressProblem` returns null for it.
+     */
+    /*
      * The address has to belong to the area the customer picked, and the order
      * has to clear the delivery minimum. Both are rules the server enforces on
      * a paid order, so they are checked here too rather than letting WhatsApp
@@ -57,6 +65,44 @@ export function waValidationProblem(
      */
     const problem = deliveryAddressProblem(customer.address, customer.suburb, settings, addressArea);
     if (problem?.level === 'error') return problem.message;
+  }
+  return null;
+}
+
+/**
+ * The delivery rules WhatsApp must not slip past.
+ *
+ * The paid checkout prices through the server, which enforces the minimum order
+ * and the radius. The WhatsApp button does not — it is a link, not a request —
+ * so an order could leave the form below the minimum, or from an address nobody
+ * ever located, and only be caught by a person reading the chat.
+ *
+ * Two things are checked here:
+ *
+ * 1. **Minimum order.** The same R100 the server enforces.
+ * 2. **A located address.** "Not in Sandton" is no longer a refusal — the
+ *    radius decides — but a radius cannot be checked without coordinates. So the
+ *    customer must either pick their address from the list (which carries the
+ *    map's own coordinates) or share their location. Without that, the honest
+ *    answer is that we cannot confirm we deliver to them, and the order waits.
+ *
+ * `zone` is the already-computed distance verdict, so the radius rule itself
+ * lives in one place (`shared/address.js`) rather than being re-derived here.
+ */
+export function deliveryGateProblem(
+  subtotal: number,
+  settings: { minDeliveryOrder?: number; maxDeliveryKm?: number } | undefined,
+  zone: { zone: string; distanceKm?: number },
+): string | null {
+  const min = Number(settings?.minDeliveryOrder ?? 100);
+  if (subtotal < min) {
+    return `Delivery orders start at ${zar(min)} — add a little more, or message us on WhatsApp about a smaller order.`;
+  }
+  if (zone.zone === 'refused') {
+    return `That address is ${zone.distanceKm} km away — we deliver within ${settings?.maxDeliveryKm ?? 50} km.`;
+  }
+  if (zone.zone === 'unknown') {
+    return 'Pick your address from the list as you type, or tap "Use my current location" — we need one of them to check we can deliver to you.';
   }
   return null;
 }
@@ -88,7 +134,6 @@ function LiveCheckout() {
   const catalog = useCatalog((s) => s.data);
   const lines = useCart((s) => s.lines);
   const fulfilment = useCart((s) => s.fulfilment);
-  const setFulfilment = useCart((s) => s.setFulfilment);
   const clear = useCart((s) => s.clear);
   const setQty = useCart((s) => s.setQty);
 
@@ -121,6 +166,23 @@ function LiveCheckout() {
    * is what lets the checkout catch "Sandton selected, Rosebank street typed".
    */
   const [addressArea, setAddressArea] = useState<string | null>(null);
+  /*
+   * Where the address is, and what that means for delivery (owner, 14 Nov 2026).
+   *
+   * `point` is the map's answer for the address the customer picked — the same
+   * coordinates the server will price from. `geo` is the device's own location,
+   * which the customer may grant: it is the more honest number when it exists,
+   * because it is where the person is standing rather than where the map thinks
+   * a house number is. Either can be null, and a null point is never treated as
+   * "too far" — an unmeasurable address must not block an order.
+   */
+  const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [geo, setGeo] = useState<
+    | { status: 'idle' }
+    | { status: 'asking' }
+    | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
+    | { status: 'denied'; reason: 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
+  >({ status: 'idle' });
   const [quote, setQuote] = useState<{ subtotal: number; delivery: number; total: number } | null>(null);
   const [state, setState] = useState<'idle' | 'quoting' | 'paying'>('idle');
   const [fatal, setFatal] = useState<string | null>(null);
@@ -161,7 +223,7 @@ function LiveCheckout() {
    * terms. Cash orders say cash; card orders ask for the Yoco link, which is how
    * the kitchen takes a card payment when the order came in through the chat.
    */
-  const waPayment = method2 === 'cash-on-collection' ? 'cash' : 'yoco';
+  const waPayment = method2 === 'cash' ? 'cash' : 'yoco';
 
   /*
    * Is the kitchen taking automated orders right now? The window comes from the
@@ -201,7 +263,36 @@ function LiveCheckout() {
    * marked, until the order is actually placeable. Validation lives in one
    * place so the two buttons can never disagree about what "complete" means.
    */
-  const waBlocked = waValidationProblem(customer, fulfilment, settings, addressArea);
+  /*
+   * Distance, and what it costs.
+   *
+   * The rules come from the catalogue so the browser and the server agree; the
+   * fallback is the shared default, which means an older server degrades to
+   * "delivery is included" rather than to a page that cannot price anything.
+   */
+  const rules = {
+    includedTo: Number(settings?.includedRadiusKm ?? DELIVERY_ZONES.includedTo),
+    maxKm: Number(settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm),
+    fee: Number(settings?.outsideFee ?? DELIVERY_ZONES.fee),
+    origin: settings?.deliveryOrigin ?? KITCHEN_ORIGIN,
+  };
+  /* The device location wins: it is the customer's own answer to "where are
+     you", not the map's guess about a house number. */
+  /* The basket's own total, before any delivery fee — what the minimum applies to. */
+  const localSubtotal = useMemo(() => lines.reduce((n, l) => n + l.unitPrice * l.qty, 0), [lines]);
+  const measured = geo.status === 'ok' ? { lat: geo.lat, lng: geo.lng } : point;
+  const zone = deliveryZoneFor(measured?.lat, measured?.lng, rules);
+  const tooFar = zone.zone === 'refused';
+  const surcharge = zone.zone === 'surcharge' ? Number(zone.fee) : 0;
+
+  const waBlockedBase = waValidationProblem(customer, fulfilment, settings, addressArea);
+  /*
+   * The order gate sits after the field checks, so the customer is told about the
+   * empty box first and the delivery rule second — a radius complaint about a
+   * form with no address in it is noise.
+   */
+  const gate = waBlockedBase ? null : deliveryGateProblem(localSubtotal, settings, zone);
+  const waBlocked = waBlockedBase ?? gate;
   const waReady = waBlocked === null;
   /* Point at the fields themselves, not only the message under the button. */
   const waProblems = (() => {
@@ -231,9 +322,6 @@ function LiveCheckout() {
     }
   };
 
-  /* How the delivery fee reads on the card and in the footer. */
-  const deliveryFee = Number(settings?.deliveryFlat ?? 0);
-  const freeAbove = Number(settings?.freeDeliveryAbove ?? 0);
   const setMethod = (next: PayMethod) => {
     setMethodRaw(next);
     setFatal(null);
@@ -271,7 +359,14 @@ function LiveCheckout() {
     const t = setTimeout(async () => {
       setState('quoting');
       try {
-        const r = await api.quote({ items: toApiItems(lines), fulfilment });
+        /* Coordinates go with the quote so the running total carries the
+           surcharge the moment an out-of-area address is picked, instead of
+           surprising the customer at the end. */
+        const r = await api.quote({
+          items: toApiItems(lines),
+          fulfilment,
+          customer: { lat: measured?.lat ?? null, lng: measured?.lng ?? null },
+        });
         setQuote({ subtotal: r.totals.subtotal, delivery: r.totals.delivery, total: r.totals.total });
         setFatal(null);
       } catch (e) {
@@ -281,9 +376,8 @@ function LiveCheckout() {
       }
     }, 320);
     return () => clearTimeout(t);
-  }, [lines, fulfilment]);
+  }, [lines, fulfilment, measured?.lat, measured?.lng]);
 
-  const localSubtotal = useMemo(() => lines.reduce((n, l) => n + l.unitPrice * l.qty, 0), [lines]);
   const shown = quote ?? { subtotal: localSubtotal, delivery: 0, total: localSubtotal };
 
   /*
@@ -310,6 +404,20 @@ function LiveCheckout() {
         const problem = deliveryAddressProblem(customer.address, customer.suburb, settings, addressArea);
         if (problem?.level === 'error') e.address = problem.message;
       }
+      /*
+       * The location gate, on the paid path too.
+       *
+       * The server cannot measure an address it has no coordinates for, and it
+       * must not invent a distance — so if nobody located the customer, the
+       * order would go through with the radius unchecked. Refusing here is the
+       * only way the 50 km rule means anything: pick the address from the list,
+       * or share your location, and the rule can be applied.
+       */
+      if (zone.zone === 'refused') {
+        e.form = `That address is ${zone.distanceKm} km away — we deliver within ${rules.maxKm} km.`;
+      } else if (zone.zone === 'unknown' && customer.address.trim()) {
+        e.form = 'We could not work out where that address is. Pick it from the list as you type, or tap "Use my current location" — we need one of them to check we can reach you.';
+      }
     }
     /* Nothing to check about a card: it is entered on Yoco's page, not here. */
     if (method2 === 'card' && !online) {
@@ -328,7 +436,11 @@ function LiveCheckout() {
       const { order, trackingToken, payment } = await api.placeOrder({
         channel: method2 === 'card' ? 'card' : 'cash',
         fulfilment,
-        customer,
+        /* The coordinates are what the server prices the delivery from and what
+           it refuses an out-of-range order on. Without them it can only price
+           the address as "somewhere in the area", which is how a 40 km order
+           used to slip through as included. */
+        customer: { ...customer, lat: measured?.lat ?? null, lng: measured?.lng ?? null },
         items: toApiItems(lines),
         payment: { method: method2 },
       });
@@ -463,32 +575,75 @@ function LiveCheckout() {
         <div className="space-y-8">
           {/* Fulfilment */}
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want it?</legend>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {([
-                {
-                  id: 'collection',
-                  t: 'Collect',
-                  d: `Pay the plate price only — nothing added. We send the exact collection point on WhatsApp with your order.`,
-                },
-                {
-                  id: 'delivery',
-                  t: 'Deliver',
-                  d: `${settings?.deliveryAreas.join(' & ') ?? 'Rosebank & Sandton'} only. ${deliveryFee > 0 ? `Flat ${zar(deliveryFee)}${freeAbove > 0 ? `, free from ${zar(freeAbove)}` : ''}` : 'Included'}.`,
-                },
-              ] as const).map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setFulfilment(f.id)}
-                  aria-pressed={fulfilment === f.id}
-                  className={`rounded-2xl border-2 p-4 text-left transition-all ${fulfilment === f.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
-                >
-                  <span className="block font-semibold">{f.t}</span>
-                  <span className="mt-1 block text-xs leading-snug text-ink/55">{f.d}</span>
-                </button>
-              ))}
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</legend>
+            {/*
+              There is no collection any more (owner, 14 Nov 2026 — "there is no
+              collection, it is delivery based"). It was a pair of radio cards
+              with Collect first; with only one option left a card would be a
+              button that cannot change anything, so the section states the
+              arrangement and lets the customer check their distance instead.
+            */}
+            <div className="mt-3 rounded-2xl border-2 border-ochre bg-ochre/10 p-4">
+              <p className="text-sm font-semibold">Every order is delivered.</p>
+              <p className="mt-1 text-xs leading-snug text-ink/60">
+                Delivery is included in the plate price in{' '}
+                {settings?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}. Elsewhere a{' '}
+                {zar(rules.fee)} delivery fee applies, and we deliver up to {rules.maxKm} km from the kitchen.
+              </p>
             </div>
+            {/*
+              The customer's own location, offered rather than demanded.
+              The browser only reveals it with permission, so the button is the
+              whole prompt — and the address they pick is still what the food
+              goes to. This only answers "how far is it", which is the question
+              that decides the fee and whether we can serve them at all.
+            */}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (geo.status === 'asking') return;
+                  setGeo({ status: 'asking' });
+                  /* Precise first, then a fallback — see lib/geolocation.ts for
+                     why a coarse fix cannot decide a 50 km boundary honestly. */
+                  requestLocation().then((r) => setGeo(r));
+                }}
+                disabled={geo.status === 'asking'}
+              >
+                {geo.status === 'asking' ? 'Checking…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
+              </Button>
+              {zone.zone !== 'unknown' && (
+                <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-ochre-deep' : 'text-emerald-700'}`} role="status">
+                  {tooFar
+                    ? `${zone.distanceKm} km away — outside our ${rules.maxKm} km delivery area`
+                    : zone.zone === 'surcharge'
+                      ? `${zone.distanceKm} km away — ${zar(rules.fee)} delivery fee added`
+                      : `${zone.distanceKm} km away — delivery included`}
+                </span>
+              )}
+              {/*
+                Shown whenever the button failed, not only when the address is
+                still unlocated: a customer who tapped it deserves to be told what
+                happened even if they had already picked an address that works.
+                Silence reads as a broken button.
+              */}
+              {geo.status === 'denied' && (
+                <span className="text-xs leading-relaxed text-ink/50">{deniedMessage(geo.reason)}</span>
+              )}
+              {geo.status === 'ok' && !geo.precise && (
+                <span className="text-xs text-ink/45">
+                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address below for an exact check.
+                </span>
+              )}
+            </div>
+            {tooFar && (
+              <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-800" role="alert">
+                We cannot deliver {zone.distanceKm} km. We would rather tell you now than take your money for food we
+                cannot bring you — message us on WhatsApp if you think this is wrong.
+              </p>
+            )}
             {/*
               No "get the collection point" button here. The order now finishes
               on WhatsApp, and the collection address is sent in that same chat,
@@ -521,17 +676,13 @@ function LiveCheckout() {
                      * doing exactly that: the copy was written once for delivery
                      * and never branched.
                      */
-                    blurb: online
-                      ? "Card or instant EFT on Yoco's secure page"
-                      : fulfilment === 'delivery'
-                        ? 'Pay the driver by card at the door'
-                        : 'Pay by card at the counter when you collect',
+                    blurb: online ? "Card or instant EFT on Yoco's secure page" : 'Pay the driver by card at the door',
                     show: true,
                   },
                   {
-                    id: 'cash-on-collection' as PayMethod,
+                    id: 'cash' as PayMethod,
                     label: 'Cash',
-                    blurb: fulfilment === 'delivery' ? 'Pay the driver on delivery' : 'Pay when you collect',
+                    blurb: 'Pay the driver on delivery',
                     show: true,
                   },
                 ]).map((m) => (
@@ -585,8 +736,9 @@ function LiveCheckout() {
             <p className="mt-4 text-xs leading-relaxed text-ink/50">
               {fulfilment === 'delivery' ? (
                 <>
-                  Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery {deliveryFee > 0 ? zar(deliveryFee) : 'included'} in
-                  {' '}{settings?.deliveryAreas?.join(' & ') ?? 'Rosebank & Sandton'}{freeAbove > 0 && deliveryFee > 0 ? `, free from ${zar(freeAbove)}` : ''}.
+                  Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery included in
+                  {' '}{settings?.deliveryAreas?.join(' & ') ?? 'Sandton & Rosebank'}
+                  {surcharge > 0 ? ` — ${zar(surcharge)} added for your address` : ''}.
                 </>
               ) : (
                 <>No minimum order and no delivery fee — you pay the plate price only.</>
@@ -611,13 +763,20 @@ function LiveCheckout() {
               {fulfilment === 'delivery' && (
                 <Field label="Delivery area" hint={defaultArea ? `${defaultArea} preselected` : undefined} error={errors.suburb}>
                   {/*
-                    No empty "Choose an area" row: it turned a two-option select
-                    into a required decision, and every order in the shop is in one
-                    of these two areas. A typed address that belongs to the other
-                    one moves this on its own.
+                    The two included suburbs, and "Other — outside Sandton &
+                    Rosebank".
+                    
+                    The third option is not a nicety: the rules are distance-based
+                    (inside the two suburbs delivery is included, outside them a
+                    fee applies, past 50 km we refuse). A customer in Bryanston
+                    had no honest answer here — only two suburbs that were both
+                    wrong — which is how a radius became a two-suburb list.
+                    
+                    No empty "Choose an area" row: that turned this into a
+                    required decision before anyone could order.
                   */}
                   <select className={inputCls} value={customer.suburb} onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}>
-                    {(settings?.deliveryAreas ?? []).map((area) => (
+                    {deliveryAreaOptions(settings).map((area) => (
                       <option key={area} value={area}>{area}</option>
                     ))}
                   </select>
@@ -658,16 +817,34 @@ function LiveCheckout() {
                       setCustomer({ ...customer, address: value, suburb: followed });
                       /* Typing over a picked address drops its map evidence. */
                       setAddressArea(null);
+                      setPoint(null);
                       setErrors((e) => ({ ...e, address: '', suburb: '' }));
                     }}
                     onPick={(suggestion: AddressSuggestion) => {
                       setCustomer({
                         ...customer,
                         address: suggestion.line,
-                        /* Autofill the area the kitchen actually delivers to. */
-                        suburb: suggestion.area ?? customer.suburb,
+                        /*
+                         * Autofill the area the kitchen actually delivers to —
+                         * or "Other" when the picked address is outside the two
+                         * included suburbs. Leaving the old value would keep the
+                         * select on Sandton for a Bryanston house and bring back
+                         * the contradiction this whole change removes.
+                         */
+                        suburb: suggestion.area ?? OUTSIDE_AREA,
                       });
                       setAddressArea(suggestion.area);
+                      /*
+                       * Keep the map's own coordinates. They are the evidence
+                       * the distance gate runs on, and the server prices from
+                       * the same pair — which is what stops the basket saying
+                       * "included" for an address the server charges a fee for.
+                       */
+                      setPoint(
+                        Number.isFinite(suggestion.lat) && Number.isFinite(suggestion.lng)
+                          ? { lat: Number(suggestion.lat), lng: Number(suggestion.lng) }
+                          : null,
+                      );
                       setErrors((e) => ({ ...e, address: '', suburb: '' }));
                     }}
                   />
@@ -804,7 +981,7 @@ function LiveCheckout() {
                 {closed
                   ? 'The window has closed, so this sends your basket as a question rather than an order. If the kitchen can still prepare it, someone will reply and arrange payment with you.'
                   : waReady
-                    ? `Your order goes to WhatsApp with every detail already filled in — name, number, the basket, ${fulfilment === 'delivery' ? 'the delivery address' : 'the collection plan'}, and your notes. Send it and we confirm, then pay ${method2 === 'cash-on-collection' ? (fulfilment === 'delivery' ? 'cash to the driver' : 'cash at the counter') : 'by secure Yoco link or card'}.`
+                    ? `Your order goes to WhatsApp with every detail already filled in — name, number, the basket, the delivery address, and your notes. Send it and we confirm, then pay ${method2 === 'cash' ? 'cash to the driver' : 'by secure Yoco link or card'}.`
                     : `${waBlocked}. Fill that in above and this button opens WhatsApp with the whole order.`}
               </p>
               <p className="mt-2 text-xs leading-relaxed text-ink/45">
@@ -832,69 +1009,292 @@ function LiveCheckout() {
 /* --------------------------- Static preview ---------------------------- */
 
 /**
- * The GitHub Pages build has no API, so a live checkout would show a basket,
- * quote nothing and fail at the last step. Rather than a broken form, a preview
- * shows the basket honestly: what is in it, what it comes to at the published
- * plate prices, and how to order for real today.
+ * The GitHub Pages build has no API, so there is no server to price an order,
+ * take a payment or store a tracking token.
+ *
+ * It must still do the job a customer came for, though: choose the payment
+ * method, give their details, say where they are, and arrive at WhatsApp with
+ * all of it already written out. That is the whole ordering journey minus the
+ * parts that need a server — and an earlier version of this page skipped the
+ * form entirely, so the only thing a customer could send was a basket with no
+ * name, no address and no idea how they wanted to pay.
+ *
+ * What is genuinely absent here, and is said plainly rather than hidden:
+ *
+ *  - **Online card payment.** Yoco needs the API (a server-side secret and a
+ *    webhook), so on the static build there is no card option at all — the
+ *    kitchen sends a payment link in the chat instead. This is the honest
+ *    answer to "can I pay online right now": not through this page.
+ *  - **A server-checked total.** The basket is priced from the published plate
+ *    prices and the kitchen confirms the total in the chat.
+ *
+ * Everything the customer typed still travels: the message that opens WhatsApp
+ * is the same `basketMessage` the live site uses, so the two paths cannot
+ * describe an order differently.
  */
 function PreviewCheckout() {
   const catalog = useCatalog((s) => s.data);
   const lines = useCart((s) => s.lines);
   const fulfilment = useCart((s) => s.fulfilment);
-  /* The whole basket, not just the shop's number: this button is the only way
-     to order from the preview, so it has to arrive pre-filled. */
-  const wa = lines.length
-    ? basketHref(catalog?.settings?.whatsapp, lines, { fulfilment })
-    : waChatHref(catalog?.settings?.whatsapp);
+  const settings = catalog?.settings;
+
+  const [customer, setCustomer] = useState({ name: '', phone: '', address: '', suburb: '', notes: '' });
+  const [method, setMethod] = useState<'link' | 'cash'>('link');
+  /*
+   * The coordinates of the address the customer *picked*, as opposed to the ones
+   * their device reported. The published site needs both: the address box is the
+   * route for anyone who will not share a location, and the 50 km rule is the
+   * whole point of asking.
+   */
+  const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
+  /* Area the picked suggestion belongs to, so the check uses the map's answer. */
+  const [addressArea, setAddressArea] = useState<string | null>(null);
+  const [geo, setGeo] = useState<
+    | { status: 'idle' }
+    | { status: 'asking' }
+    | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
+    | { status: 'denied'; reason: 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
+  >({ status: 'idle' });
+
+  const rules = {
+    includedTo: Number(settings?.includedRadiusKm ?? DELIVERY_ZONES.includedTo),
+    maxKm: Number(settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm),
+    fee: Number(settings?.outsideFee ?? DELIVERY_ZONES.fee),
+    origin: settings?.deliveryOrigin ?? KITCHEN_ORIGIN,
+  };
+  /* The device fix wins; the picked address is the fallback — same order as the
+     live checkout, so the two pages can never price the same order differently. */
+  const measured = geo.status === 'ok' ? { lat: geo.lat, lng: geo.lng } : point;
+  const zone = deliveryZoneFor(measured?.lat, measured?.lng, rules);
+  const tooFar = zone.zone === 'refused';
+  const subtotal = cartSubtotal(lines);
+
+  /*
+   * The same rule the live checkout applies, and the same reason for it: the
+   * 50 km radius cannot be checked without coordinates, so the order may not
+   * leave until the customer has given them.
+   */
+  const problem =
+    !lines.length
+      ? 'Your basket is empty.'
+      : !customer.name.trim()
+        ? 'Add your full name first'
+        : !customer.phone.trim()
+          ? 'Add your cell number first'
+          : normalisePhone(customer.phone).length < 11
+            ? 'That cell number looks too short — check it'
+            : !customer.address.trim()
+              ? 'Add a delivery address first'
+              : !customer.suburb.trim()
+                ? 'Choose a delivery area first'
+                : tooFar
+                  ? `That address is ${zone.distanceKm} km away — we deliver within ${rules.maxKm} km.`
+                  : zone.zone === 'unknown'
+                    ? 'Pick your address from the list as you type, or tap "Use my current location" — we need one of them to check we can deliver to you.'
+                    : null;
+
+  const wa = basketHref(settings?.whatsapp, lines, {
+    fulfilment,
+    payment: method === 'cash' ? 'cash' : 'yoco',
+    customer,
+  });
 
   return (
-    <section className="mx-auto max-w-3xl px-4 py-14">
+    <section className="mx-auto max-w-5xl px-4 py-14">
       <SectionLabel>Checkout</SectionLabel>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Finish your order</h1>
       <p className="mt-3 max-w-2xl text-ink/65">
-        No card is taken on this site. Send the basket on WhatsApp and the kitchen will confirm the total,
-        the collection point and the cooking day before anything is paid.
+        Give us your details and where to deliver, then send the order on WhatsApp. The kitchen confirms the total and
+        the cooking day before anything is paid.
       </p>
 
-      <div className="mt-8 rounded-[2rem] border-2 border-ink/10 bg-white p-6">
-        <h2 className="font-display text-2xl font-semibold">Your basket</h2>
-        {lines.length === 0 ? (
-          <p className="mt-3 text-sm text-ink/60">Nothing in the basket yet.</p>
-        ) : (
-          <ul className="mt-4 divide-y divide-ink/10">
-            {lines.map((l) => (
-              <li key={l.key} className="flex flex-wrap items-baseline justify-between gap-2 py-3">
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold">{l.qty} × {l.name}</span>
-                  {l.picks.length > 0 && (
-                    <span className="mt-0.5 block text-[12px] text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</span>
-                  )}
+      <form onSubmit={(e) => e.preventDefault()} className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+        <div className="space-y-6">
+          {/* Payment */}
+          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</legend>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {([
+                { id: 'link' as const, label: 'Payment link', blurb: 'We send a Yoco link in the chat' },
+                { id: 'cash' as const, label: 'Cash', blurb: 'Pay the driver on delivery' },
+              ]).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setMethod(m.id)}
+                  aria-pressed={method === m.id}
+                  className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
+                >
+                  <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
+                    {method === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold">{m.label}</span>
+                    <span className="block text-xs text-ink/55">{m.blurb}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            {/*
+              The honest answer to "can I pay online": not on this page. Card
+              payment needs the live site, because Yoco needs a server to start
+              the payment and a webhook to confirm it. Saying so beats a greyed
+              out button nobody explains.
+            */}
+            <p className="mt-3 text-xs leading-relaxed text-ink/50">
+              No card is taken on this page. Online card payment switches on with the live site; until then we send you a
+              secure Yoco link in the chat, and you pay there.
+            </p>
+          </fieldset>
+
+          {/* Details */}
+          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Your details</legend>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <Field label="Full name">
+                <input className={inputCls} value={customer.name} autoComplete="name" placeholder="Thabo Mahlangu" onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
+              </Field>
+              <Field label="Cell number" hint="so we can contact you">
+                <input className={inputCls} value={customer.phone} autoComplete="tel" placeholder="+27 82 000 0000" onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} />
+              </Field>
+              <Field label="Delivery area">
+                <select className={inputCls} value={customer.suburb} onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}>
+                  <option value="">Choose an area</option>
+                  {deliveryAreaOptions(settings).map((area) => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="sm:col-span-2">
+                {/*
+                  The same address box as the live checkout, on purpose.
+                  The owner's complaint — "house number, street and suburb it must
+                  be pulled from when u capture address" — was about this page too:
+                  the published site had a plain text input, so no address carried
+                  coordinates and the radius could not be checked at all. Picking a
+                  suggestion here fetches the map's coordinates, which is what makes
+                  the delivery check below mean something.
+                */}
+                <AddressField
+                  address={customer.address}
+                  area={customer.suburb}
+                  settings={settings}
+                  hintArea={addressArea}
+                  onChange={(value) => {
+                    setCustomer({ ...customer, address: value });
+                    /* Typing over a picked address drops its map evidence. */
+                    setAddressArea(null);
+                    setPoint(null);
+                  }}
+                  onPick={(suggestion: AddressSuggestion) => {
+                    setCustomer({ ...customer, address: suggestion.line, suburb: suggestion.area ?? OUTSIDE_AREA });
+                    setAddressArea(suggestion.area);
+                    setPoint(
+                      Number.isFinite(suggestion.lat) && Number.isFinite(suggestion.lng)
+                        ? { lat: Number(suggestion.lat), lng: Number(suggestion.lng) }
+                        : null,
+                    );
+                  }}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Field label="Notes for the kitchen" hint="optional">
+                  <input className={inputCls} value={customer.notes} placeholder="Extra hot, no salsa, ring on arrival…" onChange={(e) => setCustomer({ ...customer, notes: e.target.value })} />
+                </Field>
+              </div>
+            </div>
+
+            {/* Location: the same gate as the live checkout. */}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={geo.status === 'asking'}
+                onClick={() => {
+                  setGeo({ status: 'asking' });
+                  requestLocation().then((r) => setGeo(r));
+                }}
+              >
+                {geo.status === 'asking' ? 'Checking…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
+              </Button>
+              {zone.zone !== 'unknown' && (
+                <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-ochre-deep' : 'text-emerald-700'}`} role="status">
+                  {tooFar
+                    ? `${zone.distanceKm} km away — outside our ${rules.maxKm} km delivery area`
+                    : zone.zone === 'surcharge'
+                      ? `${zone.distanceKm} km away — ${zar(rules.fee)} delivery fee added`
+                      : `${zone.distanceKm} km away — delivery included`}
                 </span>
-                <span className="font-mono text-sm tabular-nums">{zar(l.unitPrice * l.qty)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {lines.length > 0 && (
-          <p className="mt-4 flex items-baseline justify-between border-t-2 border-ink/10 pt-4">
-            <span className="text-sm font-semibold">Subtotal · {fulfilment === 'delivery' ? 'delivery' : 'collection'}</span>
-            <span className="font-display text-2xl font-bold text-ochre-deep">{zar(cartSubtotal(lines))}</span>
-          </p>
-        )}
-
-        <p className="mt-3 text-xs leading-relaxed text-ink/45">
-          Prices are the published plate prices. Delivery in Rosebank and Sandton is included; the minimum order is R100.
-          The kitchen confirms the total with you before anything is charged.
-        </p>
-
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          <LinkButton href={wa} variant="primary">
-            {lines.length ? 'Order this on WhatsApp' : 'Chat to us on WhatsApp'}
-          </LinkButton>
-          <LinkButton to="/menu" variant="outline">Back to the menu</LinkButton>
+              )}
+              {/* Same two notes as the live checkout: a refused button must say
+                  why, and a coarse fix must be labelled as coarse. */}
+              {geo.status === 'denied' && (
+                <span className="text-xs leading-relaxed text-ink/50">{deniedMessage(geo.reason)}</span>
+              )}
+              {geo.status === 'ok' && !geo.precise && (
+                <span className="text-xs text-ink/45">
+                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address below for an exact check.
+                </span>
+              )}
+            </div>
+            {tooFar && (
+              <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-800" role="alert">
+                We cannot deliver {zone.distanceKm} km. We would rather tell you now than take your money for food we cannot
+                bring you.
+              </p>
+            )}
+          </fieldset>
         </div>
-      </div>
+
+        {/* Basket */}
+        <aside className="lg:sticky lg:top-28 lg:self-start">
+          <div className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+            <h2 className="font-display text-2xl font-semibold">Your basket</h2>
+            {lines.length === 0 ? (
+              <p className="mt-3 text-sm text-ink/60">Nothing in the basket yet.</p>
+            ) : (
+              <ul className="mt-4 divide-y divide-ink/10">
+                {lines.map((l) => (
+                  <li key={l.key} className="flex flex-wrap items-baseline justify-between gap-2 py-3">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{l.qty} × {l.name}</span>
+                      {l.picks.length > 0 && (
+                        <span className="mt-0.5 block text-[12px] text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</span>
+                      )}
+                    </span>
+                    <span className="font-mono text-sm tabular-nums">{zar(l.unitPrice * l.qty)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {lines.length > 0 && (
+              <p className="mt-4 flex items-baseline justify-between border-t-2 border-ink/10 pt-4">
+                <span className="text-sm font-semibold">Subtotal · delivery</span>
+                <span className="font-display text-2xl font-bold text-ochre-deep">{zar(subtotal)}</span>
+              </p>
+            )}
+
+            <p className="mt-3 text-xs leading-relaxed text-ink/45">
+              Delivery is included in Sandton and Rosebank; outside them a fee applies, and we deliver up to 50 km. The
+              kitchen confirms the total with you before anything is charged.
+            </p>
+
+            <div className="mt-5 flex flex-col gap-3">
+              {problem ? (
+                <span className="inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-full border-2 border-ink/25 bg-ink/5 px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink/40">
+                  Order on WhatsApp
+                </span>
+              ) : (
+                <LinkButton href={wa} variant="primary">Order on WhatsApp</LinkButton>
+              )}
+              <p className={`text-xs leading-relaxed ${problem ? 'font-medium text-chili' : 'text-ink/55'}`}>{problem ?? 'Opens WhatsApp with your order, details and payment choice already written out.'}</p>
+              <LinkButton to="/menu" variant="outline">Back to the menu</LinkButton>
+            </div>
+          </div>
+        </aside>
+      </form>
     </section>
   );
 }

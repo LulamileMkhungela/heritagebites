@@ -79,7 +79,7 @@ export const PAGES = {
   '/specials': {
     title: "This Week's Cooking & Delivery",
     description:
-      'What is cooking this week and how service works: Thursdays and Fridays, 12:00 to 13:30, with delivery in Rosebank and Sandton and collection in Rosebank.',
+      'What is cooking this week and how service works: Thursdays and Fridays, 12:00 to 13:30, delivered in Sandton and Rosebank and up to 50 km from the kitchen.',
     priority: 0.8,
     changefreq: 'daily',
   },
@@ -100,7 +100,7 @@ export const PAGES = {
   '/policies': {
     title: 'Policies & Terms',
     description:
-      'Delivery and collection, refunds, cancellations, website terms and privacy — the Heritage Bites policies in plain language, including failed payments.',
+      'Delivery, refunds, cancellations, website terms and privacy — the Heritage Bites policies in plain language, including failed payments.',
     priority: 0.5,
     changefreq: 'yearly',
   },
@@ -246,11 +246,13 @@ export function jsonLdScript(data) {
 /**
  * The business itself, as a schema.org `Restaurant`.
  *
- * Deliberately without `address`: Heritage Bites cooks in a hired kitchen and
- * hands the food over at a collection point, so a street address would be an
- * invented fact — and a wrong one is worse than a missing one for local search.
- * What is true is here: the phone, the email, the cuisine, the price band, the
- * two delivery areas, and the two service days.
+ * Deliberately without `address`: Heritage Bites cooks in a hired kitchen, so a
+ * street address would be an invented fact — and a wrong one is worse than a
+ * missing one for local search. What is true is here: the phone, the email, the
+ * cuisine, the price band, the delivery areas, and the two service days.
+ *
+ * `hasDeliveryMethod` is what tells Google this is a delivery business at all;
+ * collection has been retired, so a `Takeaway` method would now be a lie.
  *
  * @param {string | null} siteUrl
  * @param {{ phoneDisplay?: string, phone?: string, email?: string, established?: number, deliveryAreas?: string[], serviceWindow?: { open?: string, close?: string } }} [settings]
@@ -269,7 +271,7 @@ export function restaurantJsonLd(siteUrl, settings = {}) {
     name: BRAND,
     slogan: TAGLINE,
     description:
-      'Traditional and contemporary South African plates, cooked in small batches on Thursdays and Fridays and delivered in Rosebank and Sandton.',
+      'Traditional and contemporary South African plates, cooked in small batches on Thursdays and Fridays and delivered in Sandton and Rosebank, and up to 50 km from the kitchen.',
     ...(base ? { url: `${base}/`, hasMenu: `${base}/menu`, image: `${base}${DEFAULT_SHARE_IMAGE}` } : {}),
     telephone: phone,
     ...(settings.email ? { email: settings.email } : {}),
@@ -278,7 +280,14 @@ export function restaurantJsonLd(siteUrl, settings = {}) {
     currenciesAccepted: 'ZAR',
     paymentAccepted: 'Cash, Credit Card',
     foundingDate: String(settings.established ?? 2025),
-    /* Delivery-only in two suburbs, and it is not a booking restaurant. */
+    /*
+     * Delivery-only (owner, 14 Nov 2026), and not a booking restaurant.
+     *
+     * The area list is where the *included* delivery run is, not the whole
+     * radius: Google reads `areaServed` as "where this business serves", and
+     * listing every suburb inside 50 km would be inventing an address book.
+     */
+    hasDeliveryMethod: 'http://purl.org/goodrelations/v1#DeliveryModeOwnFleet',
     areaServed: areas.map((name) => ({ '@type': 'City', name })),
     openingHoursSpecification: [
       {

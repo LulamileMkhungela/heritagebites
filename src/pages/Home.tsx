@@ -4,7 +4,7 @@ import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 
 import { zar } from '../lib/format';
-import { Button, HeritageBand, LinkButton, MrDIcon, PotMark, Reveal, SectionLabel, ShweshwePanel, UberEatsIcon, WhatsAppIcon, WovenRule } from '../components/ui';
+import { Button, HeritageBand, LinkButton, MrDIcon, Reveal, SectionLabel, ShweshwePanel, UberEatsIcon, WhatsAppIcon, WovenRule } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
 import { usePageSeo } from '../lib/seo';
@@ -51,6 +51,7 @@ export default function Home() {
       <HowItWorks />
       <ServiceRules />
       <Channels settings={catalog?.settings} />
+      <GoogleReview settings={catalog?.settings} />
       <PassportCTA />
 
       {modal && <ItemModal item={modal} onClose={() => setModal(null)} />}
@@ -90,8 +91,8 @@ function Hero({ onOrder }: { onOrder: () => void }) {
 
       <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-20 md:grid-cols-[1.15fr_.85fr] md:py-28 lg:py-32">
         <div>
+          {/* The pot mark was removed from the hero at the owner's request. */}
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-bone/25 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ochre">
-            <PotMark className="h-4 w-4" />
             Est. {s?.established ?? 2025} · Every Bite Tells a Story
           </div>
 
@@ -182,7 +183,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
               {[
                 {
                   t: shut ? 'Ordering closed' : 'Order online',
-                  d: shut ? 'The window has passed for today' : 'Card through Yoco, or cash when you collect or receive',
+                  d: shut ? 'The window has passed for today' : 'Card through Yoco, or cash to the driver',
                   to: '/checkout',
                 },
                 { t: 'WhatsApp', d: shut ? 'Ask if we can still cook for you' : 'Message us to place an order', href: waHrefOrder },
@@ -223,7 +224,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
               ))}
             </ul>
             <p className="mt-4 text-xs leading-relaxed text-bone/45">
-              Collect and you pay the plate price. Delivery adds a flat fee in Rosebank and Sandton.
+              Delivered to you — the plate price includes delivery in Sandton and Rosebank.
             </p>
           </div>
         </Reveal>
@@ -372,8 +373,8 @@ function HowItWorks() {
 
   const steps = [
     { n: '01', t: 'Pick your plate', d: 'Choose a protein, then a starch and a vegetable side. The plate price includes everything.' },
-    { n: '02', t: 'Pay your way', d: 'Pay by card through Yoco, or in cash — at the counter when you collect, or to the driver on delivery.' },
-    { n: '03', t: 'Choose collection or delivery', d: 'Collect at the plate price, or have it delivered in Rosebank and Sandton for a flat fee.' },
+    { n: '02', t: 'Pay your way', d: 'Pay by card through Yoco before we cook, or in cash to the driver at the door.' },
+    { n: '03', t: 'We bring it to you', d: 'Delivery is included in Sandton and Rosebank. Further out a delivery fee applies, up to 50 km.' },
     {
       n: '04',
       t: 'Use your loyalty card',
@@ -428,7 +429,7 @@ function ServiceRules() {
           ? `${zar(settings.deliveryFlat)}, free over ${zar(settings.freeDeliveryAbove)}`
           : zar(settings.deliveryFlat),
     ],
-    ['Collection', 'Same plate price — collection point confirmed on WhatsApp'],
+    ['Outside Sandton & Rosebank', 'A delivery fee applies, up to 50 km from the kitchen'],
   ];
 
   return (
@@ -448,7 +449,7 @@ function ServiceRules() {
             confirm whether it can cook it.
           </p>
           <p className="mt-3 text-sm text-ink/55">
-            Collection is from our shadow kitchen — {settings.collectionNote}
+            Every order is delivered. Inside Sandton and Rosebank the plate price is the whole price.
           </p>
           <LinkButton to="/policies" variant="outline" size="sm" className="mt-5">
             Read our policies
@@ -570,9 +571,60 @@ function PassportCTA() {
                 the ask for a dish they miss is one tap away rather than buried
                 in a footer.
               */}
-              <LinkButton to="/quest" variant="onDark">Customer quest</LinkButton>
+              <LinkButton to="/quest" variant="onDark">Customer request</LinkButton>
             </div>
           </div>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
+/* ----------------------------- Google review --------------------------- */
+
+/**
+ * The Google review ask.
+ *
+ * Owner, 14 Nov 2026. Everything here is driven by `settings.googleReviewUrl`, so
+ * this is wired and ready the moment the Google Business Profile Place ID
+ * arrives — the link is just
+ * `https://search.google.com/local/writereview?placeid=<PLACE_ID>`.
+ *
+ * Two deliberate choices:
+ *
+ * 1. **No Place ID, no button.** An empty setting renders nothing at all. A
+ *    "Leave us a review" button pointing at a guessed Place ID would send a
+ *    happy customer to an unrelated business's page, which is worse than asking
+ *    later.
+ * 2. **No star rating until Google gives us one.** The site used to print "4.9"
+ *    beside dish cards with nothing behind it. A rating this business cannot
+ *    substantiate is exactly the kind of claim that costs a restaurant its
+ *    credibility, so the copy asks for a review instead of quoting one.
+ *
+ * The section sits under the ordering channels rather than in the footer: it is
+ * asking for something, so it belongs where the customer has just finished
+ * reading about the food.
+ */
+function GoogleReview({ settings }: { settings?: Settings }) {
+  const url = settings?.googleReviewUrl?.trim();
+  if (!url) return null;
+
+  return (
+    <section className="mx-auto max-w-7xl px-4 pb-4">
+      <Reveal>
+        <div className="flex flex-col items-start gap-5 rounded-[2rem] border-2 border-ink/10 bg-white p-8 sm:flex-row sm:items-center sm:justify-between md:p-10">
+          <div className="max-w-xl">
+            <SectionLabel>Google reviews</SectionLabel>
+            <h2 className="mt-2 font-display text-2xl font-semibold md:text-3xl">
+              Eaten with us? Tell Google.
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink/60">
+              Reviews are how the next person finds a kitchen like this one. If the plate was good, it takes a minute.
+            </p>
+          </div>
+          <LinkButton href={url} variant="dark" size="lg">
+            Review {settings?.googlePlaceName ?? 'Heritage Bites'} on Google
+          </LinkButton>
         </div>
       </Reveal>
     </section>
