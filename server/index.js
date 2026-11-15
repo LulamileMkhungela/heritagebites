@@ -36,7 +36,19 @@ import {
   removeSubscription,
   saveSubscription,
 } from './lib/web-push.js';
-import { areasNamedIn, deliveryAreaFor, deliveryAreasLabel, isOutsideAreaChoice, serviceStatus, serviceWindowFor, parseSpecialServiceDays, mergeSpecialServiceDays } from './lib/service.js';
+import {
+  areasNamedIn,
+  deliveryAreaFor,
+  deliveryAreasLabel,
+  extraCost,
+  extraLabel,
+  isOutsideAreaChoice,
+  maxPerExtra,
+  mergeSpecialServiceDays,
+  parseSpecialServiceDays,
+  serviceStatus,
+  serviceWindowFor,
+} from './lib/service.js';
 /*
  * Distance rules live in shared/address.js so the browser and the server make
  * the same decision from the same numbers — a basket that says R30 must be the
@@ -346,9 +358,23 @@ function priceLines(clientLines) {
         }
         for (const id of picked) {
           const item = group.items.find((i) => i.id === id);
-          const delta = group.priced ? Number(item?.price) || 0 : 0;
+          /*
+           * How many bottles, from the customer's own count in `extraQty`.
+           *
+           * The count is clamped against the catalogue — never trusted as sent.
+           * Four is what the seed allows for one ginger beer; a hand-made request
+           * asking for four hundred gets four, and the price follows the clamped
+           * number rather than the requested one.
+           */
+          const qty = group.priced ? Math.min(maxPerExtra(group, item), Math.max(1, Math.floor(Number(raw.extraQty?.[`${group.id}:${id}`] ?? raw.extraQty?.[id]) || 1))) : 1;
+          const delta = group.priced ? extraCost(Number(item?.price) || 0, qty) : 0;
           extras += delta;
-          chosen.push({ label: item.label, priceDelta: delta });
+          /*
+           * The label carries the quantity, because the kitchen packs from this
+           * line: "2 × Ginger gemere" is an instruction, "Ginger gemere" twice in
+           * a list is a riddle.
+           */
+          chosen.push({ id, label: extraLabel(item.label, qty), priceDelta: delta, ...(qty > 1 ? { qty } : {}) });
         }
       }
       if (invalid) continue;
@@ -385,12 +411,42 @@ function priceLines(clientLines) {
         if (opt.required) errors.push(`${item.name}: please choose ${opt.label.toLowerCase()}.`);
         continue;
       }
+      /*
+       * An option is sent either as an id ("pap") or, when the customer chose a
+       * number of it, as `{ id, qty }`. Both shapes are accepted because both are
+       * real: most options are a single choice, and only the extras carry a
+       * count — and an older cached bundle still sends the bare id.
+       */
       const picked = Array.isArray(clientPicked) ? clientPicked : [clientPicked];
-      for (const p of picked) {
-        const choice = opt.choices.find((c) => c.id === p);
+      for (const entry of picked) {
+        const id = entry && typeof entry === 'object' ? entry.id : entry;
+        const choice = opt.choices.find((c) => c.id === id);
         if (!choice) continue;
-        unitPrice += Number(choice.priceDelta) || 0;
-        optionLabels.push({ id: choice.id, label: choice.label, priceDelta: Number(choice.priceDelta) || 0 });
+        /*
+         * Only a priced option may charge for a count; a starch picked "twice"
+         * is still one starch, and its delta is zero anyway.
+         *
+         * The count arrives two ways and both are real: inline (`{ id, qty }`)
+         * and in the `extraQty` map the basket sends, keyed "optionId:choiceId".
+         * The map is what the checkout uses, because `options` is a map of ids
+         * and folding a number into it would change its shape for every option.
+         */
+        const sentQty =
+          (entry && typeof entry === 'object' ? entry.qty : null) ??
+          raw.extraQty?.[`${opt.id}:${choice.id}`] ??
+          raw.extraQty?.[choice.id] ??
+          1;
+        const qty = opt.priced
+          ? Math.min(maxPerExtra(opt, choice), Math.max(1, Math.floor(Number(sentQty) || 1)))
+          : 1;
+        const delta = extraCost(Number(choice.priceDelta) || 0, qty);
+        unitPrice += delta;
+        optionLabels.push({
+          id: choice.id,
+          label: extraLabel(choice.label, qty),
+          priceDelta: delta,
+          ...(qty > 1 ? { qty } : {}),
+        });
       }
     }
 
@@ -406,15 +462,38 @@ function priceLines(clientLines) {
      */
     const plate = item.plateId ? (get('plateMenus') ?? seed.plateMenus).find((p) => p.id === item.plateId) : null;
     if (plate) {
+      /*
+       * The override resets the price to the plate price, then re-adds only the
+       * priced extras — at the customer's own count, clamped to the catalogue.
+       * Reading the count here too is what keeps "2 ginger beers on a mogodu
+       * plate" at R150 rather than quietly back at R125.
+       */
       const extras = (item.options ?? [])
         .filter((opt) => opt.priced)
         .reduce((sum, opt) => {
-          const pickedIds = raw.options?.[opt.id] ?? null;
-          if (!pickedIds) return sum;
-          const ids = Array.isArray(pickedIds) ? pickedIds : [pickedIds];
+          const clientPicked = raw.options?.[opt.id] ?? null;
+          if (!clientPicked) return sum;
+          const entries = Array.isArray(clientPicked) ? clientPicked : [clientPicked];
           return (
             sum +
-            ids.reduce((n, id) => n + (Number(opt.choices.find((c) => c.id === id)?.priceDelta) || 0), 0)
+            entries.reduce((n, entry) => {
+              const id = entry && typeof entry === 'object' ? entry.id : entry;
+              const choice = opt.choices.find((c) => c.id === id);
+              if (!choice) return n;
+              /*
+               * The count comes from either shape, and the `extraQty` map must be
+               * read here too: this override *replaces* the unit price, so a
+               * count it does not see is a count the customer is not charged for.
+               * Missing it charged two bottles at R125 instead of R150.
+               */
+              const sentQty =
+                (entry && typeof entry === 'object' ? entry.qty : null) ??
+                raw.extraQty?.[`${opt.id}:${choice.id}`] ??
+                raw.extraQty?.[choice.id] ??
+                1;
+              const qty = Math.min(maxPerExtra(opt, choice), Math.max(1, Math.floor(Number(sentQty) || 1)));
+              return n + extraCost(Number(choice.priceDelta) || 0, qty);
+            }, 0)
           );
         }, 0);
       unitPrice = Math.round((Number(plate.price) + extras) * 100) / 100;

@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { zar } from '../lib/format';
 import { useOverlay } from '../lib/useOverlay';
 import { asset } from '../lib/assets';
+import { extraLabel } from '../../shared/service.js';
 import { HeritageBand, WhatsAppIcon } from './ui';
 import { BasketBar } from './BasketBar';
 import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY } from '../lib/whatsapp';
@@ -598,7 +599,14 @@ function CartDrawerPanel() {
                         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
                       </button>
                     </div>
-                    {l.picks.length > 0 && <p className="mt-0.5 text-xs leading-snug text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</p>}
+                    {/* "2 × Ginger gemere" — the count is the part the customer
+                        needs to check before paying, so it is never folded into
+                        the line total and left unexplained. */}
+                    {l.picks.length > 0 && (
+                      <p className="mt-0.5 text-xs leading-snug text-ink/50">
+                        {l.picks.map((p) => extraLabel(p.label, p.qty)).join(' · ')}
+                      </p>
+                    )}
                     <div className="mt-2 flex items-center justify-between">
                       <div className="inline-flex items-center rounded-full border-2 border-ink/12">
                         <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="grid h-7 w-7 place-items-center hover:bg-ink hover:text-bone rounded-full" aria-label="Decrease">−</button>

@@ -7,7 +7,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { serviceStatus, deliveryAreaFor, deliveryAreasLabel, serviceWindowFor, sastNow, windowLabel, parseSpecialServiceDays, specialServiceDayFor, mergeSpecialServiceDays } from './service.js';
+import { serviceStatus, deliveryAreaFor, deliveryAreasLabel, serviceWindowFor, sastNow, windowLabel, parseSpecialServiceDays, specialServiceDayFor, mergeSpecialServiceDays, extraCost, extraLabel, maxPerExtra } from './service.js';
+import { plateMenus } from '../seed.js';
 
 const settings = {
   hours: [
@@ -260,4 +261,59 @@ describe('special service days', () => {
     assert.equal(specialServiceDayFor(settings, '2026-10-31', 6), null, 'no special days configured on this settings object');
     assert.equal(specialServiceDayFor(settings, 'garbage', 6), null);
   });
+});
+
+/* ------------------- Extras: how many, and what that costs ------------- */
+
+/*
+ * Owner, 14 Nov 2026 — "have ability to add extras like how its done on
+ * ubereats". The mechanism is a count on a priced extra, so these four helpers
+ * are the whole behaviour: cap it, price it, and say it.
+ */
+
+test('an extra carries a count, and the count is clamped to the catalogue', () => {
+  /* Nothing declared means one — a starch is a choice, not a quantity. */
+  assert.equal(maxPerExtra(), 1);
+  assert.equal(maxPerExtra(null, null), 1);
+  /* The drink declares four. */
+  assert.equal(maxPerExtra({ max: 1 }, { max: 4 }), 4);
+  /* The choice's own cap beats the group's, which is about selections. */
+  assert.equal(maxPerExtra({ max: 1 }, { max: 4 }), 4);
+  /* Nothing may exceed the sanity ceiling, however it is asked for. */
+  assert.equal(maxPerExtra({ max: 999 }, { max: 999 }), 20);
+  /* And nothing may be zero or negative. */
+  assert.equal(maxPerExtra({ max: 0 }, { max: -3 }), 1);
+});
+
+test('a second bottle costs a second R25, not a second plate', () => {
+  assert.equal(extraCost(25, 1), 25);
+  assert.equal(extraCost(25, 2), 50, 'two bottles, one plate');
+  assert.equal(extraCost(25, 4), 100);
+  /* A missing count is one — an older bundle that never sent one is not free. */
+  assert.equal(extraCost(25), 25);
+  assert.equal(extraCost(25, 0), 25);
+  /* The ceiling matches the label ceiling, so price and text cannot disagree. */
+  assert.equal(extraCost(25, 999), 500);
+});
+
+test('one is silent, more than one is stated', () => {
+  assert.equal(extraLabel('Ginger gemere', 1), 'Ginger gemere');
+  assert.equal(extraLabel('Ginger gemere'), 'Ginger gemere');
+  assert.equal(extraLabel('Ginger gemere', 2), '2 × Ginger gemere');
+  assert.equal(extraLabel('Ginger gemere', 999), '20 × Ginger gemere');
+});
+
+test('the drink in the seed allows four bottles on one plate', () => {
+  /*
+   * The catalogue and the helpers have to agree. A seed that says "max: 1" while
+   * the UI renders a stepper would let a customer tap a second bottle and watch
+   * the server charge for one.
+   */
+  const group = plateMenus[0].groups.find((g) => g.id === 'drink');
+  assert.ok(group?.priced, 'the drink group is priced');
+  assert.equal(maxPerExtra(group, group.items[0]), 4);
+  /* Every other group stays a single choice. */
+  for (const g of plateMenus[0].groups.filter((x) => x.id !== 'drink')) {
+    assert.equal(maxPerExtra(g, g.items[0]), 1, `${g.id} must not carry a count`);
+  }
 });

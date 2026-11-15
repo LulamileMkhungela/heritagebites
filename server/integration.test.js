@@ -769,6 +769,76 @@ describe('checkout', () => {
     assert.equal(noDrink.body.order.totals.total, 100);
   });
 
+  test('two ginger beers on one plate cost two R25 drinks, not two plates', async () => {
+    /*
+     * Owner, 14 Nov 2026 — "have ability to add extras like how its done on
+     * ubereats". A table of four ordering one delivery wants four bottles beside
+     * the food, and the old builder could only express that by adding the whole
+     * plate four times: four plates they never ordered, at R100 each.
+     *
+     * The count is sent as `extraQty` and clamped against the catalogue, so this
+     * asserts both the arithmetic and the cap in one place.
+     */
+    const two = await placeOrder({
+      items: [{
+        kind: 'plate',
+        plateId: 'traditional',
+        qty: 1,
+        selections: { protein: ['mogodu'], starch: ['pap'], veg: ['chakalaka'], drink: ['ginger-gemere'] },
+        extraQty: { 'drink:ginger-gemere': 2 },
+      }],
+    });
+    assert.equal(two.res.status, 201);
+    assert.equal(two.body.order.items[0].unitPrice, 150, 'R100 plate + 2 × R25');
+    assert.equal(two.body.order.totals.total, 150);
+    assert.match(two.body.order.items[0].options.find((o) => /ginger/i.test(o.label)).label, /^2 ×/);
+
+    /* Four is the catalogue's ceiling for one plate. */
+    const four = await placeOrder({
+      items: [{
+        kind: 'plate',
+        plateId: 'traditional',
+        qty: 1,
+        selections: { protein: ['mogodu'], starch: ['pap'], veg: ['chakalaka'], drink: ['ginger-gemere'] },
+        extraQty: { 'drink:ginger-gemere': 4 },
+      }],
+    });
+    assert.equal(four.body.order.items[0].unitPrice, 200, 'R100 + 4 × R25');
+
+    /*
+     * And a hand-made request for 400 bottles is clamped to four, priced at four.
+     * The server never trusts the number it is sent — that is the whole reason
+     * the cap lives in the catalogue rather than in the browser.
+     */
+    const greedy = await placeOrder({
+      items: [{
+        kind: 'plate',
+        plateId: 'traditional',
+        qty: 1,
+        selections: { protein: ['mogodu'], starch: ['pap'], veg: ['chakalaka'], drink: ['ginger-gemere'] },
+        extraQty: { 'drink:ginger-gemere': 400 },
+      }],
+    });
+    assert.equal(greedy.body.order.items[0].unitPrice, 200, 'clamped to the catalogue, not the request');
+  });
+
+  test('two ginger beers on a DISH CARD are charged for too', async () => {
+    /* The companion path: the same drink bought from a dish card rather than the
+       builder must behave identically, or one of the two ways to order becomes a
+       place to get free drinks. */
+    const withTwo = await placeOrder({
+      items: [{
+        itemId: 'mogodu-plate',
+        qty: 1,
+        options: { starch: 'pap', veg: 'braised-cabbage', drink: 'ginger-gemere' },
+        extraQty: { 'drink:ginger-gemere': 2 },
+      }],
+    });
+    assert.equal(withTwo.res.status, 201);
+    assert.equal(withTwo.body.order.items[0].unitPrice, 150, 'R100 plate + 2 × R25');
+    assert.match(withTwo.body.order.items[0].options.find((o) => /ginger/i.test(o.label)).label, /^2 ×/);
+  });
+
   test('a plate component never adds money, whatever the client sends', async () => {
     /*
      * The companion to the drink test: a tampered client that marks a starch or

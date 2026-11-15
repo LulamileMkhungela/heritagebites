@@ -6,6 +6,16 @@ export interface OptionChoice {
   id: string;
   label: string;
   priceDelta: number;
+  /**
+   * How many of this extra the customer may take. Absent means one.
+   *
+   * This is the difference between a choice and an extra. A starch is a choice:
+   * one, and picking another replaces it. Two ginger beers is an extra, and on a
+   * delivery order it is the single most common thing a customer wants to say —
+   * Uber Eats puts a stepper on every add-on for exactly that reason. Before
+   * this, "2 ginger beers" meant adding the whole plate twice.
+   */
+  max?: number;
 }
 
 export interface MenuOption {
@@ -13,6 +23,13 @@ export interface MenuOption {
   label: string;
   required?: boolean;
   multiple?: boolean;
+  /**
+   * True when this option is an add-on sold *alongside* the dish rather than
+   * included in its price — the soft drink. Only a priced option may charge for
+   * itself, and only a priced option carries a count; everything else is part of
+   * the plate and its `priceDelta` is zero.
+   */
+  priced?: boolean;
   choices: OptionChoice[];
 }
 
@@ -81,7 +98,13 @@ export interface PlateGroup {
   label: string;
   required: boolean;
   max: number;
-  items: { id: string; label: string; price: number }[];
+  items: {
+    id: string;
+    label: string;
+    price: number;
+    /** How many of this item one plate may carry. One when absent. */
+    max?: number;
+  }[];
   /**
    * True for the one group sold *alongside* the plate rather than included in
    * it — the soft drink. Its item prices are charged on top of the plate price;
@@ -240,6 +263,15 @@ export interface CartOptionPick {
   choiceId: string;
   label: string;
   priceDelta: number;
+  /**
+   * How many of this extra, on a line that already exists. Absent means one.
+   *
+   * Stored per line rather than folded into the price so the basket can explain
+   * itself: "2 × Ginger gemere · R50" is information, and a silent R50 on the
+   * plate price is not. It also keeps the customer's own quantity intact when
+   * the server re-prices the line.
+   */
+  qty?: number;
 }
 
 export interface CartLine {
