@@ -950,13 +950,16 @@ describe('checkout', () => {
     assert.equal(rosebank.body.order.deliveryArea, 'Rosebank');
   });
 
-  test('the delivery boundary is a 50 km radius, not a suburb list', async () => {
+  test('the delivery boundary is a 15 km radius, not a suburb list', async () => {
     /*
-     * Owner, 14 Nov 2026: outside Sandton/Rosebank a fee is added, and past
-     * 50 km the order is refused. Both are decided by distance, so a Pretoria
-     * address is refused for being 45 km away — not for failing to name a suburb
-     * in a list. A Sandton address with no coordinates still goes through: an
-     * unmeasurable address is never treated as too far.
+     * Owner, 15 Nov 2026: the limit is 15 km, down from 50. Outside
+     * Sandton/Rosebank a fee is added; past 15 km the order is refused.
+     *
+     * Both are decided by distance, so a Midrand address at ~16 km is refused
+     * for being 16 km away — not for failing to name a suburb in a list. That
+     * distinction matters more at 15 km than it did at 50: a tenth of a kilometre
+     * is now a real share of the radius, and the address is the only thing that
+     * says which side of it someone is on.
      */
     const far = await placeOrder({
       customer: {
@@ -967,16 +970,36 @@ describe('checkout', () => {
     });
     assert.equal(far.res.status, 422);
     assert.match(far.body.errors[0], /52\.2 km away/i);
-    assert.match(far.body.errors[0], /within 50 km/);
+    assert.match(far.body.errors[0], /within 15 km/);
     assert.equal(far.body.outOfRange, true);
+
+    /*
+     * And the new edge is tested on its own terms: Midrand is 16.1 km out, which
+     * 50 km allowed and 15 km does not. An address that was deliverable
+     * yesterday must be refused today, or the change did not take.
+     */
+    const midrand = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '1 Church Street, Midrand', suburb: 'Midrand',
+        lat: -25.9992, lng: 28.1263,
+      },
+    });
+    assert.equal(midrand.res.status, 422, '16.1 km is outside a 15 km radius');
+    assert.match(midrand.body.errors[0], /16\.1 km away/i);
+    assert.match(midrand.body.errors[0], /within 15 km/);
   });
 
   test('an address just outside the included ring pays the fee, and is still served', async () => {
     /*
      * Bryanston is about 8 km from the kitchen: outside the included Sandton and
-     * Rosebank ring, comfortably inside the 50 km limit. It must be priced with
+     * Rosebank ring, comfortably inside the 15 km limit. It must be priced with
      * the fee rather than refused — the owner's rule is "another fee will be
      * added", not "no".
+
+     * Bryanston is also the closest thing to the new edge that still works: at
+     * 8.8 km it is over half the radius, so it is the case that proves the fee
+     * ring did not disappear when the boundary moved in.
      */
     const { res, body } = await placeOrder({
       customer: {

@@ -99,7 +99,7 @@ export function deliveryGateProblem(
     return `Delivery orders start at ${zar(min)} — add a little more, or message us on WhatsApp about a smaller order.`;
   }
   if (zone.zone === 'refused') {
-    return `That address is ${zone.distanceKm} km away — we deliver within ${settings?.maxDeliveryKm ?? 50} km.`;
+    return `That address is ${zone.distanceKm} km away — we deliver within ${settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km.`;
   }
   if (zone.zone === 'unknown') {
     return 'Pick your address from the list as you type, or tap "Use my current location" — we need one of them to check we can deliver to you.';
@@ -410,7 +410,7 @@ function LiveCheckout() {
        * The server cannot measure an address it has no coordinates for, and it
        * must not invent a distance — so if nobody located the customer, the
        * order would go through with the radius unchecked. Refusing here is the
-       * only way the 50 km rule means anything: pick the address from the list,
+       * only way the distance rule means anything: pick the address from the list,
        * or share your location, and the rule can be applied.
        */
       if (zone.zone === 'refused') {
@@ -607,7 +607,7 @@ function LiveCheckout() {
                   if (geo.status === 'asking') return;
                   setGeo({ status: 'asking' });
                   /* Precise first, then a fallback — see lib/geolocation.ts for
-                     why a coarse fix cannot decide a 50 km boundary honestly. */
+                     why a coarse fix cannot decide a distance boundary honestly. */
                   requestLocation().then((r) => setGeo(r));
                 }}
                 disabled={geo.status === 'asking'}
@@ -768,7 +768,7 @@ function LiveCheckout() {
                     
                     The third option is not a nicety: the rules are distance-based
                     (inside the two suburbs delivery is included, outside them a
-                    fee applies, past 50 km we refuse). A customer in Bryanston
+                    fee applies, past the limit we refuse). A customer in Bryanston
                     had no honest answer here — only two suburbs that were both
                     wrong — which is how a radius became a two-suburb list.
                     
@@ -1043,7 +1043,7 @@ function PreviewCheckout() {
   /*
    * The coordinates of the address the customer *picked*, as opposed to the ones
    * their device reported. The published site needs both: the address box is the
-   * route for anyone who will not share a location, and the 50 km rule is the
+   * route for anyone who will not share a location, and the distance rule is the
    * whole point of asking.
    */
   const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
@@ -1071,7 +1071,7 @@ function PreviewCheckout() {
 
   /*
    * The same rule the live checkout applies, and the same reason for it: the
-   * 50 km radius cannot be checked without coordinates, so the order may not
+   * radius cannot be checked without coordinates, so the order may not
    * leave until the customer has given them.
    */
   const problem =
@@ -1277,8 +1277,8 @@ function PreviewCheckout() {
             )}
 
             <p className="mt-3 text-xs leading-relaxed text-ink/45">
-              Delivery is included in Sandton and Rosebank; outside them a fee applies, and we deliver up to 50 km. The
-              kitchen confirms the total with you before anything is charged.
+              Delivery is included in Sandton and Rosebank; outside them a fee applies, and we deliver up to{' '}
+              {rules.maxKm} km. The kitchen confirms the total with you before anything is charged.
             </p>
 
             <div className="mt-5 flex flex-col gap-3">

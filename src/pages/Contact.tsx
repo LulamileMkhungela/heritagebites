@@ -7,6 +7,7 @@ import { Button, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../
 import { usePageSeo } from '../lib/seo';
 import { waHref, GENERAL_ENQUIRY } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
+import { DELIVERY_ZONES } from '../../shared/address.js';
 
 const SUBJECTS = ['General enquiry', 'Catering quote', 'Feedback', 'Something went wrong with my order', 'Work with us'];
 
@@ -159,7 +160,7 @@ export default function Contact() {
               <p className="mt-2 text-sm text-ink/70">
                 Thursdays and Fridays between {s?.serviceWindow.open} and {s?.serviceWindow.close}. Delivery is included in{' '}
                 {s?.deliveryAreas?.join(' & ') ?? 'Sandton & Rosebank'}; outside them a fee applies, and we deliver up to{' '}
-                {s?.maxDeliveryKm ?? 50} km from the kitchen. The minimum order is R{Number(s?.minDeliveryOrder ?? 100)}.
+                {s?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen. The minimum order is R{Number(s?.minDeliveryOrder ?? 100)}.
               </p>
               <Link to="/policies" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-ochre-deep underline">
                 Delivery, refund and cancellation policies

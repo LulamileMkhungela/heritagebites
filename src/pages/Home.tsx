@@ -7,6 +7,7 @@ import { zar } from '../lib/format';
 import { Button, HeritageBand, LinkButton, MrDIcon, Reveal, SectionLabel, ShweshwePanel, UberEatsIcon, WhatsAppIcon, WovenRule } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
+import { DELIVERY_ZONES } from '../../shared/address.js';
 import { usePageSeo } from '../lib/seo';
 import { basketHref, waUrlWithText, CHANNEL_ENQUIRY } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
@@ -370,11 +371,20 @@ function HowItWorks() {
   const catalog = useCatalog((s) => s.data);
   const perRand = catalog?.settings?.loyaltyRateCents ?? 5000;
   const rate = perRand > 0 ? zar(perRand / 100) : null;
+  /*
+   * The radius is read, never typed.
+   *
+   * Owner, 15 Nov 2026: the limit went from 50 km to 15. A number written into
+   * marketing copy is a number that will be wrong the next time the rule
+   * changes, and it is the customer-facing half of exactly the drift the
+   * single `maxDeliveryKm` setting exists to prevent.
+   */
+  const maxKm = catalog?.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm;
 
   const steps = [
     { n: '01', t: 'Pick your plate', d: 'Choose a protein, then a starch and a vegetable side. The plate price includes everything.' },
     { n: '02', t: 'Pay your way', d: 'Pay by card through Yoco before we cook, or in cash to the driver at the door.' },
-    { n: '03', t: 'We bring it to you', d: 'Delivery is included in Sandton and Rosebank. Further out a delivery fee applies, up to 50 km.' },
+    { n: '03', t: 'We bring it to you', d: `Delivery is included in Sandton and Rosebank. Further out a delivery fee applies, up to ${maxKm} km.` },
     {
       n: '04',
       t: 'Use your loyalty card',
@@ -429,7 +439,7 @@ function ServiceRules() {
           ? `${zar(settings.deliveryFlat)}, free over ${zar(settings.freeDeliveryAbove)}`
           : zar(settings.deliveryFlat),
     ],
-    ['Outside Sandton & Rosebank', 'A delivery fee applies, up to 50 km from the kitchen'],
+    ['Outside Sandton & Rosebank', `A delivery fee applies, up to ${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen`],
   ];
 
   return (

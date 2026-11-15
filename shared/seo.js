@@ -79,7 +79,7 @@ export const PAGES = {
   '/specials': {
     title: "This Week's Cooking & Delivery",
     description:
-      'What is cooking this week and how service works: Thursdays and Fridays, 12:00 to 13:30, delivered in Sandton and Rosebank and up to 50 km from the kitchen.',
+      'What is cooking this week and how service works: Thursdays and Fridays, 12:00 to 13:30, delivered in Sandton and Rosebank and up to 15 km from the kitchen.',
     priority: 0.8,
     changefreq: 'daily',
   },
@@ -255,7 +255,7 @@ export function jsonLdScript(data) {
  * collection has been retired, so a `Takeaway` method would now be a lie.
  *
  * @param {string | null} siteUrl
- * @param {{ phoneDisplay?: string, phone?: string, email?: string, established?: number, deliveryAreas?: string[], serviceWindow?: { open?: string, close?: string } }} [settings]
+ * @param {{ phoneDisplay?: string, phone?: string, email?: string, established?: number, deliveryAreas?: string[], serviceWindow?: { open?: string, close?: string }, maxDeliveryKm?: number }} [settings]
  */
 export function restaurantJsonLd(siteUrl, settings = {}) {
   const base = normaliseSiteUrl(siteUrl);
@@ -263,6 +263,9 @@ export function restaurantJsonLd(siteUrl, settings = {}) {
   const areas = settings.deliveryAreas?.length ? settings.deliveryAreas : ['Rosebank', 'Sandton'];
   const open = settings.serviceWindow?.open ?? '12:00';
   const close = settings.serviceWindow?.close ?? '13:30';
+  /* Read from settings like every other surface: the schema is what Google
+     quotes about the business, so a hardcoded radius here outlives the rule. */
+  const maxKm = Number(settings.maxDeliveryKm ?? 15);
 
   return {
     '@context': 'https://schema.org',
@@ -271,7 +274,7 @@ export function restaurantJsonLd(siteUrl, settings = {}) {
     name: BRAND,
     slogan: TAGLINE,
     description:
-      'Traditional and contemporary South African plates, cooked in small batches on Thursdays and Fridays and delivered in Sandton and Rosebank, and up to 50 km from the kitchen.',
+      `Traditional and contemporary South African plates, cooked in small batches on Thursdays and Fridays and delivered in Sandton and Rosebank, and up to ${maxKm} km from the kitchen.`,
     ...(base ? { url: `${base}/`, hasMenu: `${base}/menu`, image: `${base}${DEFAULT_SHARE_IMAGE}` } : {}),
     telephone: phone,
     ...(settings.email ? { email: settings.email } : {}),
@@ -285,7 +288,7 @@ export function restaurantJsonLd(siteUrl, settings = {}) {
      *
      * The area list is where the *included* delivery run is, not the whole
      * radius: Google reads `areaServed` as "where this business serves", and
-     * listing every suburb inside 50 km would be inventing an address book.
+     * listing every suburb inside the radius would be inventing an address book.
      */
     hasDeliveryMethod: 'http://purl.org/goodrelations/v1#DeliveryModeOwnFleet',
     areaServed: areas.map((name) => ({ '@type': 'City', name })),

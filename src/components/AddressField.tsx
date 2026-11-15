@@ -86,7 +86,7 @@ export function AddressField({
        * geocoder by that choice would leave a Sandton customer typing a real
        * Sandton street into an empty list — the one outcome worse than the
        * "Choose an area" select this replaced. The whole delivery radius is
-       * searched; results past the 50 km limit are dropped (see
+       * searched; results past the delivery limit are dropped (see
        * `filterSuggestions`), and picking a result moves the area select to match
        * or leaves it on "Other" for a suburb outside the two.
        */

@@ -2,7 +2,7 @@
  * Service-window and delivery-area rules.
  *
  * The business cooks on Thursdays and Fridays only, serving delivery and
- * delivery between 12:00 and 13:30, in Sandton and Rosebank and up to 50 km out.
+ * delivery between 12:00 and 13:30, in Sandton and Rosebank and up to 15 km out.
  * These helpers decide what the storefront may promise, in one place, so the
  * API and the page copy can never drift apart.
  *
@@ -402,7 +402,7 @@ export function deliveryAddressProblem(address, area, settings, hintArea = null)
    * "Other / outside Sandton & Rosebank" is a legitimate answer now.
    *
    * The rules are distance-based (owner, 14 Nov 2026): inside the two suburbs
-   * delivery is included, outside them a fee applies, and past 50 km we refuse.
+   * delivery is included, outside them a fee applies, and past the limit we refuse.
    * So an address in Bryanston is not a contradiction of the area select — it is
    * simply outside the included ring, and the distance check prices it. Checking
    * it against a two-suburb list would refuse exactly the customers the fee

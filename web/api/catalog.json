@@ -1381,7 +1381,7 @@
     ],
     "outsideFee": 30,
     "outsideFeeNote": "Outside Sandton and Rosebank we add a delivery fee, confirmed on WhatsApp before you pay.",
-    "maxDeliveryKm": 50,
+    "maxDeliveryKm": 15,
     "deliveryOrigin": {
       "lat": -26.126,
       "lng": 28.049
@@ -1468,7 +1468,7 @@
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Sunday",
-    "timeLabel": "01:17",
+    "timeLabel": "20:38",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Sunday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
@@ -1494,5 +1494,5 @@
   "notifications": {
     "push": false
   },
-  "today": 6
+  "today": 0
 }

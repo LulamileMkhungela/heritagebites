@@ -4,6 +4,7 @@ import { LinkButton, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { usePageSeo } from '../lib/seo';
 import { waHref } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
+import { DELIVERY_ZONES } from '../../shared/address.js';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -125,7 +126,7 @@ export default function Specials() {
                   ['Delivery areas', areas],
                   ['Minimum order', `${zar(settings.minDeliveryOrder)} for plated meals`],
                   ['Delivery fee', 'Included in Sandton & Rosebank'],
-                  ['Furthest we deliver', `${settings.maxDeliveryKm ?? 50} km from the kitchen`],
+                  ['Furthest we deliver', `${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen`],
                   ['Preparation', `About ${settings.prepEstimateMins} minutes, cooked to order`],
                   ['Delivery time', `About ${settings.deliveryEstimateMins} minutes inside the window`],
                 ].map(([term, value]) => (

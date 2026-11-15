@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 9;
+export const SEED_VERSION = 10;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -638,7 +638,16 @@ export const settings = {
    */
   outsideFee: 30,
   outsideFeeNote: 'Outside Sandton and Rosebank we add a delivery fee, confirmed on WhatsApp before you pay.',
-  maxDeliveryKm: 50,
+  /*
+   * Owner, 15 Nov 2026: 15 km, not 50.
+   *
+   * Every other surface derives from this number — the address search envelope,
+   * the basket's running total, the checkout's refusal and the copy on the home,
+   * contact, specials and policy pages. Changing it here changes the whole
+   * delivery rule at once, which is the only way the site can be trusted to
+   * quote what it charges.
+   */
+  maxDeliveryKm: 15,
   deliveryOrigin: { lat: -26.126, lng: 28.049 },
   includedRadiusKm: 6,
 

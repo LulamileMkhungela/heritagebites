@@ -8,6 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { settings as seedSettings } from '../seed.js';
 import { areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaFor, deliveryAreaOptions, isOutsideAreaChoice } from '../../shared/service.js';
 import {
   DELIVERY_BBOX,
@@ -19,6 +20,10 @@ import {
   expandStreetAbbreviations,
   filterSuggestions,
   DELIVERY_RADIUS_BBOX,
+  DELIVERY_ZONES,
+  KITCHEN_ORIGIN,
+  radiusBbox,
+  radiusBboxParam,
   deliveryFeeForPoint,
   deliveryZoneFor,
   haversineKm,
@@ -371,27 +376,85 @@ test('street abbreviations are expanded, but a leading St stays a saint', () => 
 /*
  * These cover the bug the owner hit: the address box was bolted to the two
  * suburb names, so a customer in Bryanston — 9 km out, inside the fee ring —
- * typed a real address and got no suggestion at all. The 50 km rule could never
+ * typed a real address and got no suggestion at all. The radius could never
  * be applied to the people it exists for.
  */
 
-test('the geocoder envelope reaches the whole 50 km radius, not two suburbs', () => {
-  /* Bryanston, Midrand and Roodepoort are all outside Sandton/Rosebank and all
-     inside 50 km. Their coordinates must fall inside the search box. */
-  for (const [name, lat, lng] of [
+test('the geocoder envelope reaches the whole delivery radius, not two suburbs', () => {
+  /*
+   * The envelope is derived from `maxKm`, so it has to be tested against the
+   * radius it belongs to rather than against a number written down in a test.
+   *
+   * Owner, 15 Nov 2026: 15 km, down from 50. That is why the list below is
+   * short — Bryanston (8.8 km) is inside, Midrand (16.1 km) is not, and a box
+   * that still reached Roodepoort would be promising addresses the checkout
+   * refuses.
+   */
+  const reachable = [
     ['Bryanston', -26.0515, 28.0207],
+    ['Sandton CBD', -26.1075, 28.055],
+    ['Rosebank', -26.1438, 28.0436],
+    ['Randburg', -26.0936, 28.0064],
+  ];
+  const tooFar = [
     ['Midrand', -25.9992, 28.1263],
     ['Roodepoort', -26.1625, 27.8725],
     ['Soweto', -26.2678, 27.8585],
     ['Centurion', -25.8603, 28.1894],
-  ]) {
-    const inside =
-      lat >= DELIVERY_RADIUS_BBOX.minLat &&
-      lat <= DELIVERY_RADIUS_BBOX.maxLat &&
-      lng >= DELIVERY_RADIUS_BBOX.minLon &&
-      lng <= DELIVERY_RADIUS_BBOX.maxLon;
-    assert.equal(inside, true, `${name} must be inside the search envelope`);
+  ];
+
+  const inBox = (b, lat, lng) =>
+    lat >= b.minLat && lat <= b.maxLat && lng >= b.minLon && lng <= b.maxLon;
+
+  for (const [name, lat, lng] of reachable) {
+    assert.equal(
+      deliveryZoneFor(lat, lng).zone !== 'refused',
+      true,
+      `${name} is inside 15 km, so the premise of this test is wrong`,
+    );
+    assert.equal(inBox(DELIVERY_RADIUS_BBOX, lat, lng), true, `${name} must be inside the search envelope`);
   }
+  for (const [name, lat, lng] of tooFar) {
+    assert.equal(deliveryZoneFor(lat, lng).zone, 'refused', `${name} is past 15 km`);
+  }
+  /*
+   * The box is a square, so it reaches slightly past the circle at its corners —
+   * Midrand at 16.1 km still falls inside it. That is fine and deliberate: the
+   * box only decides what the geocoder is *asked* about, and the distance check
+   * is what refuses the order. What must never happen is the reverse — a
+   * deliverable address missing from the box. The corners are covered by the
+   * derived-envelope test below.
+   */
+});
+
+test('the search envelope is derived from the radius, never written down', () => {
+  /*
+   * The failure this prevents has already happened once: the limit changed and
+   * the box did not, so the search answered with addresses the checkout then
+   * refused. A 15 km box and a 15 km rule must be the same 15.
+   */
+  const b15 = radiusBbox(15);
+  const b30 = radiusBbox(30);
+  assert.notDeepEqual(b15, b30, 'a wider radius must widen the box');
+  /* Wider in every direction, not merely different. */
+  assert.ok(b30.minLat < b15.minLat && b30.maxLat > b15.maxLat);
+  assert.ok(b30.minLon < b15.minLon && b30.maxLon > b15.maxLon);
+
+  /* The box always contains its circle: every point at the limit falls inside. */
+  const origin = { lat: -26.126, lng: 28.049 };
+  for (const bearing of [0, 90, 180, 270]) {
+    const rad = (bearing * Math.PI) / 180;
+    const lat = origin.lat + (15 / 111.32) * Math.cos(rad);
+    const lng = origin.lng + (15 / (111.32 * Math.cos((origin.lat * Math.PI) / 180))) * Math.sin(rad);
+    assert.ok(
+      lat >= b15.minLat && lat <= b15.maxLat && lng >= b15.minLon && lng <= b15.maxLon,
+      `a point 15 km ${bearing}° out fell outside the box`,
+    );
+    assert.equal(deliveryZoneFor(lat, lng).zone !== 'refused', true, 'and it is deliverable');
+  }
+
+  /* The query parameter is the same box, in Photon's order. */
+  assert.equal(radiusBboxParam(15), [b15.minLon, b15.minLat, b15.maxLon, b15.maxLat].join(','));
 });
 
 test('an address outside the two suburbs is no longer a contradiction', () => {
@@ -436,4 +499,37 @@ test('radius mode keeps a suggestion the suburb list would have thrown away', ()
   const radial = filterSuggestions([bryanston], { radius: true });
   assert.equal(radial.length, 1, 'the radius filter keeps it');
   assert.equal(radial[0].lat, -26.0515, 'and keeps its coordinates, which are what price it');
+});
+
+/* ------------- No surface may write the radius down as prose ------------ */
+
+test('the settings carry the 15 km limit, and the seeds agree with the default', () => {
+  /*
+   * Owner, 15 Nov 2026: 15 km, not 50.
+   *
+   * This is the test that would have caught the last drift: the rule changed,
+   * the copy did not, and the site spent a release telling customers it would
+   * drive 50 km while the checkout refused anything past 15.
+   */
+  assert.equal(seedSettings.maxDeliveryKm, 15);
+  assert.equal(seedSettings.maxDeliveryKm, DELIVERY_ZONES.maxKm, 'the seed and the shared default must be the same number');
+  /* The included ring sits inside the limit, or the fee ring would not exist. */
+  assert.ok(seedSettings.includedRadiusKm < seedSettings.maxDeliveryKm);
+  /* And the limit is still measured from the same kitchen the fee is. */
+  assert.deepEqual(seedSettings.deliveryOrigin, KITCHEN_ORIGIN);
+});
+
+test('a 15 km radius still serves the two included suburbs outright', () => {
+  /* Shrinking the radius must not quietly start charging for Sandton or
+     Rosebank — those are the plates the price already covers. */
+  for (const [name, lat, lng] of [
+    ['Sandton CBD', -26.1075, 28.055],
+    ['Rosebank', -26.1438, 28.0436],
+  ]) {
+    const zone = deliveryZoneFor(lat, lng, { includedTo: 6, maxKm: 15, fee: 30 });
+    assert.equal(zone.zone, 'included', `${name} must stay inside the included ring`);
+  }
+  /* Bryanston is the nearest real place outside it, and now also the furthest
+     comfortably-inside-the-limit one. */
+  assert.equal(deliveryZoneFor(-26.0515, 28.0207, { includedTo: 6, maxKm: 15, fee: 30 }).zone, 'surcharge');
 });

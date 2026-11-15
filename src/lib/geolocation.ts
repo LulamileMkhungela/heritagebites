@@ -13,7 +13,7 @@
  *  - `enableHighAccuracy: true` is what asks for GPS/Wi-Fi positioning. Without
  *    it a browser hands back a coarse fix — often the centre of the suburb, or a
  *    cell-tower location several kilometres away. On a 6 km included ring and a
- *    50 km hard limit, a three-kilometre error is the difference between "free"
+ *    delivery limit, a three-kilometre error is the difference between "free"
  *    and "R30", or between "delivered" and "refused". A coarse fix cannot decide
  *    that honestly.
  *  - It can, however, fail or take too long — indoors, in a car park, on a laptop

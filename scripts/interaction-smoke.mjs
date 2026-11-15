@@ -1101,12 +1101,15 @@ await step('a blocked location says where the switch is, and still lets the cust
   return 'one prompt, blocked message with the browser switch, address still offered';
 });
 
-await step('a customer outside the 50 km radius is refused, and told how far out they are', async () => {
+await step('a customer outside the delivery radius is refused, and told how far out they are', async () => {
   /*
-   * Germiston is roughly 30 km out; Polokwane is 280 km. Staging a position well
-   * past the limit must produce a refusal with the actual distance in it — not a
-   * generic "we do not deliver there", which leaves the customer guessing
-   * whether they typed their address wrong.
+   * Polokwane is ~285 km out — far enough that the refusal is true whatever the
+   * limit is set to, which is the point of choosing it here rather than a place
+   * a few kilometres over the line.
+   *
+   * Staging a position well past the limit must produce a refusal with the actual
+   * distance in it — not a generic "we do not deliver there", which leaves the
+   * customer guessing whether they typed their address wrong.
    */
   const s7b = boot('/checkout', {
     seedCart: {
@@ -1141,14 +1144,23 @@ await step('a customer outside the 50 km radius is refused, and told how far out
 
   const page = s7b.text();
   if (!/km away/i.test(page)) throw new Error(`no distance reported: ${page.slice(0, 400)}`);
-  if (!/outside our 50 km delivery area/i.test(page)) {
+  /*
+   * The limit is read from the catalogue, not written here: it is now 15 km, and
+   * a test that hardcodes it becomes the thing that has to be fixed every time
+   * the owner changes the rule. What must be true is that the refusal *names* the
+   * configured limit and the real distance.
+   */
+  const settings = await fetch(`${BASE}/api/catalog`).then((r) => r.json()).then((c) => c.settings);
+  const maxKm = Number(settings?.maxDeliveryKm ?? 15);
+  if (!new RegExp(`outside our ${maxKm} km delivery area`, 'i').test(page)) {
     throw new Error(`an out-of-range address was not refused with the limit named: ${page.slice(0, 400)}`);
   }
+  if (!new RegExp(`${maxKm} km`).test(page)) throw new Error('the refusal does not name the configured limit');
   if (!/We cannot deliver/i.test(page)) throw new Error('the refusal does not tell the customer we cannot deliver');
   const wa = [...s7b.doc.querySelectorAll('a[href^="https://wa.me/"]')]
     .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
-  if (wa) throw new Error('WhatsApp still carries an order past the 50 km limit');
-  return 'refused with the distance and the limit named';
+  if (wa) throw new Error('WhatsApp still carries an order past the delivery limit');
+  return `refused at 285.5 km, limit ${maxKm} km named`;
 });
 
 await step('the WhatsApp order is blocked until the customer details are filled', async () => {
