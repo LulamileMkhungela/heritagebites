@@ -370,7 +370,10 @@ export function applyHouseHint(suggestions, query) {
   const house = match[1];
   return (suggestions ?? []).map((suggestion) => {
     if (/^\d/.test(suggestion.line)) return suggestion;
-    return { ...suggestion, house, line: `${house} ${suggestion.line}` };
+    /* The typed house number belongs in the structured part too, not only in
+       the sentence — otherwise picking a street would blank the field the
+       customer had already filled in. */
+    return { ...suggestion, house: suggestion.house || house, line: `${house} ${suggestion.line}` };
   });
 }
 
@@ -536,6 +539,18 @@ export function mapPhotonFeature(feature, settings) {
     line,
     detail,
     area,
+    /*
+     * The address in its three parts, so the checkout can fill the house number,
+     * the street and the suburb into the boxes the owner asked for instead of
+     * making the customer re-split a sentence the map already understands.
+     *
+     * `suburb` is the map's own locality tag (not the delivery area): it is what
+     * goes in a postal address, and it is the field a courier actually reads.
+     */
+    house: str(props.housenumber),
+    street: str(props.street) || (str(props.name) !== str(props.city) ? str(props.name) : ''),
+    suburb: str(props.suburb) || str(props.district) || str(props.locality) || str(props.city) || str(props.town) || str(props.village),
+    city: str(props.city) || str(props.town) || str(props.village),
     lat: Number.isFinite(lat) && lat !== null && Math.abs(lat) <= 90 ? lat : null,
     lng: Number.isFinite(lng) && lng !== null && Math.abs(lng) <= 180 ? lng : null,
   };

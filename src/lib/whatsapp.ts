@@ -135,7 +135,18 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
    * quote it confirms in this same chat.
    */
   parts.push(`Plates: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'})`);
-  parts.push(`I would like it delivered${opts.customer?.suburb ? ` in ${opts.customer.suburb}` : ''}.`);
+  /*
+   * The suburb, when it is a real one.
+   *
+   * The select's third option is the label "Another area — within 15 km", which
+   * is a rule, not a place: "I would like it delivered in Another area — within
+   * 15 km" is nonsense in a chat, and the full address is on its own line
+   * directly below anyway. So the option is skipped and the sentence stays a
+   * sentence.
+   */
+  const area = String(opts.customer?.suburb ?? '').trim();
+  const outsideChoice = /^another area/i.test(area) || /^other\b/i.test(area);
+  parts.push(`I would like it delivered${area && !outsideChoice ? ` in ${area}` : ''}.`);
 
   const name = opts.customer?.name?.trim();
   const phone = opts.customer?.phone?.trim();

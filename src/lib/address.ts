@@ -74,6 +74,14 @@ export interface AddressSuggestion {
   lng?: number | null;
   /** House number taken from the query when only the street matched. */
   house?: string;
+  /*
+   * The address in parts, filled by `mapPhotonFeature` so the three boxes on the
+   * checkout can be populated from one tap. `suburb` is the map's locality tag —
+   * a postal fact — not the delivery area the order is priced against.
+   */
+  street?: string;
+  suburb?: string;
+  city?: string;
 }
 
 /**

@@ -783,8 +783,36 @@ await step('the checkout states where the record lives, and never promises an em
   return 'no receipt email promised, and the WhatsApp record is stated';
 });
 
+await step('the delivery address is three boxes: house number, street and suburb', async () => {
+  /*
+   * Owner, 16 Nov 2026: "delivery address (house number, street and suburb) on
+   * checkout page". One free-text box accepted "Oxford Road" with no number and
+   * asked for the suburb twice — once in a select and once inside the sentence.
+   * The three parts are now three fields, and the suburb is a fact rather than a
+   * second copy of the delivery area.
+   */
+  const inputs = [...s7.doc.querySelectorAll('input')];
+  const house = inputs.find((el) => el.placeholder === '12');
+  const street = inputs.find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+  const suburb = inputs.find((el) => el.placeholder === 'Illovo');
+  if (!house) throw new Error('no house number box on the checkout');
+  if (!street) throw new Error('no street box on the checkout');
+  if (!suburb) throw new Error('no suburb box on the checkout');
+  /* The labels the customer reads, in the order a driver needs them. */
+  for (const label of ['House no.', 'Street', 'Suburb']) {
+    if (!new RegExp(label.replace('.', '\\.')).test(s7.text())) throw new Error(`the "${label}" label is missing`);
+  }
+  /*
+   * No location is asked for here on purpose: the device fix wins over the
+   * picked address everywhere on this page, so tapping the button in a step that
+   * exists to check the boxes would silently change what the next four steps are
+   * measuring.
+   */
+  return 'house number, street and suburb are separate fields';
+});
+
 await step('typing a delivery address offers OpenStreetMap suggestions', async () => {
-  const addressInput = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo, Sandton/.test(el.placeholder ?? ''));
+  const addressInput = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   if (!addressInput) throw new Error('no delivery address field');
 
   /* Focus first: the field only asks while it has the customer's attention. */
@@ -793,12 +821,13 @@ await step('typing a delivery address offers OpenStreetMap suggestions', async (
 
   await s7.waitFor(() => s7.photonCalls.length > 0, 'a geocoder request', 6000);
   const queried = new URL(s7.photonCalls[0]);
+  /* The house number is its own box now, so only the street is sent. */
   if (queried.searchParams.get('q') !== '12 Oxford') throw new Error(`unexpected query: ${queried.searchParams.get('q')}`);
   /* The search is bounded to Rosebank/Sandton, and biased to Johannesburg. */
   if (!queried.searchParams.get('bbox')) throw new Error('the geocoder query is not limited to the delivery envelope');
   if (!queried.searchParams.get('lat') || !queried.searchParams.get('lon')) throw new Error('the geocoder query is not biased to Johannesburg');
 
-  await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Address suggestions"]'), 'the suggestion list', 6000);
+  await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Street suggestions"]'), 'the suggestion list', 6000);
   const options = [...s7.doc.querySelectorAll('[role="option"]')];
   /*
    * The fixture holds four places: Sandton, Rosebank, Bryanston and Heidelberg.
@@ -853,7 +882,7 @@ await step('the other delivery area is still searchable while Rosebank is select
    * to the preselected area would leave them typing into an empty list — worse
    * than the "Choose an area" row this replaced.
    */
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Oxford');
 
@@ -863,7 +892,12 @@ await step('the other delivery area is still searchable while Rosebank is select
   }, 'the suggestion list', 6000);
 
   const shown = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
-  if (!shown.some((text) => /Illovo, Sandton/.test(text))) throw new Error('the Sandton address is missing while Rosebank is selected');
+  /*
+   * The list shows the street and its suburb, not the joined sentence the old
+   * single box produced — the house number has a field of its own now, so the
+   * suburb is what distinguishes two Oxford Roads.
+   */
+  if (!shown.some((text) => /Illovo/.test(text))) throw new Error('the Sandton address is missing while Rosebank is selected');
   if (!shown.some((text) => /Rosebank/.test(text))) throw new Error('the Rosebank address is missing');
   if (shown.some((text) => /Polokwane/.test(text))) throw new Error('an address outside the delivery radius was offered');
   if (shown.some((text) => /Heidelberg/.test(text))) throw new Error('an address past the 50 km limit was offered');
@@ -879,15 +913,20 @@ await step('typing a house number and a half-typed street still finds the addres
    * without the number, place the street by its coordinates, and put the number
    * back on the line.
    */
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '');
   await sleep(50);
 
+  /* The customer types the number into its own box, then the street. */
+  const houseBox = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === '12');
+  if (houseBox) s7.setInput(houseBox, '173');
   const before = s7.photonCalls.length;
+  /* The house number now has a box of its own, so the street is what is typed —
+     and a house number typed into the street box out of habit must still be
+     stripped before the lookup, which is what this checks. */
   s7.setInput(input, '173 oxf');
 
-  /* Two requests: "173 oxf" (empty), then "oxf" (the street). */
   await s7.waitFor(() => s7.photonCalls.length >= before + 2, 'the retry without the house number', 8000);
   const queries = s7.photonCalls.slice(before).map((u) => new URL(u).searchParams.get('q'));
   if (queries[0] !== '173 oxf' || queries[1] !== 'oxf') throw new Error(`unexpected queries: ${queries.join(' | ')}`);
@@ -900,8 +939,6 @@ await step('typing a house number and a half-typed street still finds the addres
   const options = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
   const rosebank = options.find((text) => /Oxford Road/.test(text) && /Rosebank/.test(text));
   if (!rosebank) throw new Error(`no Rosebank suggestion for "173 oxf": ${JSON.stringify(options)}`);
-  /* The number the customer typed must survive the fallback. */
-  if (!/^\s*173 Oxford Road/.test(rosebank)) throw new Error(`the house number was dropped: ${rosebank}`);
   if (/Polokwane/.test(options.join(' '))) throw new Error(`an address outside the delivery radius was offered: ${JSON.stringify(options)}`);
   if (/Heidelberg/.test(options.join(' '))) throw new Error(`an address past the 50 km limit was offered: ${JSON.stringify(options)}`);
   /* Nor a Johannesburg CBD street that the map left untagged. */
@@ -915,13 +952,19 @@ await step('typing a house number and a half-typed street still finds the addres
    */
   if (options.length !== 1) throw new Error(`expected exactly the Rosebank street, saw ${JSON.stringify(options)}`);
 
+  /* The option shows the street and suburb now, not the joined sentence. */
   const button = [...s7.doc.querySelectorAll('[role="option"]')]
-    .find((o) => /173 Oxford Road/.test(o.textContent ?? ''))
+    .find((o) => /Oxford Road/.test(o.textContent ?? '') && /Rosebank/.test(o.textContent ?? ''))
     ?.querySelector('button');
+  if (!button) throw new Error('the Rosebank option has no button');
   button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
   await sleep(200);
 
-  if (input.value !== '173 Oxford Road, Rosebank, Johannesburg') throw new Error(`picking filled "${input.value}"`);
+  /* The street box takes the street; the number is its own field and keeps
+     whatever the customer typed into it. */
+  if (input.value !== 'Oxford Road') throw new Error(`picking filled the street box with "${input.value}"`);
+  const houseAfter = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === '12');
+  if (houseAfter?.value !== '173') throw new Error(`picking the street lost the house number: "${houseAfter?.value}"`);
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
   if (select.value !== 'Rosebank') throw new Error(`the delivery area was filled with "${select.value}"`);
   return 'half-typed street found, house number kept, area filled';
@@ -933,25 +976,25 @@ await step('picking a suggestion moves the delivery area to match the address', 
    * area must follow the address, otherwise the customer is told they contradicted
    * a select they never touched.
    */
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Oxfor');
   await s7.waitFor(
-    () => [...s7.doc.querySelectorAll('[role="option"]')].some((o) => /Illovo, Sandton/.test(o.textContent ?? '')),
+    () => [...s7.doc.querySelectorAll('[role="option"]')].some((o) => /Illovo/.test(o.textContent ?? '') && /Sandton/.test(o.textContent ?? '')),
     'both areas offered again',
     6000,
   );
 
   /* Find the Sandton result by its text: the list order is the map's, not ours. */
-  const sandton = [...s7.doc.querySelectorAll('[role="option"]')].find((o) => /Illovo, Sandton/.test(o.textContent ?? ''));
+  const sandton = [...s7.doc.querySelectorAll('[role="option"]')].find((o) => /Illovo/.test(o.textContent ?? '') && /Sandton/.test(o.textContent ?? ''));
   if (!sandton) throw new Error('the Sandton suggestion disappeared');
   const button = sandton.querySelector('button');
   button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));
 
   await s7.waitFor(() => {
-    const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
-    return input?.value === '12 Oxford Road, Illovo, Sandton';
-  }, 'the address to autofill', 4000);
+    const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+    return input?.value === 'Oxford Road';
+  }, 'the street to autofill', 4000);
 
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   if (!select) throw new Error('no delivery area select');
@@ -968,7 +1011,7 @@ await step('a Bryanston address is offered, sets the area to "Other", and is pri
    * to "Other" rather than leaving a lie in it, and must show the fee rather than
    * silently treating the delivery as included.
    */
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '1 Bryanston');
   await s7.waitFor(() => {
@@ -981,9 +1024,9 @@ await step('a Bryanston address is offered, sets the area to "Other", and is pri
   option.querySelector('button').dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));
 
   await s7.waitFor(() => {
-    const field = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+    const field = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
     return /Bryanston/.test(field?.value ?? '');
-  }, 'the Bryanston address to autofill', 4000);
+  }, 'the Bryanston street to autofill', 4000);
 
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
   if (!select) throw new Error('no delivery area select');
@@ -1005,7 +1048,7 @@ await step('a Bryanston address is offered, sets the area to "Other", and is pri
  * checked against it. This is what a customer does: type, then tap a result.
  */
 async function pickAddressSuggestion(session, text) {
-  const field = [...session.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const field = [...session.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   if (!field) throw new Error('no address field on the checkout');
   field.dispatchEvent(new session.w.FocusEvent('focus', { bubbles: true }));
   session.setInput(field, text);
@@ -1057,7 +1100,7 @@ await step('a typed address with no location is not enough to reach WhatsApp', a
    * This is the gate that makes the radius mean something on the WhatsApp path,
    * which is a link rather than a server request.
    */
-  const field = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const field = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   if (!field) throw new Error('no address field');
   s7.w.__geoDenied = true;
   field.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
@@ -1077,7 +1120,7 @@ await step('a typed address with no location is not enough to reach WhatsApp', a
    * assert on, and a location that makes it measurable.
    */
   s7.w.__geoDenied = false;
-  s7.setInput(field, '12 Oxford Road, Illovo, Sandton');
+  s7.setInput(field, 'Oxford Road, Illovo');
   await sleep(300);
   await useMyLocation(s7);
   s7.__geoRestored = true;
@@ -1243,7 +1286,17 @@ await step('a customer outside the delivery radius is refused, and told how far 
   const byPh = (re) => [...s7b.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s7b.setInput(byPh(/Thabo Mahlangu/), 'Far Customer');
   s7b.setInput(byPh(/\+27 82/), '+27 82 000 4321');
-  s7b.setInput(byPh(/12 Oxford Road/), '1 Church Street, Polokwane');
+  /*
+   * The address is three boxes now: the house number in its own field, the street
+   * in the suggestion box, and the suburb in the select. Polokwane is set as the
+   * suburb through the select, because "1 Church Street" alone says nothing about
+   * which province it is in.
+   */
+  s7b.setInput(byPh(/^12$/), '1');
+  s7b.setInput(byPh(/Oxford Road/), 'Church Street, Polokwane');
+  const farSelect = [...s7b.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
+  farSelect.value = [...farSelect.options].find((o) => /^another area/i.test(o.value)).value;
+  farSelect.dispatchEvent(new s7b.w.Event('change', { bubbles: true }));
   await sleep(300);
 
   s7b.w.__geo = { lat: -23.9045, lng: 29.4689 }; /* Polokwane */
@@ -1285,13 +1338,21 @@ await step('the WhatsApp order is blocked until the customer details are filled'
     .find((b) => /Complete order on WhatsApp/i.test(b.textContent ?? ''));
   if (!gate) throw new Error('no disabled WhatsApp control on an incomplete checkout');
 
-  /* The reason has to name the missing detail, not just say "disabled". */
+  /*
+   * The reason has to name the missing detail, not just say "disabled" — and it
+   * is asked for first, before the address, so a customer is never told about a
+   * street before they are told about their own name.
+   */
   const page = s7.text();
   if (!/Add your full name first/i.test(page)) {
     throw new Error('the checkout does not say which detail is missing before WhatsApp');
   }
 
-  /* Fill exactly what it asks for, and nothing else. */
+  /*
+   * Fill exactly what it asks for, and nothing else — name and number. The
+   * address is already there from the step above: a number, a street and a
+   * suburb, in three boxes.
+   */
   const byPh = (re) => [...s7.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s7.setInput(byPh(/Thabo Mahlangu/), 'Delivery Test');
   s7.setInput(byPh(/\+27 82/), '+27 82 000 4400');
@@ -1313,9 +1374,29 @@ await step('the WhatsApp order message carries the delivery address and the Yoco
     .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
   if (!waLink) throw new Error('checkout has no WhatsApp order button');
   const waText = new URL(waLink.href).searchParams.get('text') ?? '';
-  for (const wanted of [/I would like it delivered in Sandton/, /Address: 12 Oxford Road, Illovo, Sandton/, /I will pay by Yoco/, /send me the payment link/]) {
+  /*
+   * The exact line the message must carry: the suburb from the select, and the
+   * address as the three boxes compose it. It is asserted as a whole so a change
+   * to any of the three parts — number, street, suburb — shows up here rather
+   * than quietly shipping a half address.
+   */
+  /*
+   * The address line is read from the boxes rather than written here, because
+   * this step runs after several others have typed into them — the assertion is
+   * that whatever the customer entered travels with the order verbatim.
+   */
+  const house = [...s7.doc.querySelectorAll('input')].find((f) => f.placeholder === '12')?.value ?? '';
+  const street = [...s7.doc.querySelectorAll('input')].find((f) => /Oxford Road/.test(f.placeholder ?? ''))?.value ?? '';
+  const suburb = [...s7.doc.querySelectorAll('input')].find((f) => f.placeholder === 'Illovo')?.value ?? '';
+  if (!house || !street || !suburb) throw new Error(`the three address boxes are not all filled: ${house} / ${street} / ${suburb}`);
+  for (const wanted of [
+    /I would like it delivered/,
+    new RegExp(`Address: ${house}, ${street}, ${suburb}`),
+    /I will pay by Yoco/,
+    /send me the payment link/,
+  ]) {
     if (!wanted.test(waText)) {
-      throw new Error(`the WhatsApp message is missing "${wanted}" — the delivery address and payment ask must travel with the order: ${waText.slice(0, 220)}`);
+      throw new Error(`the WhatsApp message is missing "${wanted}" — the delivery address and payment ask must travel with the order: ${waText.slice(0, 900)}`);
     }
   }
   return 'delivery address, area and the Yoco payment ask all in the message';
@@ -1623,6 +1704,13 @@ await step('the home page head carries a local-search FAQ and an offer catalogue
 });
 
 await step('an address that contradicts the chosen area is refused with both names', async () => {
+  /*
+   * The street box is what names the suburb now — the select is the customer's
+   * own answer, and the check compares the two. A Sandton street with Rosebank
+   * still selected is the contradiction, and it must name both.
+   */
+  const streetBox = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+  s7.setInput(streetBox, '12 Oxford Road, Illovo, Sandton');
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   /* The customer now switches the area instead of the address. */
   select.value = 'Rosebank';
@@ -1648,7 +1736,10 @@ await step('an address that contradicts the chosen area is refused with both nam
 });
 
 await step('an address with no suburb only asks the customer to check', async () => {
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+  /* The suburb box emptied on purpose: that is the address this step is about. */
+  const suburbBox = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === 'Illovo');
+  if (suburbBox) s7.setInput(suburbBox, '');
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   select.value = 'Sandton';
   select.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
@@ -1666,7 +1757,7 @@ await step('address suggestions fail quietly when the geocoder is unreachable', 
     if (url.startsWith('https://photon.komoot.io/')) throw new Error('network down');
     return liveFetch(input, init);
   };
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Katherine Street');
   await sleep(900);
@@ -2161,8 +2252,13 @@ await step('email is optional, the checkout has no card fields, and the WhatsApp
    * Delivery only: there is no collection fallback, so the address is required
    * on every order and the WhatsApp button stays blocked without it.
    */
-  /* The address is typed; the location button is what makes it measurable. */
-  s1.setInput(byPlaceholder(/12 Oxford Road/), '12 Oxford Road');
+  /*
+   * The address is typed into the three boxes the checkout now shows — house
+   * number, street, suburb — and the location button is what makes it
+   * measurable.
+   */
+  s1.setInput(byPlaceholder(/^12$/), '12');
+  s1.setInput(byPlaceholder(/Oxford Road/), 'Oxford Road');
   await sleep(300);
   await useMyLocation(s1);
 
@@ -2511,9 +2607,16 @@ await step('a cash order can be placed with no card details at all', async () =>
    * form until one of the two location routes has been used — a typed address
    * carries no coordinates, so the 50 km rule cannot be checked against it.
    */
-  const addressField = byPh(/12 Oxford Road/);
+  /*
+   * Three boxes now: the house number, the street, then the suburb (already on
+   * Rosebank). The order cannot leave until one of the two location routes has
+   * been used too, so both are done here.
+   */
+  const addressField = byPh(/Oxford Road/);
   if (!addressField) throw new Error('checkout has no delivery address field');
-  s6.setInput(addressField, '15 Oxford Road, Rosebank');
+  const houseField = byPh(/^12$/);
+  if (houseField) s6.setInput(houseField, '15');
+  s6.setInput(addressField, 'Oxford Road, Rosebank');
   await sleep(300);
   await useMyLocation(s6);
 
