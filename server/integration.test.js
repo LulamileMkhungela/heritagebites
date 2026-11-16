@@ -1570,8 +1570,9 @@ describe('the head served to a crawler', () => {
   test('the home page declares its own title, description and canonical', async () => {
     const { res, body } = await html('/');
     assert.equal(res.status, 200);
-    assert.match(body, /<title>South African Plates in Rosebank &amp; Sandton — Heritage Bites<\/title>/);
-    assert.match(body, /<meta name="description" content="South African plates from R100/);
+    assert.match(body, /<title>South African Food Delivery in Sandton &amp; Rosebank — Heritage Bites<\/title>/);
+    /* The words a customer types come first: traditional food, delivered, Sandton. */
+    assert.match(body, /<meta name="description" content="Traditional South African plates from R100/);
     assert.match(body, /<link rel="canonical" href="https:\/\/heritagebites\.test\/" \/>/);
     assert.match(body, /<meta name="robots" content="index,follow/);
   });
@@ -1581,7 +1582,7 @@ describe('the head served to a crawler', () => {
       '/menu': /<title>The Menu &amp; Prices — Heritage Bites<\/title>/,
       '/specials': /<title>This Week&#39;s Cooking &amp; Delivery — Heritage Bites<\/title>/,
       '/about': /<title>Our Story, Vision &amp; Mission — Heritage Bites<\/title>/,
-      '/contact': /<title>Contact &amp; WhatsApp — Heritage Bites<\/title>/,
+      '/contact': /<title>Contact, WhatsApp &amp; Directions — Heritage Bites<\/title>/,
       '/policies': /<title>Policies &amp; Terms — Heritage Bites<\/title>/,
       '/passport': /<title>Loyalty Card — Heritage Bites<\/title>/,
       '/quest': /<title>Ask Us to Cook It — Heritage Bites<\/title>/,
@@ -1621,7 +1622,8 @@ describe('the head served to a crawler', () => {
     const restaurant = nodes.find((node) => node['@type'] === 'Restaurant');
     assert.ok(restaurant, 'no Restaurant node');
     assert.equal(restaurant.name, 'Heritage Bites');
-    assert.deepEqual(restaurant.areaServed.map((a) => a.name), ['Rosebank', 'Sandton']);
+    /* The suburbs, plus the metro they sit in — and nothing the shop cannot reach. */
+    assert.deepEqual(restaurant.areaServed.map((a) => a.name), ['Rosebank', 'Sandton', 'Johannesburg']);
     assert.equal(restaurant.telephone, '+27670137587');
     assert.equal(restaurant.address, undefined, 'the business has no public street address to claim');
   });

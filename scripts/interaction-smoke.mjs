@@ -1520,6 +1520,108 @@ await step('a meal card is the plate, not a delivery advert', async () => {
   return 'no plate caption on the cards';
 });
 
+await step('the footer centres the three social icons on the copyright line, and its logo spins too', async () => {
+  /*
+   * Owner, 16 Nov 2026: "put the three social icons and the icons must be on the
+   * footer but centred on © 2026 Heritage Bites… section" and "since the
+   * heritagebites logo at the top when i hover it rotates ensure even on footer
+   * when you hover on the logo it must rotate too".
+   */
+  const page = boot('/');
+  await page.waitFor(() => page.doc.querySelectorAll('footer a').length > 4, 'the footer', 20000);
+  const footer = [...page.doc.querySelectorAll('footer')].find((f) => f.querySelector('a[href^="tel:"]'));
+  if (!footer) throw new Error('no page footer');
+
+  const copy = [...footer.querySelectorAll('span')].find((sp) => /©/.test(sp.textContent ?? ''));
+  if (!copy) throw new Error('the footer has no copyright line');
+  const row = copy.closest('div');
+  const labels = ['Instagram', 'Facebook', 'TikTok'];
+  const icons = labels.map((label) => row?.querySelector(`a[aria-label="${label}"]`) ?? null);
+  if (icons.some((i) => !i)) {
+    throw new Error(`the social icons are not on the copyright line (found ${icons.filter(Boolean).length} of 3)`);
+  }
+  /* Centred: the icon row is the middle child of the bottom line's grid. */
+  const socialNav = icons[0].closest('nav');
+  if (!socialNav || socialNav.getAttribute('aria-label') !== 'Social media') {
+    throw new Error('the social icons are not wrapped in a labelled nav');
+  }
+  if (!/justify-center/.test(socialNav.className)) throw new Error('the social icon row is not centred');
+
+  /* The footer badge turns on hover, from the same rule the header uses. */
+  const badge = footer.querySelector('img.logo-spin');
+  if (!badge) throw new Error('the footer logo does not carry the spin class');
+  if (!badge.closest('.logo-spin-host')) throw new Error('the footer logo has no hover host, so it will not turn');
+  page.close();
+  return 'three social icons, centred on the copyright line, and a footer badge that turns';
+});
+
+await step('the contact page offers icons for WhatsApp, phone and email, and its own social row', async () => {
+  /*
+   * Owner: "restructure contact page because i dont see social icons, put some
+   * icons on contact page for whatsapp,email,phone".
+   */
+  const page = boot('/contact');
+  await page.waitFor(() => page.doc.querySelectorAll('a[href^="tel:"]').length > 0, 'the contact page', 20000);
+  const main = page.doc.querySelector('main') ?? page.doc;
+  for (const [label, href] of [
+    ['WhatsApp', 'https://wa.me/'],
+    ['Phone', 'tel:'],
+    ['Email', 'mailto:'],
+  ]) {
+    const link = [...main.querySelectorAll('a')].find((a) => href.startsWith('http') ? a.href.startsWith(href) : a.getAttribute('href')?.startsWith(href));
+    if (!link) throw new Error(`the contact page has no ${label} link`);
+    const card = link.closest('a');
+    if (!card?.querySelector('svg')) throw new Error(`the ${label} card has no icon`);
+  }
+  for (const label of ['Instagram', 'Facebook', 'TikTok']) {
+    if (!main.querySelector(`a[aria-label="${label}"]`)) throw new Error(`the contact page has no ${label} icon`);
+  }
+
+  /* The two conditional labels, in the owner's own words. */
+  const text = page.doc.body.textContent ?? '';
+  if (!/Contact number\s*\(required if no email\)/.test(text)) {
+    throw new Error('the phone field is not labelled "(required if no email)"');
+  }
+  if (!/Email\s*\(required if no number\)/.test(text)) {
+    throw new Error('the email field is not labelled "(required if no number)"');
+  }
+  page.close();
+  return 'three contact icons, three social icons, and both conditional labels';
+});
+
+await step('the home page head carries a local-search FAQ and an offer catalogue', async () => {
+  /*
+   * Local search and SEO, in the block a crawler reads without running the app.
+   *
+   * Read from the built document rather than from a jsdom session: the app only
+   * writes structured data when it knows the address it is served from, and this
+   * suite runs on 127.0.0.1 — which is explicitly not a public address. The
+   * build bakes in the deployment's real one, so `dist/index.html` is the honest
+   * thing to inspect.
+   */
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync('dist/index.html', 'utf8');
+  const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) =>
+    JSON.parse(m[1].replace(/<\\\//g, '</')),
+  );
+  if (!blocks.length) throw new Error('the built home page has no structured data');
+  const nodes = blocks.flatMap((n) => n['@graph'] ?? [n]);
+  const faq = nodes.find((n) => n['@type'] === 'FAQPage');
+  if (!faq) throw new Error('the built home page has no FAQ node');
+  if (faq.mainEntity.length < 4) throw new Error('the FAQ answers too few questions to be useful');
+
+  const restaurant = nodes.find((n) => n['@type'] === 'Restaurant');
+  if (!restaurant) throw new Error('no Restaurant node');
+  if (!restaurant.hasOfferCatalog) throw new Error('the restaurant node prices no plates');
+  const prices = restaurant.hasOfferCatalog.itemListElement.map((o) => o.price);
+  if (!prices.includes('100.00')) throw new Error(`the offer catalogue prices nothing at R100: ${prices.join(', ')}`);
+  if (!restaurant.areaServed.some((a) => a.name === 'Johannesburg')) {
+    throw new Error('the restaurant node does not name the metro it serves');
+  }
+  if (!/mogodu/.test(restaurant.keywords ?? '')) throw new Error('the restaurant node carries no cuisine keywords');
+  return `${faq.mainEntity.length} FAQ answers, ${prices.length} priced offers, and the metro named`;
+});
+
 await step('an address that contradicts the chosen area is refused with both names', async () => {
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   /* The customer now switches the area instead of the address. */

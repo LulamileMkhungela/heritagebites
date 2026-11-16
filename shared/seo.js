@@ -63,9 +63,9 @@ export const SHARE_IMAGE_ALT =
  */
 export const PAGES = {
   '/': {
-    title: 'South African Plates in Rosebank & Sandton',
+    title: 'South African Food Delivery in Sandton & Rosebank',
     description:
-      'South African plates from R100 — mogodu, tshotlo, tlhakwana, smiley, wings and short rib. Cooked Thursdays and Fridays, delivered in Rosebank and Sandton.',
+      'Traditional South African plates from R100 — mogodu, tshotlo, tlhakwana and smiley — cooked Thursdays and Fridays and delivered in Sandton and Rosebank.',
     priority: 1,
     changefreq: 'daily',
   },
@@ -91,7 +91,7 @@ export const PAGES = {
     changefreq: 'monthly',
   },
   '/contact': {
-    title: 'Contact & WhatsApp',
+    title: 'Contact, WhatsApp & Directions',
     description:
       'Call or WhatsApp +27 67 013 7587, email heritagebitesfood@gmail.com, or send a message about an order, delivery in Rosebank and Sandton, or the weekly menu.',
     priority: 0.6,
@@ -244,6 +244,21 @@ export function jsonLdScript(data) {
 /* ----------------------------------------------------------- structured data */
 
 /**
+ * The suburbs, plus the metro they sit in.
+ *
+ * "Rosebank" and "Sandton" are what a customer says; "Johannesburg" is what a
+ * lot of them type, and it is true — both are in it. The metro is added only
+ * when every configured suburb is one of Johannesburg's, so a shop configured
+ * for Pretoria does not inherit a city it does not serve.
+ */
+const JOHANNESBURG_SUBURBS = ['Rosebank', 'Sandton', 'Bryanston', 'Randburg', 'Fourways', 'Midrand', 'Illovo', 'Melrose'];
+
+function localAreas(areas) {
+  const inJoburg = areas.every((name) => JOHANNESBURG_SUBURBS.some((known) => known.toLowerCase() === String(name).toLowerCase()));
+  return inJoburg ? [...new Set([...areas, 'Johannesburg'])] : areas;
+}
+
+/**
  * The business itself, as a schema.org `Restaurant`.
  *
  * Deliberately without `address`: Heritage Bites cooks in a hired kitchen, so a
@@ -267,22 +282,43 @@ export function restaurantJsonLd(siteUrl, settings = {}) {
      quotes about the business, so a hardcoded radius here outlives the rule. */
   const maxKm = Number(settings.maxDeliveryKm ?? 15);
 
+  const menu = Number(settings.minDeliveryOrder) > 0 ? `, minimum order R${Number(settings.minDeliveryOrder) || 100}` : '';
+
   return {
     '@context': 'https://schema.org',
     '@type': 'Restaurant',
     '@id': base ? `${base}/#restaurant` : undefined,
     name: BRAND,
+    alternateName: 'Heritage Bites South African Kitchen',
     slogan: TAGLINE,
     description:
-      `Traditional and contemporary South African plates, cooked in small batches on Thursdays and Fridays and delivered in Sandton and Rosebank, and up to ${maxKm} km from the kitchen.`,
+      `Traditional and contemporary South African plates — mogodu, tshotlo, tlhakwana, smiley, wings and short rib — cooked in small batches on Thursdays and Fridays, delivered in Sandton and Rosebank and up to ${maxKm} km from the kitchen.`,
     ...(base ? { url: `${base}/`, hasMenu: `${base}/menu`, image: `${base}${DEFAULT_SHARE_IMAGE}` } : {}),
     telephone: phone,
     ...(settings.email ? { email: settings.email } : {}),
-    servesCuisine: 'South African',
+    servesCuisine: ['South African', 'African', 'Traditional'],
     priceRange: 'R100–R130',
     currenciesAccepted: 'ZAR',
     paymentAccepted: 'Cash, Credit Card',
     foundingDate: String(settings.established ?? 2025),
+    /*
+     * `keywords` is a weak signal and a nearly-free one: it is what ties the
+     * *words people type* ("traditional food delivery Sandton", "mogodu near
+     * me") to this business, alongside everything better below it. It never
+     * contains a place the kitchen does not deliver to.
+     */
+    keywords: [
+      'South African food',
+      'traditional South African plates',
+      'mogodu',
+      'tshotlo',
+      'tlhakwana',
+      'smiley',
+      'kota',
+      'African food delivery',
+      ...areas.map((area) => `${area} food delivery`),
+      `${areas.join(' and ')} restaurants`,
+    ].join(', '),
     /*
      * Delivery-only (owner, 14 Nov 2026), and not a booking restaurant.
      *
@@ -291,7 +327,15 @@ export function restaurantJsonLd(siteUrl, settings = {}) {
      * listing every suburb inside the radius would be inventing an address book.
      */
     hasDeliveryMethod: 'http://purl.org/goodrelations/v1#DeliveryModeOwnFleet',
-    areaServed: areas.map((name) => ({ '@type': 'City', name })),
+    /*
+     * Two levels of geography, because they answer two different questions.
+     *
+     * `areaServed` is where the business serves — the whole radius, named by the
+     * suburbs a searcher actually types. `areaServed` on the offer is the free
+     * run. Listing the radius under the business rather than under the offer is
+     * what stops Google quoting a delivery promise about a free zone.
+     */
+    areaServed: localAreas(areas).map((name) => ({ '@type': 'City', name })),
     openingHoursSpecification: [
       {
         '@type': 'OpeningHoursSpecification',
@@ -300,6 +344,40 @@ export function restaurantJsonLd(siteUrl, settings = {}) {
         closes: close,
       },
     ],
+    /* What a customer needs before they order, in the schema rather than in prose. */
+    ...(base
+      ? {
+          hasOfferCatalog: {
+            '@type': 'OfferCatalog',
+            name: 'Plates',
+            itemListElement: [
+              {
+                '@type': 'Offer',
+                name: 'Traditional plate',
+                price: '100.00',
+                priceCurrency: 'ZAR',
+                url: `${base}/menu`,
+                eligibleQuantity: { '@type': 'QuantitativeValue', minValue: Number(settings.minDeliveryOrder) || 100 },
+              },
+              {
+                '@type': 'Offer',
+                name: 'Contemporary plate',
+                price: '130.00',
+                priceCurrency: 'ZAR',
+                url: `${base}/menu`,
+              },
+            ],
+          },
+        }
+      : {}),
+    potentialAction: base
+      ? {
+          '@type': 'OrderAction',
+          target: `${base}/checkout`,
+          deliveryMethod: 'http://purl.org/goodrelations/v1#DeliveryModeOwnFleet',
+        }
+      : undefined,
+    ...(menu ? { additionalProperty: { '@type': 'PropertyValue', name: 'Minimum order', value: `R${Number(settings.minDeliveryOrder) || 100}` } } : {}),
   };
 }
 
@@ -389,6 +467,62 @@ export function menuJsonLd(siteUrl, catalog) {
       '@type': 'MenuSection',
       name: sectionName(id),
       hasMenuItem: items,
+    })),
+  };
+}
+
+/**
+ * The questions the owner is asked on WhatsApp, answered the way the site
+ * answers them — as schema.org `FAQPage`.
+ *
+ * This is the one structured-data block that can win a piece of the search
+ * result itself: Google shows these as expandable questions under the link,
+ * which is where "do you deliver to Bryanston" gets answered before anyone
+ * taps through. The answers must match the page word for word in spirit; a FAQ
+ * that promises a radius the checkout refuses is worse than no FAQ.
+ *
+ * @param {string | null} siteUrl
+ * @param {{ deliveryAreas?: string[], maxDeliveryKm?: number, minDeliveryOrder?: number, outsideFee?: number, phoneDisplay?: string }} [settings]
+ */
+export function faqJsonLd(siteUrl, settings = {}) {
+  const base = normaliseSiteUrl(siteUrl);
+  const areas = settings.deliveryAreas?.length ? settings.deliveryAreas : ['Rosebank', 'Sandton'];
+  const maxKm = Number(settings.maxDeliveryKm ?? 15);
+  const min = Number(settings.minDeliveryOrder ?? 100);
+  const fee = Number(settings.outsideFee ?? 30);
+
+  const qa = [
+    [
+      'Where does Heritage Bites deliver?',
+      `We deliver in ${areas.join(' and ')}, and anywhere else within ${maxKm} km of the kitchen. Inside ${areas.join(' and ')} delivery is included in the plate price; further out a R${fee} delivery fee applies.`,
+    ],
+    [
+      'Which days do you cook?',
+      'Thursdays and Fridays. You can order ahead on any day of the week for any upcoming Thursday or Friday — ordering on a Monday for a Thursday is exactly how most orders arrive.',
+    ],
+    [
+      'What does a plate cost?',
+      `A traditional plate is R100 and a contemporary plate is R130. Each plate is a protein, a starch and a vegetable side, and you can pick more than one starch and more than one vegetable side. The minimum order for delivery is R${min}.`,
+    ],
+    [
+      'How do I pay?',
+      'By card through Yoco, or in cash to the driver when the food arrives. If you order on WhatsApp we send a secure Yoco link in the chat.',
+    ],
+    [
+      'What food do you cook?',
+      'Traditional and contemporary South African plates: mogodu (beef tripe), tshotlo, tlhakwana, smiley, chicken hardbody, chicken wings, BBQ beef short rib and lamb stew, with pap, mabele, samp or dumpling and a vegetable side.',
+    ],
+  ];
+
+  if (!base) return null;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    '@id': `${base}/#faq`,
+    mainEntity: qa.map(([question, answer]) => ({
+      '@type': 'Question',
+      name: question,
+      acceptedAnswer: { '@type': 'Answer', text: answer },
     })),
   };
 }
@@ -515,6 +649,12 @@ export function headHtml(path, options = {}) {
     const name = path === '/' ? null : title;
     const crumb = breadcrumbJsonLd(base, path, name);
     if (crumb) nodes.push(crumb);
+    /*
+     * The FAQ rides on the home page only. It is the same five answers on every
+     * page it appears on, and Google treats a repeated FAQPage as boilerplate
+     * rather than as content — one page, one copy, is the honest arrangement.
+     */
+    if (pageMeta(path).path === '/') nodes.push(faqJsonLd(base, options.settings));
   }
   for (const node of options.jsonLd ?? []) if (node) nodes.push(node);
   for (const node of nodes.filter(Boolean)) {
