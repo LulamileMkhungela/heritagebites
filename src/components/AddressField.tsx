@@ -194,9 +194,19 @@ export function AddressField({
   const shownNote = note || (problem?.level === 'warn' ? problem.message : '');
 
   return (
-    <div className="relative grid gap-3 sm:col-span-2 sm:grid-cols-6">
+    /*
+     * Six columns at every width, not only from `sm` up.
+     *
+     * On a phone this used to be one column, so each of the three boxes took a
+     * full line — house number, street and suburb read as three stacked
+     * paragraphs rather than one address, and the number got a line as wide as a
+     * street. The rows are now house number + street, then suburb, then the
+     * delivery area: the same three facts, laid out the way an address is read on
+     * a phone. Widths are still generous enough for the street suggestion list.
+     */
+    <div className="relative grid grid-cols-6 gap-3 sm:col-span-2">
       {/* House number: narrow, numeric keypad on a phone, and required. */}
-      <div className="sm:col-span-1">
+      <div className="col-span-2 sm:col-span-1">
         <Field label="House no." error={errors?.house}>
           <input
             className={inputCls}
@@ -211,11 +221,23 @@ export function AddressField({
       </div>
 
       {/* Street: the suggestion box. `relative` so its list floats over the fields below. */}
-      <div className="relative sm:col-span-3">
+      <div className="relative col-span-4 sm:col-span-3">
+        {/*
+          No hint under the street on a phone.
+          
+          "pick it from the list so we can check the distance" is longer than the
+          street label and the box beside it put together: at 390px it wrapped to
+          two lines, pushed the street field down below the house-number box, and
+          made a two-field row look broken. The suggestion list already says what
+          it wants — it opens as soon as the box is focused, names each street and
+          its suburb, and the footer line explains the radius. The words are still
+          on the field for a screen reader, and they still appear at `sm` and up
+          where there is room on the line.
+        */}
         <Field
           label="Street"
           error={shownError}
-          hint="pick it from the list so we can check the distance"
+          hint={<span className="hidden sm:inline">pick it from the list so we can check the distance</span>}
         >
           <input
             ref={inputRef}
@@ -304,7 +326,7 @@ export function AddressField({
         called Sandton, and making them say "Sandton" to get a plate was the
         fudge this field removes.
       */}
-      <div className="sm:col-span-2">
+      <div className="col-span-6 sm:col-span-2">
         <Field label="Suburb" error={errors?.suburb}>
           <input
             className={inputCls}
@@ -324,7 +346,7 @@ export function AddressField({
         fills it, and "Another area" is how a Bryanston address gets priced
         instead of refused.
       */}
-      <div className="sm:col-span-6">
+      <div className="col-span-6">
         <Field label="Delivery area" hint="decides the fee" error={errors?.area}>
           <select
             className={inputCls}
@@ -340,7 +362,7 @@ export function AddressField({
       </div>
 
       {shownNote && !shownError && (
-        <p className="flex items-start gap-1.5 text-[12px] leading-snug text-ochre-deep sm:col-span-6" role="status">
+        <p className="col-span-6 flex items-start gap-1.5 text-[12px] leading-snug text-ochre-deep" role="status">
           <span aria-hidden="true">!</span>
           <span>{shownNote}</span>
         </p>

@@ -262,6 +262,17 @@ describe('catalogue + search', () => {
     ]);
 
     const archived = c.comingSoon.flatMap((cat) => cat.items);
+
+    /*
+     * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
+     * Sides & Relishes". Every side a plate offers must have a card there, and it
+     * must be the same list the plate builder reads.
+     */
+    const sidesSection = c.comingSoon.find((cat) => cat.id === 'sides-relishes');
+    const sideCards = new Set(sidesSection.items.map((item) => item.id));
+    for (const side of [...new Set(c.plateMenus.flatMap((p) => p.groups.filter((g) => g.id === 'veg').flatMap((g) => g.items.map((i) => i.id))))]) {
+      assert.ok(sideCards.has(`archive-${side}`), `the vegetable side "${side}" is missing from Sides & Relishes`);
+    }
     /* Eight, because Heritage Pots (three cards) was hidden on 14 Nov 2026. */
     assert.ok(archived.length >= 8);
 
@@ -278,7 +289,17 @@ describe('catalogue + search', () => {
         /* The owner asked for archive cards to read like menu cards: name,
            guide price and a line of description. */
         assert.equal(typeof item.price, 'number', `${item.id} needs a guide price to show`);
-        assert.ok(item.price > 0, `${item.id} has a nonsense price`);
+        /*
+         * A vegetable side has no price of its own — it is chosen *inside* the
+         * R100/R130 plate — so `0` is the honest value for it and the card prints
+         * no price at all. Every other archive dish is a dish the kitchen would
+         * sell on its own, and a zero there would be a broken card.
+         */
+        const sideOfAPlate = cat.id === 'sides-relishes' && c.plateMenus.some((plate) =>
+          plate.groups.some((group) => group.id === 'veg' && group.items.some((i) => `archive-${i.id}` === item.id)),
+        );
+        if (sideOfAPlate) assert.equal(item.price, 0, `${item.id} is a side, so it carries no price`);
+        else assert.ok(item.price > 0, `${item.id} has a nonsense price`);
         assert.ok(item.description && item.description.length > 20, `${item.id} needs a description`);
         assert.equal(item.status, 'coming-soon');
         assert.ok(item.image.startsWith('/img/'), `${item.id} needs a photo to show`);

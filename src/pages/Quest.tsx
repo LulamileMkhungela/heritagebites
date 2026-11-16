@@ -243,7 +243,7 @@ export default function Quest() {
                         aria-invalid={Boolean(errors.name)}
                       />
                     </Field>
-                    <Field label="Cell number" hint="we reply here · required if no email" error={errors.phone}>
+                    <Field label="Cell number (we reply here · required if no email)" error={errors.phone}>
                       <input
                         className={inputCls}
                         value={form.phone}
@@ -256,7 +256,7 @@ export default function Quest() {
                     </Field>
                   </div>
 
-                  <Field label="Email" hint="required if no number" error={errors.email}>
+                  <Field label="Email (required if no number)" error={errors.email}>
                     <input
                       className={inputCls}
                       value={form.email}
@@ -268,11 +268,14 @@ export default function Quest() {
                     />
                   </Field>
 
-                  <Field
-                    label="What should we cook?"
-                    hint="the dish, and how you like it"
-                    error={errors.dish}
-                  >
+                  {/*
+                    The label is the whole question: "What should we cook?" —
+                    on the owner's instruction the "the dish, and how you like
+                    it" hint is gone, because the placeholder already shows the
+                    kind of answer wanted and a hint under a question this plain
+                    only competes with it.
+                  */}
+                  <Field label="What should we cook?" error={errors.dish}>
                     <textarea
                       className={`${inputCls} min-h-28 resize-y`}
                       value={form.dish}

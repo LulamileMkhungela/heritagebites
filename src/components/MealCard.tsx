@@ -46,9 +46,18 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
       </button>
 
       <div className="flex flex-1 flex-col p-4">
+        {/*
+          No prep figure beside the name.
+          
+          It read "20′" next to "Tlhakwana Plate", which the owner called out as
+          confusing — and it was: a number with no label, sitting where a price
+          or a badge usually goes, saying nothing a customer could act on. The
+          kitchen cooks in batches on two days a week, so a per-plate prep time
+          was never the honest answer to "when will it arrive" anyway. The dish
+          sheet states the serving and the rating, which are real.
+        */}
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
-          <span className="shrink-0 font-mono text-xs text-ink/45">{item.prepMins}′</span>
         </div>
         {item.localName && (
           <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-ochre-deep">
@@ -194,10 +203,9 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7">
           <p className="text-[15px] leading-relaxed text-ink/75">{item.description}</p>
 
-          <dl className="mt-5 grid grid-cols-3 gap-2 rounded-2xl border-2 border-ink/10 bg-white p-3 text-center">
+          <dl className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border-2 border-ink/10 bg-white p-3 text-center">
             {[
               ['Serves', String(item.serves)],
-              ['Prep', `${item.prepMins} min`],
               ['Rating', `★ ${item.rating}`],
             ].map(([k, v]) => (
               <div key={k}>

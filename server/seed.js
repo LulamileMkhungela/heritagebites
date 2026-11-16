@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 10;
+export const SEED_VERSION = 11;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -253,6 +253,70 @@ export const categories = [
 /* Coming soon — the kitchen archive                                      */
 /* --------------------------------------------------------------------- */
 
+/**
+ * Every vegetable side either kitchen offers, once each, in menu order.
+ *
+ * The traditional list first, then anything only the contemporary kitchen has —
+ * corn ribs and glazed carrots. Order matters for the card, not for the rule:
+ * the first occurrence wins, so a side shared by both plates keeps its
+ * traditional position and does not appear twice.
+ */
+function uniqueSides() {
+  const seen = new Set();
+  return [...traditionalSides, ...contemporarySides].filter((side) => {
+    if (seen.has(side.id)) return false;
+    seen.add(side.id);
+    return true;
+  });
+}
+
+/*
+ * What a vegetable side card shows, and the photograph behind it.
+ *
+ * Kept beside the sides themselves so a new side cannot be added to a plate and
+ * then appear on the Sides & Relishes card with a blank photo and no sentence.
+ * `archiveSideImage` borrows from the photographs the kitchen already has —
+ * the archive has never carried a photo of every side on its own, and a card
+ * with no picture at all reads as broken next to the rest of the menu.
+ *
+ * Every name here must exist in `public/img/`. A side pointing at a photograph
+ * the site does not ship is a 404 on the published page (the static-pages test
+ * catches it), so the map is kept to files that are actually there rather than
+ * to the name of the side.
+ */
+function archiveSideImage(id) {
+  return img(
+    {
+      chakalaka: 'chakalaka',
+      atchaar: 'atchaar',
+      'braised-cabbage': 'pap-cabbage',
+      spinach: 'samp-beans',
+      morogo: 'samp-beans',
+      salsa: 'chakalaka',
+      'green-salad': 'chakalaka',
+      'corn-ribs': 'russian-chips',
+      'glazed-carrots': 'pap-cabbage',
+    }[id] ?? 'chakalaka',
+  );
+}
+
+/** One honest line per side — what it is, not a marketing claim. */
+function sideBlurb(id) {
+  return (
+    {
+      'braised-cabbage': 'Cabbage braised slowly with onion until it is sweet and soft.',
+      spinach: 'Spinach wilted down with a little onion and seasoning.',
+      morogo: 'Wild African greens, cooked the traditional way.',
+      salsa: 'Fresh tomato and onion salsa, chopped and served cold.',
+      chakalaka: 'Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.',
+      atchaar: 'Tangy mango atchaar, made in the kitchen and spooned over the plate.',
+      'green-salad': 'Crisp lettuce, cucumber and tomato with a light dressing.',
+      'corn-ribs': 'Sweetcorn ribs, cut and grilled until the kernels caramelise.',
+      'glazed-carrots': 'Carrots roasted and glazed until they shine.',
+    }[id] ?? 'One of the vegetable sides you can choose inside a plate.'
+  );
+}
+
 /*
  * The categories the site carried before the owner signed off the two-tier
  * menu. Customers asked to see them again, and asked for the cards to read like
@@ -371,19 +435,51 @@ export const comingSoon = [
     id: 'sides-relishes',
     name: 'Sides & Relishes',
     tagline: 'The things that make the plate',
-    blurb: 'Chakalaka, atchaar and stywe pap — the supporting cast that steals the show.',
+    blurb: 'Every vegetable side you can choose inside a plate — braised cabbage, spinach, morogo, salsa, chakalaka, atchaar and green salad — plus stywe pap from the old kitchen.',
     accent: 'sky',
+    /*
+     * The vegetable sides the plate builders offer, listed here too.
+     *
+     * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
+     * Sides & Relishes". They are the same seven choices, read from the same
+     * constant the plate builder uses, so the two can never drift: adding a side
+     * to a plate adds it to this section, and retiring one removes it from both.
+     *
+     * They are *not* on sale on their own — these cards still carry the "Coming
+     * soon" tag and no basket control (see the archive rule above: nothing that is
+     * already sellable belongs in a coming-soon section, and a vegetable side is
+     * not sold separately, it is chosen *inside* the R100/R130 plate). What the
+     * section does is answer "what sides do you have?" in one place, which is the
+     * question the owner was being asked.
+     */
     items: [
-      {
-        id: 'archive-chakalaka', name: 'Chakalaka', price: 35, image: img('chakalaka'),
-        description: 'Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.',
+      /* Both kitchens' vegetable sides, deduplicated: braised cabbage, spinach,
+         salsa and green salad are offered inside either plate and are one card
+         each, not two. */
+      ...uniqueSides().map((side) => ({
+        /*
+         * The id matches the choice id inside a plate, with the archive prefix.
+         *
+         * That is not a coincidence and it is not cosmetic: the card, the option
+         * in the plate builder and the item in any future "order a side" flow are
+         * the same thing, so matching ids mean a test (and the kitchen) can prove
+         * the two lists agree instead of eyeballing them.
+         */
+        id: `archive-${side.id}`,
+        name: side.label,
+        /*
+         * No price of its own, said the honest way.
+         *
+         * A vegetable side is not sold separately — it is chosen *inside* the
+         * R100/R130 plate — so it carries `price: 0` and the card prints no
+         * price at all. Before, chakalaka showed R35 and atchaar R30, which
+         * contradicted the builder that includes them free.
+         */
+        price: 0,
+        image: archiveSideImage(side.id),
+        description: sideBlurb(side.id),
         status: 'coming-soon',
-      },
-      {
-        id: 'archive-atchaar', name: 'Atchaar', price: 30, image: img('atchaar'),
-        description: 'Tangy mango atchaar, made in the kitchen and spooned over the plate.',
-        status: 'coming-soon',
-      },
+      })),
       {
         id: 'archive-stywe-pap', name: 'Stywe Pap', price: 30, image: img('pap-cabbage'),
         description: 'Stiff maize pap, the traditional partner to a braai or a pot of mogodu.',

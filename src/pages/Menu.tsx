@@ -25,7 +25,14 @@ const SORTS = [
   { id: 'recommended', label: 'Recommended' },
   { id: 'price-asc', label: 'Price: low to high' },
   { id: 'price-desc', label: 'Price: high to low' },
-  { id: 'quickest', label: 'Quickest first' },
+  /*
+   * "Quickest first" sorted on a per-plate prep time the page no longer shows —
+   * the number behind it read "20′" on a card, which the owner called out as
+   * confusing, and the kitchen cooks in batches on two days a week, so a
+   * per-plate minute count was never a real answer about when food arrives.
+   * A sort option with no visible number behind it would be a control that
+   * silently reorders the menu for no reason the customer can see.
+   */
 ] as const;
 
 type SortId = (typeof SORTS)[number]['id'];
@@ -37,8 +44,6 @@ function sortItems(items: MenuItem[], sort: SortId): MenuItem[] {
       return copy.sort((a, b) => a.price - b.price || a.name.localeCompare(b.name));
     case 'price-desc':
       return copy.sort((a, b) => b.price - a.price || a.name.localeCompare(b.name));
-    case 'quickest':
-      return copy.sort((a, b) => a.prepMins - b.prepMins || a.price - b.price);
     default:
       /* The kitchen's own order: the plates it sells most sit first. */
       return copy.sort((a, b) => (b.orders ?? 0) - (a.orders ?? 0));
@@ -528,12 +533,22 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
         <span className="absolute left-3 top-3 rounded-full bg-ink/85 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-bone">
           Coming soon
         </span>
-        <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">{zar(item.price)}</span>
+        {/*
+          Only when there is a price. A vegetable side has none of its own — it
+          is included *inside* the plate — and "R0,00" would be a price, wrongly
+          stated. The line under the description says where it comes from
+          instead, as a short uppercase label so it reads at a glance.
+        */}
+        {item.price > 0 && (
+          <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">{zar(item.price)}</span>
+        )}
       </div>
       <div className="flex flex-1 flex-col p-4">
         <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
         <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>
-        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-ink/40">Not on sale yet</p>
+        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-ink/40">
+          {item.price > 0 ? 'Not on sale yet' : 'Included in a plate'}
+        </p>
       </div>
     </article>
   );

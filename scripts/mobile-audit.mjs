@@ -32,12 +32,19 @@ const HEIGHT = 844;
 
 const runtime = await prepareRuntime();
 
-/* A real order, so the receipt page (and its alerts card) is audited too. */
+/*
+ * A real order, so the receipt page (and its alerts card) is audited too.
+ *
+ * Cash, not card: a host with no Yoco configuration refuses a card order at the
+ * order route (correctly — it cannot start a payment), and the audit died on that
+ * refusal instead of measuring any layout. The receipt page it renders is the
+ * same page either way.
+ */
 const orderResponse = await fetch(`${BASE}/api/orders`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    channel: 'card',
+    channel: 'cash',
     fulfilment: 'delivery',
     customer: {
       name: 'Mobile Audit',
@@ -48,8 +55,8 @@ const orderResponse = await fetch(`${BASE}/api/orders`, {
     },
     items: [{ itemId: 'tshotlo-plate', qty: 2, options: { starch: 'pap', veg: 'chakalaka' } }],
     /* No card fields exist any more: the order is saved and the customer is
-       sent to Yoco. The receipt page is what this audit renders. */
-    payment: { method: 'card' },
+       sent to Yoco when card is configured. Cash always works. */
+    payment: { method: 'cash' },
   }),
 });
 if (!orderResponse.ok) throw new Error(`could not create audit order: ${await orderResponse.text()}`);

@@ -469,7 +469,14 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
     card grid may be a control, a link or a dish sheet.
   */
   for (const grid of blocks) {
-    if (!/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
+    /*
+     * Sides & Relishes is the exception to "every archive card shows a price":
+     * a vegetable side has no price of its own, because it is included inside
+     * the plate. Its cards say so instead ("Chosen inside a plate · included").
+     */
+    const isSides = /Sides & Relishes/i.test(grid.closest('section')?.textContent ?? '');
+    if (!isSides && !/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
+    if (isSides && /R\s?0[,.\s]?00/.test(grid.textContent ?? '')) throw new Error('a side is showing a R0,00 price');
     if (!/Coming soon/i.test(grid.textContent ?? '')) throw new Error('archive cards are missing their "Coming soon" tag');
     const interactive = grid.querySelectorAll('a, button, input, select, textarea, [role="link"], [role="button"], [onclick]');
     if (interactive.length) throw new Error(`the archive must not be orderable, but a card grid holds ${interactive.length} control(s)`);
@@ -510,6 +517,74 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
   if (placeholders.length) throw new Error('archive cards are showing placeholder images instead of photos');
 
   return '3 categories, priced cards, 0 order controls';
+});
+
+await step('every vegetable side a plate offers is also on Sides & Relishes', async () => {
+  /*
+   * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
+   * Sides & Relishes".
+   *
+   * The options are read out of the plate builder's own DOM — open the builder,
+   * collect the "Choose your vegetable side" checkboxes — and then matched
+   * against the cards in the Sides & Relishes section. Comparing the two rendered
+   * lists is the point: a hard-coded list here would pass even if the builder
+   * gained a side the section never showed.
+   */
+  const builderButton = [...arch.doc.querySelectorAll('section button')]
+    .find((el) => /Build your plate/i.test(el.textContent ?? ''));
+  if (!builderButton) throw new Error('no plate builder card on the menu');
+  arch.click(builderButton);
+  await arch.waitFor(() => arch.dialogs().length > 0, 'plate builder to open', 8000);
+
+  /*
+   * The choices are buttons with role="checkbox", not real inputs — the group is
+   * a fieldset whose legend asks the question. Each row reads "Braised cabbage
+   * Included", so the price note is stripped before comparing.
+   */
+  const group = [...arch.doc.querySelectorAll('[role="dialog"] fieldset')]
+    .find((el) => /Choose your vegetable side/i.test(el.querySelector('legend')?.textContent ?? ''));
+  if (!group) throw new Error('the plate builder has no vegetable-side group');
+  const options = [...group.querySelectorAll('button[role="checkbox"]')]
+    .map((el) => (el.textContent ?? '').replace(/\s*Included\s*$/i, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  if (options.length < 5) throw new Error(`expected the vegetable sides, saw ${options.length}: ${options.slice(0, 6)}`);
+
+  /* Close it the way a customer does — the sheet's own close control — so the
+     menu is back to its sections for the comparison below. */
+  const closeBuilder = [...arch.doc.querySelectorAll('[role="dialog"] button')]
+    .find((el) => /close/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!closeBuilder) throw new Error('the plate builder has no close control');
+  arch.click(closeBuilder);
+  await arch.waitFor(() => arch.dialogs().length === 0, 'plate builder to close', 8000);
+
+  const sidesSection = [...arch.doc.querySelectorAll('section')]
+    .find((section) => /Sides & Relishes/i.test(section.querySelector('h2')?.textContent ?? ''));
+  if (!sidesSection) throw new Error('the Sides & Relishes section is missing');
+  const cards = [...sidesSection.querySelectorAll('[data-coming-soon] article h3')]
+    .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase());
+
+  const missing = options.filter((option) => !cards.some((card) => card === option.toLowerCase()));
+  if (missing.length) throw new Error(`sides in the plate builder but not on Sides & Relishes: ${missing.join(', ')}`);
+  return `${options.length} sides in the builder, all ${cards.length} cards on Sides & Relishes match`;
+});
+
+await step('no plate card carries a bare prep-time figure', async () => {
+  /*
+   * The owner saw "20′" beside "Tlhakwana Plate" and asked what it was for. It
+   * was a per-plate prep time, unlabelled, next to the price — so it is gone from
+   * the card and from the dish sheet, and the "Quickest first" sort that ordered
+   * the menu by a number nobody could see went with it.
+   */
+  const priced = [...arch.doc.querySelectorAll('[data-sellable] article')];
+  if (!priced.length) throw new Error('no sellable plates to check');
+  for (const card of priced) {
+    if (/\d+\s?[′']/.test(card.textContent ?? '')) throw new Error(`a plate card still shows a bare figure: ${(card.textContent ?? '').slice(0, 60)}`);
+  }
+  const sorter = [...arch.doc.querySelectorAll('select')].find((el) => /sort/i.test(el.getAttribute('aria-label') ?? ''));
+  if (sorter && [...sorter.options].some((o) => /quickest/i.test(o.textContent ?? ''))) {
+    throw new Error('the "Quickest first" sort is back, but no prep time is shown');
+  }
+  return `${priced.length} plate cards, no unlabelled numbers; no invisible sort`;
 });
 
 await step('clicking an archive category chip jumps to its section', async () => {
@@ -803,12 +878,32 @@ await step('the delivery address is three boxes: house number, street and suburb
     if (!new RegExp(label.replace('.', '\\.')).test(s7.text())) throw new Error(`the "${label}" label is missing`);
   }
   /*
+   * The same three boxes on a phone, not three stacked paragraphs.
+   *
+   * jsdom does not compute layout, so this reads the classes that decide it: the
+   * grid must be six columns at *every* width (no `sm:` prefix on the track
+   * count), with the house number and the street sharing a row. Before, the box
+   * was `grid` only, so on a phone each part took a full line and "House no."
+   * stretched as wide as the street.
+   */
+  const row = house.closest('.grid');
+  if (!row) throw new Error('the address fields are not in a grid');
+  if (!/(^|\s)grid-cols-6(\s|$)/.test(row.className)) {
+    throw new Error(`the address grid collapses to one column on a phone: "${row.className}"`);
+  }
+  const houseCol = house.closest('[class*="col-span"]');
+  const streetCol = street.closest('[class*="col-span"]');
+  if (!houseCol || !streetCol) throw new Error('the address boxes have no column spans');
+  if (/(^|\s)col-span-2(\s|$)/.test(houseCol.className) === false) throw new Error('the house number is not a narrow column');
+  if (/(^|\s)col-span-4(\s|$)/.test(streetCol.className) === false) throw new Error('the street does not take the rest of the row');
+
+  /*
    * No location is asked for here on purpose: the device fix wins over the
    * picked address everywhere on this page, so tapping the button in a step that
    * exists to check the boxes would silently change what the next four steps are
    * measuring.
    */
-  return 'house number, street and suburb are separate fields';
+  return 'house number, street and suburb are separate fields, on one row on a phone';
 });
 
 await step('typing a delivery address offers OpenStreetMap suggestions', async () => {
@@ -1917,6 +2012,37 @@ await step('the customer-quest reference lists both menus and opens nothing', as
     if (!expected.test(text)) throw new Error(`the reference is missing ${expected}`);
   }
   return 'both menus listed; 0 links, 0 buttons, 0 dish pages';
+});
+
+await step('the quest form asks in the owner\'s words, with the extra hint gone', async () => {
+  /*
+   * Owner, 16 Nov 2026, on the three questions that carry a condition:
+   *   Cell number  (we reply here · required if no email)
+   *   What should we cook?   — and *no* "the dish, and how you like it" under it
+   *   Email  (required if no number)
+   *
+   * The condition lives in the label so it cannot be missed: a hint set off to the
+   * right is the first thing a phone drops. This reads the labels back off the
+   * rendered page, not the source, and then proves the old hint has not crept
+   * back under any of the three fields.
+   */
+  const labels = [...quest.doc.querySelectorAll('form label')].map((el) => (el.querySelector('span')?.textContent ?? '').trim());
+  const cell = labels.find((text) => /^Cell number/i.test(text));
+  const email = labels.find((text) => /^Email/i.test(text));
+  if (!cell) throw new Error('the form has no cell-number field');
+  if (!email) throw new Error('the form has no email field');
+  if (!/required if no email/i.test(cell)) throw new Error(`the cell-number label lost its condition: "${cell}"`);
+  if (!/required if no number/i.test(email)) throw new Error(`the email label lost its condition: "${email}"`);
+
+  const dishLabel = labels.find((text) => /What should we cook/i.test(text));
+  if (!dishLabel) throw new Error('the form no longer asks what to cook');
+  if (/dish, and how you like it/i.test(dishLabel)) throw new Error('the removed hint is back inside the label');
+
+  /* The hint would sit in the same label as the question, beside it. */
+  const dishField = [...quest.doc.querySelectorAll('form label')].find((el) => /What should we cook/i.test(el.textContent ?? ''));
+  if (!dishField) throw new Error('the "what should we cook" field is not a label');
+  if (/how you like it/i.test(dishField.textContent ?? '')) throw new Error('the "the dish, and how you like it" hint came back');
+  return `labels: ${cell.slice(0, 40)}… / Email (required if no number); no dish hint`;
 });
 
 await step('an incomplete quest is refused with a reason', async () => {

@@ -78,13 +78,45 @@
       "id": "sides-relishes",
       "name": "Sides & Relishes",
       "tagline": "The things that make the plate",
-      "blurb": "Chakalaka, atchaar and stywe pap — the supporting cast that steals the show.",
+      "blurb": "Every vegetable side you can choose inside a plate — braised cabbage, spinach, morogo, salsa, chakalaka, atchaar and green salad — plus stywe pap from the old kitchen.",
       "accent": "sky",
       "items": [
         {
+          "id": "archive-braised-cabbage",
+          "name": "Braised cabbage",
+          "price": 0,
+          "image": "/img/pap-cabbage.jpg",
+          "description": "Cabbage braised slowly with onion until it is sweet and soft.",
+          "status": "coming-soon"
+        },
+        {
+          "id": "archive-spinach",
+          "name": "Spinach",
+          "price": 0,
+          "image": "/img/samp-beans.jpg",
+          "description": "Spinach wilted down with a little onion and seasoning.",
+          "status": "coming-soon"
+        },
+        {
+          "id": "archive-morogo",
+          "name": "Morogo",
+          "price": 0,
+          "image": "/img/samp-beans.jpg",
+          "description": "Wild African greens, cooked the traditional way.",
+          "status": "coming-soon"
+        },
+        {
+          "id": "archive-salsa",
+          "name": "Salsa",
+          "price": 0,
+          "image": "/img/chakalaka.jpg",
+          "description": "Fresh tomato and onion salsa, chopped and served cold.",
+          "status": "coming-soon"
+        },
+        {
           "id": "archive-chakalaka",
           "name": "Chakalaka",
-          "price": 35,
+          "price": 0,
           "image": "/img/chakalaka.jpg",
           "description": "Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.",
           "status": "coming-soon"
@@ -92,9 +124,33 @@
         {
           "id": "archive-atchaar",
           "name": "Atchaar",
-          "price": 30,
+          "price": 0,
           "image": "/img/atchaar.jpg",
           "description": "Tangy mango atchaar, made in the kitchen and spooned over the plate.",
+          "status": "coming-soon"
+        },
+        {
+          "id": "archive-green-salad",
+          "name": "Green salad",
+          "price": 0,
+          "image": "/img/chakalaka.jpg",
+          "description": "Crisp lettuce, cucumber and tomato with a light dressing.",
+          "status": "coming-soon"
+        },
+        {
+          "id": "archive-corn-ribs",
+          "name": "Corn ribs",
+          "price": 0,
+          "image": "/img/russian-chips.jpg",
+          "description": "Sweetcorn ribs, cut and grilled until the kernels caramelise.",
+          "status": "coming-soon"
+        },
+        {
+          "id": "archive-glazed-carrots",
+          "name": "Glazed carrots",
+          "price": 0,
+          "image": "/img/pap-cabbage.jpg",
+          "description": "Carrots roasted and glazed until they shine.",
           "status": "coming-soon"
         },
         {
@@ -1500,7 +1556,7 @@
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Monday",
-    "timeLabel": "21:49",
+    "timeLabel": "22:52",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Monday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",

@@ -561,7 +561,14 @@ export function Field({
   children,
 }: {
   label: string;
-  hint?: string;
+  /**
+   * The hint beside the label.
+   *
+   * A node, not a string, so a hint that is too long for a phone can be hidden at
+   * that width with `hidden sm:inline` instead of being deleted for everybody —
+   * the street box uses that to keep its one-line label on a 390px screen.
+   */
+  hint?: ReactNode;
   error?: string;
   /**
    * Marks the field as mandatory with a red asterisk.
