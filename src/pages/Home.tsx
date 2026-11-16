@@ -542,7 +542,7 @@ function Channels({ settings }: { settings: Settings | undefined }) {
             ? 'Message us and we will take your order in the chat.'
             : url
               ? `Order through the ${r.name} app.`
-              : `We are not on ${r.name} yet — WhatsApp us and we will tell you where to find us.`;
+              : `We are not on ${r.name} yet. It is coming — until then, order here or on WhatsApp.`;
           const content = (
             <>
               <span className={`grid h-12 w-12 place-items-center rounded-xl ${r.brand}`}>
@@ -551,7 +551,7 @@ function Channels({ settings }: { settings: Settings | undefined }) {
               <h3 className="mt-4 font-display text-xl font-semibold">{r.name}</h3>
               <p className="mt-1 text-[13px] text-ink/60">{description}</p>
               <span className="mt-auto pt-4 text-sm font-semibold text-ochre-deep">
-                {url ? (r.key === 'whatsapp' ? 'Start a chat' : 'Order in the app') : 'Order on WhatsApp instead'}
+                {url ? (r.key === 'whatsapp' ? 'Start a chat' : 'Order in the app') : 'Coming soon'}
               </span>
             </>
           );

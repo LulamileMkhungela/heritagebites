@@ -12,6 +12,7 @@ import { AddressField } from '../components/AddressField';
 import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaOptions } from '../../shared/service.js';
 import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, type AddressSuggestion } from '../lib/address';
 import { deniedMessage, requestLocation, type LocationResult } from '../lib/geolocation';
+import type { BookableDate, Settings } from '../lib/types';
 
 /*
  * `cash` is the stored value, and it means cash to the driver.
@@ -569,6 +570,7 @@ function LiveCheckout() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
+      <BackToWhereIWas />
       <div className="flex items-center justify-between gap-4">
         <SectionLabel>Checkout</SectionLabel>
         <HeritageMark className="h-7 w-7 text-ink/70" />
@@ -628,11 +630,8 @@ function LiveCheckout() {
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
             <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
             <p className="mt-1 text-xs leading-snug text-ink/55">
-              We cook on{' '}
-              {bookable.length > 1
-                ? `${settings?.hours.filter((h) => !h.closed).map((h) => h.label).join(' and ') ?? 'Thursdays and Fridays'}`
-                : 'Thursdays and Fridays'}
-              . Pick any day below — today is not the only option, and you can book weeks ahead.
+              This is the cooking week. Order today and choose any Thursday or Friday ahead — including several weeks
+              from now — so nothing has to wait for the next one.
             </p>
             {bookable.length === 0 ? (
               <p className="mt-3 text-sm text-ink/60">
@@ -640,213 +639,12 @@ function LiveCheckout() {
                 with you.
               </p>
             ) : (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {bookable.map((d) => {
-                  const on = plannedDate === d.date;
-                  return (
-                    <button
-                      key={d.date}
-                      type="button"
-                      onClick={() => setPlannedDate(on ? '' : d.date)}
-                      aria-pressed={on}
-                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block">{d.label}</span>
-                        <span className="font-mono text-[11px] text-ink/50">
-                          {d.open}–{d.close}
-                          {d.isToday && <span className="text-ochre-deep"> · today</span>}
-                        </span>
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
-                      >
-                        {on && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <WeekSchedule settings={settings} bookable={bookable} chosen={plannedDate} onChoose={setPlannedDate} />
             )}
             <p className="mt-3 text-[12px] leading-relaxed text-ink/50">
               {planned
                 ? `Booked for ${planned.label}. The order leaves today and the kitchen cooks it on that day — the WhatsApp message says so in as many words.`
                 : 'Leave this alone and the kitchen cooks it on the next cooking day, the same way an order placed on the day always has.'}
-            </p>
-          </fieldset>
-
-          {/* Fulfilment */}
-          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</legend>
-            {/*
-              There is no collection any more (owner, 14 Nov 2026 — "there is no
-              collection, it is delivery based"). It was a pair of radio cards
-              with Collect first; with only one option left a card would be a
-              button that cannot change anything, so the section states the
-              arrangement and lets the customer check their distance instead.
-            */}
-            <div className="mt-3 rounded-2xl border-2 border-ochre bg-ochre/10 p-4">
-              <p className="text-sm font-semibold">Every order is delivered.</p>
-              <p className="mt-1 text-xs leading-snug text-ink/60">
-                Delivery is included in the plate price in{' '}
-                {settings?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}. Elsewhere a{' '}
-                {zar(rules.fee)} delivery fee applies, and we deliver up to {rules.maxKm} km from the kitchen.
-              </p>
-            </div>
-            {/*
-              The customer's own location, offered rather than demanded.
-              The browser only reveals it with permission, so the button is the
-              whole prompt — and the address they pick is still what the food
-              goes to. This only answers "how far is it", which is the question
-              that decides the fee and whether we can serve them at all.
-            */}
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (geo.status === 'asking') return;
-                  setGeo({ status: 'asking' });
-                  /* Precise first, then a fallback — see lib/geolocation.ts for
-                     why a coarse fix cannot decide a distance boundary honestly. */
-                  requestLocation().then((r) => setGeo(r));
-                }}
-                disabled={geo.status === 'asking'}
-              >
-                {geo.status === 'asking' ? 'Checking…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
-              </Button>
-              {zone.zone !== 'unknown' && (
-                <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-ochre-deep' : 'text-emerald-700'}`} role="status">
-                  {tooFar
-                    ? `${zone.distanceKm} km away — outside our ${rules.maxKm} km delivery area`
-                    : zone.zone === 'surcharge'
-                      ? `${zone.distanceKm} km away — ${zar(rules.fee)} delivery fee added`
-                      : `${zone.distanceKm} km away — delivery included`}
-                </span>
-              )}
-              {/*
-                Shown whenever the button failed, not only when the address is
-                still unlocated: a customer who tapped it deserves to be told what
-                happened even if they had already picked an address that works.
-                Silence reads as a broken button.
-              */}
-              {geo.status === 'denied' && (
-                <span className="text-xs leading-relaxed text-ink/50">{deniedMessage(geo.reason)}</span>
-              )}
-              {geo.status === 'ok' && !geo.precise && (
-                <span className="text-xs text-ink/45">
-                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address below for an exact check.
-                </span>
-              )}
-            </div>
-            {tooFar && (
-              <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-800" role="alert">
-                We cannot deliver {zone.distanceKm} km. We would rather tell you now than take your money for food we
-                cannot bring you — message us on WhatsApp if you think this is wrong.
-              </p>
-            )}
-            {/*
-              No "get the collection point" button here. The order now finishes
-              on WhatsApp, and the collection address is sent in that same chat,
-              so a button that opens a second conversation only loses the one
-              message the kitchen needs.
-            */}
-            {/*
-              Payment belongs to the same question — how the food arrives and how
-              it is paid for is one decision, made together at the top of the
-              form rather than in its own section at the bottom.
-            */}
-            <div className="mt-6 border-t-2 border-ink/10 pt-5">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {([
-                  {
-                    id: 'card' as PayMethod,
-                    label: 'Card',
-                    /*
-                     * Card is always offered, because the business can always
-                     * take it: on collection there is a Yoco card machine at the
-                     * counter, and on delivery the kitchen brings one. When the
-                     * online checkout is wired up the customer pays before the
-                     * food is cooked instead; that is a difference in *when*, not
-                     * in whether card is accepted.
-                     */
-                    /*
-                     * The card blurb follows the fulfilment. Saying "at your
-                     * door" to someone collecting is simply wrong, and it was
-                     * doing exactly that: the copy was written once for delivery
-                     * and never branched.
-                     */
-                    blurb: online ? "Card or instant EFT on Yoco's secure page" : 'Pay the driver by card at the door',
-                    show: true,
-                  },
-                  {
-                    id: 'cash' as PayMethod,
-                    label: 'Cash',
-                    blurb: 'Pay the driver on delivery',
-                    show: true,
-                  },
-                ]).map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setMethod(m.id)}
-                    aria-pressed={method2 === m.id}
-                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method2 === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
-                  >
-                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method2 === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
-                      {method2 === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
-                    </span>
-                    <span>
-                      <span className="block text-sm font-semibold">{m.label}</span>
-                      <span className="block text-xs text-ink/55">{m.blurb}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/*
-                One short line, whatever the payment state. The order finishes on
-                WhatsApp either way, so that chat is where the Yoco link arrives —
-                and card works for delivery too, because the kitchen carries a
-                Yoco card machine. No paragraph about what is not connected.
-              */}
-              {method2 === 'card' && online && (
-                <p className="mt-3 text-xs leading-relaxed text-ink/55">
-                  You&apos;ll pay on Yoco&apos;s secure page. We send the payment link on WhatsApp.
-                </p>
-              )}
-              {!online && (
-                <p className="mt-3 text-xs leading-relaxed text-ink/55">
-                  Secure Yoco payment — card or instant EFT — is sent as a link in your WhatsApp chat.
-                </p>
-              )}
-              {/*
-                The payment blurbs above already say how card works for the
-                chosen fulfilment, so this line only needs to exist when online
-                checkout is off and the customer must be told a link is coming.
-              */}
-            </div>
-
-            {/*
-              The rules follow the fulfilment. The minimum order is a DELIVERY
-              rule (server/index.js only applies it when fee < 0 for delivery),
-              so quoting a minimum to someone collecting invents a restriction
-              the kitchen does not actually impose.
-            */}
-            <p className="mt-4 text-xs leading-relaxed text-ink/50">
-              {fulfilment === 'delivery' ? (
-                <>
-                  Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery included in{' '}
-                  {settings?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}
-                  {surcharge > 0 ? ` — ${zar(surcharge)} added for your address` : ''}; we deliver up to {rules.maxKm} km
-                  from the kitchen.
-                </>
-              ) : (
-                <>No minimum order and no delivery fee — you pay the plate price only.</>
-              )}
             </p>
           </fieldset>
 
@@ -958,6 +756,155 @@ function LiveCheckout() {
                 </Field>
               </div>
             </div>
+            {/*
+              The customer's own location, offered rather than demanded.
+              The browser only reveals it with permission, so the button is the
+              whole prompt — and the address they pick is still what the food
+              goes to. This only answers "how far is it", which is the question
+              that decides the fee and whether we can serve them at all.
+            */}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (geo.status === 'asking') return;
+                  setGeo({ status: 'asking' });
+                  /* Precise first, then a fallback — see lib/geolocation.ts for
+                     why a coarse fix cannot decide a distance boundary honestly. */
+                  requestLocation().then((r) => setGeo(r));
+                }}
+                disabled={geo.status === 'asking'}
+              >
+                {geo.status === 'asking' ? 'Checking…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
+              </Button>
+              {zone.zone !== 'unknown' && (
+                <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-ochre-deep' : 'text-emerald-700'}`} role="status">
+                  {tooFar
+                    ? `${zone.distanceKm} km away — outside our ${rules.maxKm} km delivery area`
+                    : zone.zone === 'surcharge'
+                      ? `${zone.distanceKm} km away — ${zar(rules.fee)} delivery fee added`
+                      : `${zone.distanceKm} km away — delivery included`}
+                </span>
+              )}
+              {/*
+                Shown whenever the button failed, not only when the address is
+                still unlocated: a customer who tapped it deserves to be told what
+                happened even if they had already picked an address that works.
+                Silence reads as a broken button.
+              */}
+              {geo.status === 'denied' && (
+                <span className="text-xs leading-relaxed text-ink/50">{deniedMessage(geo.reason)}</span>
+              )}
+              {geo.status === 'ok' && !geo.precise && (
+                <span className="text-xs text-ink/45">
+                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
+                </span>
+              )}
+            </div>
+            {tooFar && (
+              <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-800" role="alert">
+                We cannot deliver {zone.distanceKm} km. We would rather tell you now than take your money for food we
+                cannot bring you — message us on WhatsApp if you think this is wrong.
+              </p>
+            )}
+            {/*
+              No "get the collection point" button here. The order now finishes
+              on WhatsApp, and the collection address is sent in that same chat,
+              so a button that opens a second conversation only loses the one
+              message the kitchen needs.
+            */}
+
+            {/*
+              Payment belongs to the same question — how the food arrives and how
+              it is paid for is one decision, made together at the top of the
+              form rather than in its own section at the bottom.
+            */}
+            <div className="mt-6 border-t-2 border-ink/10 pt-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {([
+                  {
+                    id: 'card' as PayMethod,
+                    label: 'Card',
+                    /*
+                     * Card is always offered, because the business can always
+                     * take it: on collection there is a Yoco card machine at the
+                     * counter, and on delivery the kitchen brings one. When the
+                     * online checkout is wired up the customer pays before the
+                     * food is cooked instead; that is a difference in *when*, not
+                     * in whether card is accepted.
+                     */
+                    /*
+                     * The card blurb follows the fulfilment. Saying "at your
+                     * door" to someone collecting is simply wrong, and it was
+                     * doing exactly that: the copy was written once for delivery
+                     * and never branched.
+                     */
+                    blurb: online ? "Card or instant EFT on Yoco's secure page" : 'Pay the driver by card at the door',
+                    show: true,
+                  },
+                  {
+                    id: 'cash' as PayMethod,
+                    label: 'Cash',
+                    blurb: 'Pay the driver on delivery',
+                    show: true,
+                  },
+                ]).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMethod(m.id)}
+                    aria-pressed={method2 === m.id}
+                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method2 === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
+                  >
+                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method2 === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
+                      {method2 === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold">{m.label}</span>
+                      <span className="block text-xs text-ink/55">{m.blurb}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/*
+                One short line, whatever the payment state. The order finishes on
+                WhatsApp either way, so that chat is where the Yoco link arrives —
+                and card works for delivery too, because the kitchen carries a
+                Yoco card machine. No paragraph about what is not connected.
+              */}
+              {method2 === 'card' && online && (
+                <p className="mt-3 text-xs leading-relaxed text-ink/55">
+                  You&apos;ll pay on Yoco&apos;s secure page. We send the payment link on WhatsApp.
+                </p>
+              )}
+              {!online && (
+                <p className="mt-3 text-xs leading-relaxed text-ink/55">
+                  Secure Yoco payment — card or instant EFT — is sent as a link in your WhatsApp chat.
+                </p>
+              )}
+              {/*
+                The payment blurbs above already say how card works for the
+                chosen fulfilment, so this line only needs to exist when online
+                checkout is off and the customer must be told a link is coming.
+              */}
+            </div>
+            {/*
+              The delivery facts survive the section they used to live in. The
+              "Delivery" fieldset is gone (owner, 16 Nov 2026 — the details are
+              all one form now), but the minimum order and the fee are money, so
+              they stay as one plain line rather than a heading of their own.
+            */}
+            <p className="mt-3 text-xs leading-relaxed text-ink/50">
+              Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery included in{' '}
+              {settings?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}
+              {surcharge > 0 ? ` — ${zar(surcharge)} added for your address` : ''}; we deliver up to {rules.maxKm} km
+              from the kitchen.
+            </p>
+
             {/*
               One line. Email receipts needed SMTP configured on the host before
               a single message could go out, and telling a customer about that
@@ -1108,6 +1055,208 @@ function LiveCheckout() {
 }
 
 
+/* --------------------------- Back to where I was ------------------------ */
+
+/**
+ * A visible way back to the screen the customer came from.
+ *
+ * The owner's report (16 Nov 2026): "when am on checkout why i cant go back to
+ * the screen i was at". The browser's own Back button does work — this is a
+ * single-page app with real history entries — but on a phone the checkout is the
+ * end of a flow the customer arrived at from a plate they were reading, and there
+ * was nothing on the page itself that said "leave without losing your basket".
+ * A checkout that only offers forward is a checkout people abandon.
+ *
+ * Where it goes, in order of preference:
+ *
+ *   1. The page they came from, if it was another page on this site. The basket
+ *      and every form field are kept in the store and in sessionStorage, so going
+ *      back does not cost the customer their work.
+ *   2. The menu, when the checkout was opened directly (a bookmark, a link in a
+ *      chat) and there is no history to return to. `history.length` is the only
+ *      signal a browser gives, and on a fresh tab it is 1.
+ */
+function BackToWhereIWas({ to = '/menu', label = 'Back to the menu' }: { to?: string; label?: string }) {
+  const nav = useNavigate();
+  const goBack = () => {
+    /*
+     * `history.state.idx` is what React Router installs on every entry: 0 means
+     * this is the first page of the session, so `navigate(-1)` would leave the
+     * site entirely. Checking it — rather than trusting `history.length`, which
+     * counts other sites too — is what keeps the button inside the shop.
+     */
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) nav(-1);
+    else nav(to);
+  };
+  return (
+    <button
+      type="button"
+      onClick={goBack}
+      className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-ink/60 transition-colors hover:text-ink"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m15 18-6-6 6-6" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+/* ------------------------- The week, as a schedule ---------------------- */
+
+/** Monday-first order, with the name a customer reads. */
+const WEEK = [
+  { day: 1, label: 'Monday', short: 'Mon' },
+  { day: 2, label: 'Tuesday', short: 'Tue' },
+  { day: 3, label: 'Wednesday', short: 'Wed' },
+  { day: 4, label: 'Thursday', short: 'Thu' },
+  { day: 5, label: 'Friday', short: 'Fri' },
+  { day: 6, label: 'Saturday', short: 'Sat' },
+  { day: 0, label: 'Sunday', short: 'Sun' },
+];
+
+/**
+ * The cooking week, always all seven days, plus the next dates that can be booked.
+ *
+ * The owner asked for "the which day — please put week schedule only (eg user can
+ * order even on monday for a thursday and friday)". That is two things at once,
+ * and both are here:
+ *
+ *   - **the week itself**, Monday to Sunday, so the rhythm is visible on any day
+ *     of the week. It used to show nothing but a list of upcoming dates, which
+ *     meant a customer reading the checkout on a Monday saw two buttons and no
+ *     explanation of why those days and not others.
+ *   - **a date to book**, because "Thursday" alone is ambiguous two weeks out. The
+ *     day of the week is the schedule; the date is the booking, and both travel
+ *     with the order.
+ *
+ * Booking is never gated on *today*: a Monday order for a Thursday is the normal
+ * case, and a Saturday order for a Friday three weeks away is just as valid. Every
+ * date offered comes from `bookableDates` on the server, which is the same list the
+ * order route validates against — so the checkout can only offer days the kitchen
+ * will accept.
+ */
+function WeekSchedule({
+  settings,
+  bookable,
+  chosen,
+  onChoose,
+}: {
+  settings?: Settings | null;
+  bookable: BookableDate[];
+  chosen: string;
+  onChoose: (date: string) => void;
+}) {
+  const hours = settings?.hours ?? [];
+  const nextByDay = new Map<number, BookableDate>();
+  for (const entry of bookable ?? []) {
+    /* The first upcoming date for each weekday — the list is in date order. */
+    const day = new Date(`${entry.date}T00:00:00Z`).getUTCDay();
+    if (!nextByDay.has(day)) nextByDay.set(day, entry);
+  }
+
+  return (
+    <div className="mt-4">
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {WEEK.map(({ day, label }) => {
+          const open = hours.some((h) => h.day === day && !h.closed);
+          const next = nextByDay.get(day) ?? null;
+          const on = Boolean(next && next.date === chosen);
+          /*
+           * A cooking day is a button; a rest day is not.
+           *
+           * A rest day that could be tapped would need a refusal, and the schedule
+           * already says everything: "we do not cook on Monday". Making it
+           * interactive would suggest otherwise.
+           */
+          const inner = (
+            <span className="flex w-full items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className={`block text-sm ${open ? 'font-semibold' : 'text-ink/45'}`}>{label}</span>
+                <span className="block font-mono text-[11px] text-ink/45">
+                  {open && next ? `Next: ${next.label.replace(`${label} `, '')}` : open ? 'Open — dates coming' : 'Not a cooking day'}
+                </span>
+              </span>
+              <span
+                aria-hidden="true"
+                className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${
+                  !open ? 'border-ink/15' : on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'
+                }`}
+              >
+                {on && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+              </span>
+            </span>
+          );
+
+          if (!open || !next) {
+            return (
+              <li
+                key={label}
+                data-weekday={label}
+                aria-disabled="true"
+                className="flex items-center rounded-xl border-2 border-dashed border-ink/10 bg-bone-2/40 px-3 py-2.5"
+              >
+                {inner}
+              </li>
+            );
+          }
+          return (
+            <li key={label}>
+              <button
+                type="button"
+                data-weekday={label}
+                data-bookable-date={next.date}
+                onClick={() => onChoose(on ? '' : next.date)}
+                aria-pressed={on}
+                className={`flex w-full items-center rounded-xl border-2 px-3 py-2.5 text-left transition-all ${
+                  on ? 'border-ochre bg-ochre/15' : 'border-ink/12 hover:border-ink/30'
+                }`}
+              >
+                {inner}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* The other dates inside the booking horizon, so a specific week is pickable. */}
+      {bookable.length > 2 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm font-semibold text-ochre-deep">
+            Or pick a specific date
+          </summary>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {bookable.map((d) => {
+              const on = d.date === chosen;
+              return (
+                <button
+                  key={d.date}
+                  type="button"
+                  onClick={() => onChoose(on ? '' : d.date)}
+                  aria-pressed={on}
+                  className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2 text-left text-sm transition-all ${
+                    on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block">{d.label}</span>
+                    <span className="font-mono text-[11px] text-ink/50">
+                      {d.open}–{d.close}
+                      {d.isToday && <span className="text-ochre-deep"> · today</span>}
+                    </span>
+                  </span>
+                  {on && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink" />}
+                </button>
+              );
+            })}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 /* --------------------------- Static preview ---------------------------- */
 
 /**
@@ -1212,6 +1361,7 @@ function PreviewCheckout() {
 
   return (
     <section className="mx-auto max-w-5xl px-4 py-14">
+      <BackToWhereIWas />
       <SectionLabel>Checkout</SectionLabel>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Finish your order</h1>
       <p className="mt-3 max-w-2xl text-ink/65">
@@ -1225,8 +1375,8 @@ function PreviewCheckout() {
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
             <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
             <p className="mt-1 text-xs leading-snug text-ink/55">
-              We cook Thursdays and Fridays. Pick any day below — today is not the only option, and you can book weeks
-              ahead.
+              This is the cooking week. Order today and choose any Thursday or Friday ahead — including several weeks
+              from now — so nothing has to wait for the next one.
             </p>
             {bookable.length === 0 ? (
               <p className="mt-3 text-sm text-ink/60">
@@ -1234,34 +1384,7 @@ function PreviewCheckout() {
                 a day with you.
               </p>
             ) : (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {bookable.map((d) => {
-                  const on = plannedDate === d.date;
-                  return (
-                    <button
-                      key={d.date}
-                      type="button"
-                      onClick={() => setPlannedDate(on ? '' : d.date)}
-                      aria-pressed={on}
-                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
-                    >
-                      <span className="min-w-0">
-                        <span className="block">{d.label}</span>
-                        <span className="font-mono text-[11px] text-ink/50">
-                          {d.open}–{d.close}
-                          {d.isToday && <span className="text-ochre-deep"> · today</span>}
-                        </span>
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
-                      >
-                        {on && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <WeekSchedule settings={settings} bookable={bookable} chosen={plannedDate} onChoose={setPlannedDate} />
             )}
             {planned && (
               <p className="mt-3 text-[12px] leading-relaxed text-ink/50">
@@ -1269,43 +1392,6 @@ function PreviewCheckout() {
                 which day to cook it for.
               </p>
             )}
-          </fieldset>
-
-          {/* Payment */}
-          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</legend>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {([
-                { id: 'link' as const, label: 'Payment link', blurb: 'We send a Yoco link in the chat' },
-                { id: 'cash' as const, label: 'Cash', blurb: 'Pay the driver on delivery' },
-              ]).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMethod(m.id)}
-                  aria-pressed={method === m.id}
-                  className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
-                >
-                  <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
-                    {method === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-semibold">{m.label}</span>
-                    <span className="block text-xs text-ink/55">{m.blurb}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-            {/*
-              The honest answer to "can I pay online": not on this page. Card
-              payment needs the live site, because Yoco needs a server to start
-              the payment and a webhook to confirm it. Saying so beats a greyed
-              out button nobody explains.
-            */}
-            <p className="mt-3 text-xs leading-relaxed text-ink/50">
-              No card is taken on this page. Online card payment switches on with the live site; until then we send you a
-              secure Yoco link in the chat, and you pay there.
-            </p>
           </fieldset>
 
           {/* Details */}
@@ -1395,7 +1481,7 @@ function PreviewCheckout() {
               )}
               {geo.status === 'ok' && !geo.precise && (
                 <span className="text-xs text-ink/45">
-                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address below for an exact check.
+                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
                 </span>
               )}
             </div>
@@ -1405,6 +1491,43 @@ function PreviewCheckout() {
                 bring you.
               </p>
             )}
+            {/* Payment sits in the same section as the details, not in a fieldset
+                of its own — one form, one place to fill it in. */}
+            <div className="mt-6 border-t-2 border-ink/10 pt-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {([
+                  { id: 'link' as const, label: 'Payment link', blurb: 'We send a Yoco link in the chat' },
+                  { id: 'cash' as const, label: 'Cash', blurb: 'Pay the driver on delivery' },
+                ]).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMethod(m.id)}
+                    aria-pressed={method === m.id}
+                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
+                  >
+                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
+                      {method === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold">{m.label}</span>
+                      <span className="block text-xs text-ink/55">{m.blurb}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {/*
+                The honest answer to "can I pay online": not on this page. Card
+                payment needs the live site, because Yoco needs a server to start
+                the payment and a webhook to confirm it. Saying so beats a greyed
+                out button nobody explains.
+              */}
+              <p className="mt-3 text-xs leading-relaxed text-ink/50">
+                No card is taken on this page. Online card payment switches on with the live site; until then we send you a
+                secure Yoco link in the chat, and you pay there.
+              </p>
+              </div>
           </fieldset>
         </div>
 

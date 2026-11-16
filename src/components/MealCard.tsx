@@ -56,18 +56,9 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
           </p>
         )}
         {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>}
-        {/*
-          The price sits on the photograph above; this line used to repeat it and
-          add "collect price, no extras", which stopped being true twice over —
-          there is no collection any more, and delivery outside Sandton/Rosebank
-          does carry a fee. The card states the one thing that is always true:
-          what is in the plate, and that delivery is included where it is.
-        */}
-        {!compact && (
-          <p className="mt-2 font-mono text-xs uppercase tracking-wider text-ink/40">
-            One complete plate · delivery included in Sandton &amp; Rosebank
-          </p>
-        )}
+        {/* The price is on the photograph and the description says what is in the
+            plate; this line repeated both and named the two included suburbs on
+            every card. Removed at the owner's request (16 Nov 2026). */}
 
         <div className="mt-auto flex items-center gap-2 pt-4">
           <Button size="sm" variant="dark" onClick={quickAdd} disabled={item.available === false} block>

@@ -656,27 +656,28 @@ await step('quantity stepper changes the line and the total', async () => {
  * service being up, CORS-open, or reachable from CI, and the mapping itself is
  * covered by the Node tests in server/lib/address.test.js.
  */
-const s7 = boot('/checkout', {
-  seedCart: {
-    state: {
-      fulfilment: 'delivery',
-      lines: [{
-        key: 'mogodu-plate::starch=pap|veg=chakalaka',
-        itemId: 'mogodu-plate',
-        name: 'Mogodu Plate',
-        image: '/img/plate-mogodu.jpg',
-        unitPrice: 100,
-        qty: 1,
-        picks: [
-          { optionId: 'starch', choiceId: 'pap', label: 'Pap', priceDelta: 0 },
-          { optionId: 'veg', choiceId: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
-        ],
-        kind: 'menu',
-      }],
-    },
-    version: 2,
+/* The basket every checkout session in this suite starts with. */
+const CHECKOUT_CART = {
+  state: {
+    fulfilment: 'delivery',
+    lines: [{
+      key: 'mogodu-plate::starch=pap|veg=chakalaka',
+      itemId: 'mogodu-plate',
+      name: 'Mogodu Plate',
+      image: '/img/plate-mogodu.jpg',
+      unitPrice: 100,
+      qty: 1,
+      picks: [
+        { optionId: 'starch', choiceId: 'pap', label: 'Pap', priceDelta: 0 },
+        { optionId: 'veg', choiceId: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
+      ],
+      kind: 'menu',
+    }],
   },
-});
+  version: 2,
+};
+
+const s7 = boot('/checkout', { seedCart: CHECKOUT_CART });
 
 /*
  * What Photon really answers, in three shapes. This is a reproduction of the
@@ -1331,14 +1332,22 @@ await step('a customer can book any cooking day, and the WhatsApp message says w
    * window — that was the complaint — and picking a day must change the message
    * that opens in WhatsApp, not just the page.
    */
-  const days = [...s7.doc.querySelectorAll('button[aria-pressed]')].filter((b) =>
+  /*
+   * The picker is a week schedule now (owner, 16 Nov 2026: "please put week
+   * schedule only"), so all seven days are on the page. The schedule is only
+   * honest if the two cooking days are the only ones that can be chosen, so the
+   * assertion moved from "fewer days are shown" to "the rest days cannot be
+   * picked".
+   */
+  const pressed = [...s7.doc.querySelectorAll('button[aria-pressed]')];
+  const days = pressed.filter((b) =>
     /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/.test((b.textContent ?? '').trim()),
   );
-  if (days.length < 4) {
-    throw new Error(`the day picker offers ${days.length} day(s) — it must offer the cooking weeks ahead, not just the next one`);
+  if (days.length < 2) {
+    throw new Error(`the day picker offers ${days.length} bookable day(s) — it must offer the cooking weeks ahead, not just the next one`);
   }
 
-  /* Every day offered must be a Thursday or a Friday. */
+  /* Every day that can be chosen must be a Thursday or a Friday. */
   for (const day of days) {
     const name = (day.textContent ?? '').trim().split(' ')[0];
     if (name !== 'Thursday' && name !== 'Friday') {
@@ -1346,9 +1355,25 @@ await step('a customer can book any cooking day, and the WhatsApp message says w
     }
   }
 
+  /* And the rest days are still on the page — as a schedule, not as buttons. */
+  const schedule = s7.text();
+  for (const name of ['Monday', 'Tuesday', 'Wednesday', 'Saturday', 'Sunday']) {
+    if (!schedule.includes(`${name}\n`) && !schedule.includes(name)) {
+      throw new Error(`the week schedule does not list ${name}`);
+    }
+  }
+
+  /*
+   * The order link, not the service strip's one. Both open WhatsApp, and on a
+   * rest day the strip is on screen too — matching "Ask on WhatsApp" loosely
+   * picked the strip and read a message that carries no basket at all.
+   */
   const waText = () => {
-    const link = [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')]
-      .find((a) => /Complete order on WhatsApp|Ask on WhatsApp/i.test(a.textContent ?? ''));
+    const links = [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')];
+    const link =
+      links.find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? '')) ??
+      links.find((a) => /Ask on WhatsApp if we can cook it/i.test(a.textContent ?? '')) ??
+      [...links].reverse().find((a) => /Complete order|Ask on WhatsApp/i.test(a.textContent ?? ''));
     return link ? new URL(link.href).searchParams.get('text') ?? '' : '';
   };
 
@@ -1367,6 +1392,132 @@ await step('a customer can book any cooking day, and the WhatsApp message says w
     throw new Error(`the message names the wrong cooking day. Wanted "${targetLabel}", got: ${after.split('\n').slice(0, 5).join(' | ')}`);
   }
   return `${days.length} cooking days offered; the message names "Cooking day: ${targetLabel}"`;
+});
+
+/* ------------------------------------------------------------------ */
+/* Round five: the checkout as one form, the week as a schedule         */
+/* ------------------------------------------------------------------ */
+
+await step('the checkout is one form: details, location and payment together, and no separate delivery section', async () => {
+  /*
+   * Owner, 16 Nov 2026: "use my current location must be inside your details",
+   * "there must be 'how do you want to pay?' in that same area; remove the
+   * separate Delivery section and the other blocks added there".
+   *
+   * Asserted on structure rather than on wording, because the point is that the
+   * customer fills in one section instead of hunting down three.
+   */
+  const legends = [...s7.doc.querySelectorAll('fieldset > legend')].map((l) => (l.textContent ?? '').trim());
+  if (legends.some((l) => /^delivery$/i.test(l))) {
+    throw new Error(`the separate Delivery section is still on the page: ${legends.join(' / ')}`);
+  }
+  const details = [...s7.doc.querySelectorAll('fieldset')].find((f) =>
+    /your details/i.test(f.querySelector('legend')?.textContent ?? ''),
+  );
+  if (!details) throw new Error('the checkout has no "Your details" section');
+  const inside = details.textContent ?? '';
+  /*
+   * A step above has already tapped it, so on this page the button now reads
+   * "Location checked ✓" — the assertion is that it lives in this section, not
+   * that it still carries its original label.
+   */
+  const locationBtn = [...details.querySelectorAll('button')].find((b) =>
+    /current location|Location checked/i.test(b.textContent ?? ''),
+  );
+  if (!locationBtn) {
+    throw new Error(`"Use my current location" is not inside Your details (sections: ${legends.join(' / ')})`);
+  }
+  if (!/How do you want to pay\?/i.test(inside)) {
+    throw new Error('"How do you want to pay?" is not inside Your details');
+  }
+  return `one form — ${legends.join(' / ')} — with location and payment inside the details`;
+});
+
+await step('checkout offers a way back to the screen the customer came from', async () => {
+  /*
+   * Owner, 16 Nov 2026: "when am on checkout why i cant go back to the screen i
+   * was at". The browser's Back button always worked; what was missing was
+   * anything on the page offering it.
+   */
+  /*
+   * Its own session, on purpose: clicking back really does navigate, and the
+   * checkout session below is reused by a dozen steps that assume it is still
+   * on /checkout.
+   */
+  const nav = boot('/checkout', { seedCart: CHECKOUT_CART });
+  await nav.waitFor(() => /Almost there/i.test(nav.text()), 'checkout page', 20000);
+  const back = [...nav.doc.querySelectorAll('button')].find((b) => /^Back to /i.test((b.textContent ?? '').trim()));
+  if (!back) throw new Error('the checkout has no back control');
+
+  const before = nav.w.location.pathname;
+  back.click();
+  await sleep(300);
+  const after = nav.w.location.pathname;
+  nav.close();
+  if (after === before) throw new Error(`the back control did nothing — still on ${after}`);
+  if (after === '/checkout') throw new Error('the back control left the customer on the checkout');
+  /* Somewhere inside the shop, never off the site. */
+  if (!after.startsWith('/')) throw new Error(`the back control left the site: ${after}`);
+  return `back control moved ${before} → ${after}`;
+});
+
+await step('the day picker is a full week schedule, and only the cooking days can be picked', async () => {
+  /*
+   * Owner: "the which day - please put week schedule only (eg user can order
+   * even on monday for a thursday and friday)". So all seven days are listed,
+   * the rest days are visibly rest days, and the booking days are the ones the
+   * kitchen actually cooks on.
+   */
+  const rows = [...s7.doc.querySelectorAll('[data-weekday]')];
+  const seen = rows.map((r) => r.getAttribute('data-weekday'));
+  for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
+    if (!seen.includes(day)) throw new Error(`the schedule does not show ${day}`);
+  }
+  const rest = rows.filter((r) => r.getAttribute('aria-disabled') === 'true');
+  const bookable = rows.filter((r) => r.tagName === 'BUTTON');
+  if (!rest.length) throw new Error('every day is offered as bookable — the kitchen does not cook seven days');
+  if (!bookable.length) throw new Error('no cooking day can be booked');
+  for (const day of bookable) {
+    const name = day.getAttribute('data-weekday');
+    if (name !== 'Thursday' && name !== 'Friday') throw new Error(`${name} is bookable and should not be`);
+  }
+  for (const day of rest) {
+    if (!/Not a cooking day/i.test(day.textContent ?? '')) {
+      throw new Error(`${day.getAttribute('data-weekday')} is a rest day but does not say so`);
+    }
+  }
+  return `seven days listed, ${bookable.length} bookable cooking dates, ${rest.length} rest days marked`;
+});
+
+await step('partner channels we are not on yet say "coming soon"', async () => {
+  /*
+   * Owner: Mr D and Uber Eats must read "coming soon", not "order on WhatsApp
+   * instead". The tile has to be about the partner, not about the workaround.
+   */
+  const home = boot('/');
+  await home.waitFor(() => home.doc.querySelectorAll('h3').length > 3, 'the home page', 20000);
+  const text = home.text();
+  if (/Order on WhatsApp instead/i.test(text)) {
+    throw new Error('a channel tile still says "Order on WhatsApp instead"');
+  }
+  if (!/coming soon/i.test(text)) throw new Error('no channel tile says "coming soon"');
+  home.close();
+  return 'unreleased partners read as "coming soon"';
+});
+
+await step('a meal card is the plate, not a delivery advert', async () => {
+  /*
+   * Owner: drop "One complete plate · delivery included in Sandton & Rosebank"
+   * from the cards. The price is on the photograph and the description says what
+   * is in the plate; the caption only repeated both and named two suburbs.
+   */
+  const menu = boot('/menu');
+  await menu.waitFor(() => menu.doc.querySelectorAll('button').length > 10, 'the menu', 20000);
+  if (/One complete plate/i.test(menu.text())) {
+    throw new Error('the meal cards still carry the "One complete plate" caption');
+  }
+  menu.close();
+  return 'no plate caption on the cards';
 });
 
 await step('an address that contradicts the chosen area is refused with both names', async () => {
