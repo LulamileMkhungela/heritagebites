@@ -25,7 +25,59 @@
       name="description"
       content="South African plates from R100 — mogodu, tshotlo, tlhakwana, smiley, wings and short rib. Cooked Thursdays and Fridays, delivered in Rosebank and Sandton."
     />
-    <meta name="robots" content="index,follow" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <!--
+      The canonical, and the address it names.
+
+      This file is Vite's source entry, and it is also what GitHub Pages serves at
+      the repository root — the first address a crawler finds for this shop. It
+      used to carry no canonical and no structured data at all, so the root was
+      indexed as an undescribed page competing with the eight real ones.
+
+      The address includes `/web/` because that is the folder Pages actually
+      publishes; the built home lives there. `scripts/build-seo.mjs` writes the
+      same address into every built page and into `sitemap.xml`, and
+      `scripts/build-pages.mjs` bakes it into the bundle so the canonical a browser
+      ends up with matches the one written here — two canonicals for one page is
+      the duplicate-content signal this whole setup exists to avoid.
+
+      A build replaces everything between the markers below with the real head, so
+      this block only has to be right for the unbundled root document.
+    -->
+    <link rel="canonical" href="https://lulamilemkhungela.github.io/heritagebites/web/" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Restaurant",
+        "@id": "https://lulamilemkhungela.github.io/heritagebites/web/#restaurant",
+        "name": "Heritage Bites",
+        "slogan": "Every Bite Tells a Story",
+        "description": "Traditional and contemporary South African plates, cooked in small batches on Thursdays and Fridays and delivered in Sandton and Rosebank, and up to 15 km from the kitchen.",
+        "url": "https://lulamilemkhungela.github.io/heritagebites/web/",
+        "hasMenu": "https://lulamilemkhungela.github.io/heritagebites/web/menu",
+        "image": "https://lulamilemkhungela.github.io/heritagebites/web/img/social-card.jpg",
+        "telephone": "+27670137587",
+        "email": "heritagebitesfood@gmail.com",
+        "servesCuisine": "South African",
+        "priceRange": "R100–R130",
+        "currenciesAccepted": "ZAR",
+        "paymentAccepted": "Cash, Credit Card",
+        "foundingDate": "2025",
+        "hasDeliveryMethod": "http://purl.org/goodrelations/v1#DeliveryModeOwnFleet",
+        "areaServed": [
+          { "@type": "City", "name": "Rosebank" },
+          { "@type": "City", "name": "Sandton" }
+        ],
+        "openingHoursSpecification": [
+          {
+            "@type": "OpeningHoursSpecification",
+            "dayOfWeek": ["Thursday", "Friday"],
+            "opens": "12:00",
+            "closes": "13:30"
+          }
+        ]
+      }
+    </script>
     <meta property="og:site_name" content="Heritage Bites" />
     <meta property="og:locale" content="en_ZA" />
     <meta property="og:type" content="website" />

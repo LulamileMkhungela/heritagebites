@@ -68,8 +68,24 @@ import { HEAD_END, HEAD_START, headHtml, normaliseSiteUrl } from '../shared/seo.
  * a Friday?". Production never sets HB_CLOCK_LABEL, so this is simply now; the
  * test suites pin it so they can run the shop both open and shut without
  * depending on when CI happens to start.
+ *
+ * An unreadable value falls back to the real clock instead of producing an
+ * Invalid Date. `Intl.DateTimeFormat.formatToParts(new Date(NaN))` throws a
+ * RangeError, and that throw happened inside a request handler — so a typo in
+ * the variable ("Thu 12:30" instead of a full date-time) took the entire server
+ * down on the first request rather than being ignored. A bad test setting must
+ * not be able to kill the shop.
  */
-const clockNow = () => (process.env.HB_CLOCK_LABEL ? new Date(process.env.HB_CLOCK_LABEL) : new Date());
+function clockNow() {
+  const pinned = process.env.HB_CLOCK_LABEL;
+  if (!pinned) return new Date();
+  const parsed = new Date(pinned);
+  if (Number.isNaN(parsed.getTime())) {
+    console.warn(`[clock] HB_CLOCK_LABEL="${pinned}" is not a date-time — using the real clock.`);
+    return new Date();
+  }
+  return parsed;
+}
 
 const PORT = Number(process.env.PORT || 4000);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -171,16 +187,26 @@ app.use(compression({ threshold: 1024 }));
  * and frame-ancestors/X-Frame-Options (a login-free order page inside someone
  * else's frame is a clickjacking surface).
  *
- * There is no CSP yet. The built index.html carries an inline JSON-LD block and
- * the app uses inline styles, so a real policy needs nonces threaded through the
- * build. Doing that badly is worse than not doing it; it is listed as follow-up.
+ * `geolocation` MUST stay allowed — `geolocation=(self)`, not `geolocation=()`.
+ *
+ * This header used to read `geolocation=()`, which is a Permissions Policy
+ * *denial lock on our own origin*: the browser refuses every
+ * `navigator.geolocation` call this site makes, never shows the permission
+ * prompt, and reports PERMISSION_DENIED. That is precisely the bug the owner
+ * reported ("why Location is blocked for this site… u must ask for location
+ * permission") — the customer had blocked nothing, and the advice to allow it in
+ * site settings led them to a switch that was already on. `self` allows the
+ * origin that is asking, which is the only one that needs it; no third-party
+ * origin is granted anything.
+ *
+ * Camera and microphone remain fully denied: nothing on this site uses them.
  */
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
   /*
    * Only over HTTPS, and only for a year at a time: HSTS on a domain that is
    * later served over plain HTTP locks customers out with no way to click past it.
@@ -295,20 +321,25 @@ function deliveryRules(settings = {}) {
 }
 
 /**
- * Coordinates for a delivery address.
+ * Coordinates for a delivery address — and whether they were actually measured.
  *
- * The checkout sends the map coordinates of the address the customer picked
- * from the suggestion list, which is the only address form the map has already
- * resolved. A hand-typed address has none, so the server falls back to the
- * centre of the area the customer selected — deliberately generous to nobody:
- * an unlocated address in Sandton is treated as Sandton, which is the same
- * answer the old area rule gave. `null` means "cannot measure", never "far".
+ * The checkout sends the map coordinates of the address the customer picked from
+ * the suggestion list, or the device's own fix. That is the only address form
+ * whose distance is *known*. A hand-typed address has none, and the honest answer
+ * then is "cannot measure", never "inside the ring": `null` is what
+ * `deliveryZoneFor` turns into `{ zone: 'unknown' }`.
+ *
+ * This used to fall back to the middle of the suburb the customer selected, which
+ * quietly turned "I typed 40 km away and picked Sandton" into a free delivery.
+ * The order route below now refuses an unmeasured address on a delivery order
+ * unless the address itself names an included area, so the radius is a rule the
+ * site actually applies rather than one it only prints.
  */
 function coordinatesFor(customer = {}) {
   const lat = Number(customer.lat);
   const lng = Number(customer.lng);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
-  return { lat: null, lng: null };
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng, measured: true };
+  return { lat: null, lng: null, measured: false };
 }
 
 /**
@@ -982,6 +1013,42 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
         distanceKm: zone.distanceKm,
         maxDeliveryKm: rules.maxKm,
       });
+    }
+    /*
+     * An address nobody located cannot be priced, and must not default to
+     * "free".
+     *
+     * The radius is the rule the customer is shown, so an order is only
+     * accepted once the distance is known: pick the address from the list (that
+     * carries the map's coordinates) or share a location. The one exception is
+     * an address that *names* one of the included areas — "12 Rivonia Road,
+     * Sandton" with no map hit is inside the run by the customer's own words,
+     * and refusing that would send a real Sandton customer to WhatsApp for no
+     * reason. Anything else is asked for a located address, in the same words the
+     * checkout uses, rather than being quietly under-charged.
+     */
+    if (!points.measured) {
+      const included = getSettings()?.deliveryAreas ?? [];
+      const isIncluded = (area) => included.some((name) => name.toLowerCase() === String(area).toLowerCase());
+      /*
+       * Two pieces of evidence are accepted, and neither is a guess: the address
+       * line names an included area, or the customer's own area choice is one of
+       * them and the address contradicts nothing. An "Another area" order has
+       * neither — its distance is the only thing that can price it — so it is
+       * asked for a located address instead of being given the included price.
+       */
+      const named = areasNamedIn(customer.address, getSettings());
+      const chosen = String(customer.suburb ?? '').trim();
+      const insideByWord = named.some(isIncluded) || (isIncluded(chosen) && (named.length === 0 || named.some(isIncluded)));
+      if (!insideByWord) {
+        return res.status(422).json({
+          errors: [
+            'We could not work out where that address is, so we cannot check the delivery. Pick it from the list as you type, or share your location, and order again.',
+          ],
+          needsLocation: true,
+          maxDeliveryKm: rules.maxKm,
+        });
+      }
     }
     /*
      * The suburb named in the typed address still has to match the one chosen —

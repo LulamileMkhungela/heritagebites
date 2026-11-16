@@ -11,7 +11,7 @@ import { basketHref } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
 import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaOptions } from '../../shared/service.js';
 import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, type AddressSuggestion } from '../lib/address';
-import { deniedMessage, requestLocation } from '../lib/geolocation';
+import { deniedMessage, requestLocation, type LocationResult } from '../lib/geolocation';
 
 /*
  * `cash` is the stored value, and it means cash to the driver.
@@ -22,6 +22,15 @@ import { deniedMessage, requestLocation } from '../lib/geolocation';
  * customer with an old bundle is not refused over a string.
  */
 type PayMethod = 'card' | 'cash';
+
+/**
+ * Why a location request failed, as the shared helper reports it.
+ *
+ * Derived from `LocationResult` rather than written out again, so a new failure
+ * reason (a policy denial, a browser that will not prompt) reaches this page
+ * without a second list to keep in step.
+ */
+type LocationFailureReason = Extract<LocationResult, { status: 'denied' }>['reason'];
 
 type CheckoutCustomer = { name: string; phone: string; email: string; address: string; suburb: string; notes: string };
 
@@ -54,8 +63,8 @@ export function waValidationProblem(
     /*
      * A picked suggestion may fill the address without a suburb name the map
      * recognises — Bryanston is a real place with no entry in `deliveryAreas`.
-     * That is fine: the area select already says "outside Sandton & Rosebank",
-     * and `deliveryAddressProblem` returns null for it.
+     * That is fine: the area select's third option is "another area", and
+     * `deliveryAddressProblem` returns null for it.
      */
     /*
      * The address has to belong to the area the customer picked, and the order
@@ -193,7 +202,7 @@ function LiveCheckout() {
     | { status: 'idle' }
     | { status: 'asking' }
     | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
-    | { status: 'denied'; reason: 'insecure' | 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
+    | { status: 'denied'; reason: LocationFailureReason }
   >({ status: 'idle' });
   const [quote, setQuote] = useState<{ subtotal: number; delivery: number; total: number } | null>(null);
   const [state, setState] = useState<'idle' | 'quoting' | 'paying'>('idle');
@@ -623,8 +632,7 @@ function LiveCheckout() {
               {bookable.length > 1
                 ? `${settings?.hours.filter((h) => !h.closed).map((h) => h.label).join(' and ') ?? 'Thursdays and Fridays'}`
                 : 'Thursdays and Fridays'}
-              , {settings?.serviceWindow.open}–{settings?.serviceWindow.close}. Book any of them — today is not the
-              only option.
+              . Pick any day below — today is not the only option, and you can book weeks ahead.
             </p>
             {bookable.length === 0 ? (
               <p className="mt-3 text-sm text-ink/60">
@@ -831,14 +839,14 @@ function LiveCheckout() {
             <p className="mt-4 text-xs leading-relaxed text-ink/50">
               {fulfilment === 'delivery' ? (
                 <>
-                  Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery included in
-                  {' '}{settings?.deliveryAreas?.join(' & ') ?? 'Sandton & Rosebank'}
-                  {surcharge > 0 ? ` — ${zar(surcharge)} added for your address` : ''}.
+                  Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery included in{' '}
+                  {settings?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}
+                  {surcharge > 0 ? ` — ${zar(surcharge)} added for your address` : ''}; we deliver up to {rules.maxKm} km
+                  from the kitchen.
                 </>
               ) : (
                 <>No minimum order and no delivery fee — you pay the plate price only.</>
-              )}{' '}
-              Thursdays and Fridays, {settings?.serviceWindow.open}–{settings?.serviceWindow.close}.
+              )}
             </p>
           </fieldset>
 
@@ -858,8 +866,7 @@ function LiveCheckout() {
               {fulfilment === 'delivery' && (
                 <Field label="Delivery area" hint={defaultArea ? `${defaultArea} preselected` : undefined} error={errors.suburb}>
                   {/*
-                    The two included suburbs, and "Other — outside Sandton &
-                    Rosebank".
+                    The two included suburbs, and "Another area — within 15 km".
                     
                     The third option is not a nicety: the rules are distance-based
                     (inside the two suburbs delivery is included, outside them a
@@ -1156,7 +1163,7 @@ function PreviewCheckout() {
     | { status: 'idle' }
     | { status: 'asking' }
     | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
-    | { status: 'denied'; reason: 'insecure' | 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
+    | { status: 'denied'; reason: LocationFailureReason }
   >({ status: 'idle' });
 
   const rules = {
@@ -1218,8 +1225,8 @@ function PreviewCheckout() {
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
             <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
             <p className="mt-1 text-xs leading-snug text-ink/55">
-              We cook Thursdays and Fridays, {settings?.serviceWindow.open}–{settings?.serviceWindow.close}. Book any of
-              them — today is not the only option.
+              We cook Thursdays and Fridays. Pick any day below — today is not the only option, and you can book weeks
+              ahead.
             </p>
             {bookable.length === 0 ? (
               <p className="mt-3 text-sm text-ink/60">

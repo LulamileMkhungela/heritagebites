@@ -228,6 +228,15 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
               <legend className="mb-2 flex items-center gap-2 text-sm font-semibold">
                 {o.label}
                 {o.required ? <span className="text-ochre-deep">*</span> : <span className="text-xs font-normal text-ink/40">optional{o.multiple ? ' · choose any' : ''}</span>}
+                {/*
+                  A required group that holds several (starch, vegetable side)
+                  says so, because a row of checkboxes under a bare "Choose your
+                  starch" still reads as a single choice. The cap comes from the
+                  catalogue, so this can never promise a fourth one.
+                */}
+                {o.multiple && o.required && (
+                  <span className="text-xs font-normal text-ink/45">· pick up to {Math.max(1, Math.min(20, Number(o.max) || 1))}</span>
+                )}
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {o.choices.map((c) => {

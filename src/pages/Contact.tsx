@@ -158,8 +158,8 @@ export default function Contact() {
             <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
               <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</p>
               <p className="mt-2 text-sm text-ink/70">
-                Thursdays and Fridays between {s?.serviceWindow.open} and {s?.serviceWindow.close}. Delivery is included in{' '}
-                {s?.deliveryAreas?.join(' & ') ?? 'Sandton & Rosebank'}; outside them a fee applies, and we deliver up to{' '}
+                Thursdays and Fridays, and you can book any cooking day ahead. Delivery is included in{' '}
+                {s?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}; elsewhere a fee applies, and we deliver up to{' '}
                 {s?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen. The minimum order is R{Number(s?.minDeliveryOrder ?? 100)}.
               </p>
               <Link to="/policies" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-ochre-deep underline">

@@ -275,7 +275,7 @@ const ROUTES = [
    * underneath, and the robots instruction keeps private screens out.
    */
   { path: '/', expect: [/A taste of South African heritage/i, /Cooked Thursdays/i], title: /^South African Plates in Rosebank & Sandton — Heritage Bites$/, description: /^South African plates from R100/ },
-  { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/], title: /^The Menu & Prices — Heritage Bites$/, description: /^Every plate on the Heritage Bites menu/ },
+  { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/], title: /^The Menu & Prices — Heritage Bites$/, description: /^The full Heritage Bites menu and prices/ },
   { path: '/specials', expect: [/Thursdays & Fridays/i, /R100|R130/], title: /^This Week's Cooking & Delivery — Heritage Bites$/, description: /^What is cooking this week/ },
   { path: '/policies', expect: [/Privacy Policy/i, /Refund Policy/i, /Order Cancellation Policy/i], title: /^Policies & Terms — Heritage Bites$/, description: /^Delivery, refunds/ },
   { path: '/about', expect: [/Every bite tells a story/i, /Vision/i, /Mission/i, /How we started/i], title: /^Our Story, Vision & Mission — Heritage Bites$/, description: /^Heritage Bites began in a family kitchen/ },

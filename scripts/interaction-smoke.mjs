@@ -137,6 +137,28 @@ function boot(path, { seedCart } = {}) {
   w.__geoCalls = [];
   /* Simulates a device that cannot answer a high-accuracy request at all. */
   w.__geoHighAccurateUnavailable = false;
+  /*
+   * The Permissions API, as the real browsers expose it. The site now reads the
+   * permission state before asking for a fix, because a denied origin can never
+   * be prompted again and deserves a different sentence from a customer who has
+   * simply not answered yet. The stub answers `prompt` unless a step says the
+   * permission is denied, which reproduces the browser a first-time visitor
+   * actually has: the prompt is raiseable, and getCurrentPosition is what raises
+   * it.
+   */
+  w.__geoPermission = 'prompt';
+  Object.defineProperty(w.navigator, 'permissions', {
+    configurable: true,
+    value: {
+      query: async (descriptor) => ({
+        name: descriptor?.name,
+        state: descriptor?.name === 'geolocation' ? w.__geoPermission : 'prompt',
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    },
+  });
   Object.defineProperty(w.navigator, 'geolocation', {
     configurable: true,
     value: {
@@ -813,10 +835,14 @@ await step('Rosebank is preselected, and there is no empty "choose an area" row'
    */
   if (values.length !== 3) throw new Error(`unexpected area options: ${JSON.stringify(values)}`);
   if (values[0] !== 'Rosebank' || values[1] !== 'Sandton') throw new Error(`unexpected area options: ${JSON.stringify(values)}`);
-  if (!/^other/i.test(values[2])) throw new Error(`no "somewhere else" option: ${JSON.stringify(values)}`);
+  /* The third option is "Another area — within 15 km". The old long label
+     ("Other — outside Sandton & Rosebank") was removed at the owner's request, so
+     this checks the new wording rather than a prefix that now means nothing. */
+  if (!/^another area/i.test(values[2])) throw new Error(`no "somewhere else" option: ${JSON.stringify(values)}`);
+  if (/outside/i.test(values[2])) throw new Error(`the removed "outside Sandton & Rosebank" wording is back: ${values[2]}`);
   if (values.includes('')) throw new Error('an empty "Choose an area" option is still offered');
   if (select.value !== 'Rosebank') throw new Error(`the checkout opens on "${select.value}", not Rosebank`);
-  return 'Rosebank preselected, two included suburbs + Other, no empty row';
+  return 'Rosebank preselected, two included suburbs + another area, no empty row';
 });
 
 await step('the other delivery area is still searchable while Rosebank is selected', async () => {
@@ -960,13 +986,13 @@ await step('a Bryanston address is offered, sets the area to "Other", and is pri
 
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
   if (!select) throw new Error('no delivery area select');
-  if (!/^other/i.test(select.value)) throw new Error(`the area was left on "${select.value}" for a Bryanston address`);
+  if (!/^another area/i.test(select.value)) throw new Error(`the area was left on "${select.value}" for a Bryanston address`);
 
   /* 8.8 km: outside the included ring, so the fee must be stated on screen. */
   const said = [...s7.doc.querySelectorAll('[role="status"]')].map((el) => el.textContent ?? '').join(' ');
   if (!/8\.8 km/.test(said)) throw new Error(`the distance is not shown: ${said}`);
   if (!/R30,00 delivery fee (added|applies)/i.test(said)) throw new Error(`the fee is not stated: ${said}`);
-  return `Bryanston offered, area set to "Other", 8.8 km with a fee`;
+  return `Bryanston offered, area set to "another area", 8.8 km with a fee`;
 });
 
 
@@ -1009,7 +1035,14 @@ async function useMyLocation(session) {
          insecure-origin bug was fixed — the old message blamed a browser switch
          and this one names the real reason — so the pattern matches the meaning
          ("no location") rather than one sentence. */
-      || /not sharing a location|could not get a location|This browser cannot share|secure \(https\) connection/i.test(session.text()),
+      /*
+       * Every refusal the checkout can show, including the two this round added:
+       * a blocked site ("Location is blocked for this site") and a page that is
+       * not permitted to ask at all ("not allowed to ask for your location").
+       * Matching the meaning rather than one sentence is deliberate — the copy
+       * changes as the wording improves, and the assertion is about the ending.
+       */
+      || /Location is blocked|not sharing a location|could not get a location|This browser cannot share|not allowed to ask for your location|secure \(https\) connection/i.test(session.text()),
     'the location check to come back',
     8000,
   );
@@ -1108,11 +1141,19 @@ await step('a blocked location says where the switch is, and still lets the cust
   const s7e = boot('/checkout', { seedCart: s7.seedCart });
   await s7e.waitFor(() => /Almost there/i.test(s7e.text()), 'checkout', 20000);
   s7e.w.__geoCalls.length = 0;
+  /* The browser's own record says denied — the state after the customer tapped
+     Block once. The fix request would only repeat that, so it must not be made. */
+  s7e.w.__geoPermission = 'denied';
   s7e.w.__geoDenied = true;
   await useMyLocation(s7e);
 
-  if (s7e.w.__geoCalls.length !== 1) {
-    throw new Error(`a blocked browser was asked again (${s7e.w.__geoCalls.length} calls) — the prompt must appear once`);
+  /*
+   * A denied origin shows no prompt, so the site must not spend a fix request on
+   * one. Reading the permission state first is what makes that true: the button
+   * answers immediately instead of waiting out a timeout that cannot succeed.
+   */
+  if (s7e.w.__geoCalls.length !== 0) {
+    throw new Error(`a blocked browser was asked for a fix (${s7e.w.__geoCalls.length} calls) — no prompt can appear`);
   }
   const page = s7e.text();
   /*

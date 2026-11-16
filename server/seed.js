@@ -673,7 +673,7 @@ export const settings = {
    * this one value updates the entire site.
    */
   outsideFee: 30,
-  outsideFeeNote: 'Outside Sandton and Rosebank we add a delivery fee, confirmed on WhatsApp before you pay.',
+  outsideFeeNote: 'Farther than the included run we add a small delivery fee, confirmed on WhatsApp before you pay.',
   /*
    * Owner, 15 Nov 2026: 15 km, not 50.
    *

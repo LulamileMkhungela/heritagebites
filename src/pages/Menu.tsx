@@ -7,6 +7,7 @@ import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateGroup, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
+import { DELIVERY_ZONES } from '../../shared/address.js';
 import { extraCost, maxPerExtra } from '../../shared/service.js';
 import { currentSiteUrl, usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
@@ -239,8 +240,8 @@ export default function MenuPage() {
             which stops being true as soon as one plate is priced differently.
           */}
           <p className="mt-4 max-w-2xl text-bone/70">
-            Two plate menus, each at a fixed price. Choose a protein, a starch and a vegetable side, and delivery is
-            included.
+            Two plate menus, each at a fixed price. Choose a protein, then as many starches and vegetable sides as you
+            like, and delivery is included.
             {catalog.plateMenus.length > 0 && (
               <>
                 {' '}
@@ -456,10 +457,9 @@ export default function MenuPage() {
         <section className="mx-auto mt-14 max-w-7xl px-4 pb-4">
           <div className="rounded-3xl border-2 border-ink/10 bg-white p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
             <p className="max-w-2xl text-sm leading-relaxed text-ink/70">
-              Every plate is cooked on a Thursday or a Friday between{' '}
-              {catalog?.settings?.serviceWindow.open ?? '12:00'} and{' '}
-              {catalog?.settings?.serviceWindow.close ?? '13:30'}. Collect and you pay the plate price; we deliver in{' '}
-              {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} for a flat fee.{' '}
+              Every plate is cooked on a Thursday or a Friday, and any cooking day ahead can be booked. Delivery is
+              included in {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} and up to{' '}
+              {catalog?.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen.{' '}
               <Link to="/specials" className="font-semibold text-ochre-deep underline">
                 How delivery and collection work
               </Link>
@@ -681,6 +681,19 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
               <fieldset key={g.id}>
                 <legend className="mb-2 text-sm font-semibold">
                   {g.label} {g.required ? <span className="text-ochre-deep">*</span> : null}
+                  {/*
+                    Say that more than one is allowed. The rule has always been
+                    there — `max` is 3 for starch and vegetable side — but a group
+                    of rows that look like radio buttons is read as "pick one"
+                    whatever the code does, so the owner reasonably reported that
+                    multi-select could not be seen. This is the label that makes
+                    the rule visible before anything is tapped.
+                  */}
+                  {!g.priced && Number(g.max) > 1 && (
+                    <span className="ml-2 text-xs font-normal text-ink/45">
+                      pick up to {Number(g.max)}
+                    </span>
+                  )}
                 </legend>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {g.items.map((it) => {

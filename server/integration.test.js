@@ -1139,6 +1139,38 @@ describe('checkout', () => {
     assert.ok(body.order.totals.delivery > 0, 'and it is priced by distance, not by suburb name');
   });
 
+  test('an unlocated address outside the included suburbs is asked for coordinates instead of being priced as free', async () => {
+    /*
+     * "Is it calculating valid distance, or only showing addresses within 15 km?"
+     * was the owner's question, and the honest answer before this test was
+     * "only the second". A hand-typed Bryanston address with no map coordinates
+     * and the area select still on "another area" used to price as included —
+     * no distance was ever measured, so nothing could refuse it.
+     */
+    const { res, body } = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '1 Bryanston Drive, Bryanston', suburb: 'Another area — within 15 km',
+      },
+    });
+    assert.equal(res.status, 422, 'an unmeasurable address cannot be priced');
+    assert.equal(body.needsLocation, true);
+    assert.match(body.errors[0], /Pick it from the list/i);
+  });
+
+  test('an unlocated address that names an included suburb is still accepted', async () => {
+    /* The customer said Sandton in the address and in the select: inside by
+       their own words, priced at the plate price, no location demand. */
+    const { res, body } = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '12 Rivonia Road, Sandton', suburb: 'Sandton',
+      },
+    });
+    assert.equal(res.status, 201);
+    assert.equal(body.order.totals.delivery, 0);
+  });
+
   test('an address that names the area is trusted even when the select was skipped', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
@@ -1627,5 +1659,28 @@ describe('the head served to a crawler', () => {
     } else {
       assert.equal(sitemap.status, 404, 'a missing sitemap must 404, not answer with the shell');
     }
+  });
+});
+
+/*
+ * The bug that made "Use my current location" impossible on the live site.
+ *
+ * A Permissions-Policy of `geolocation=()` is a denial lock on *our own origin*:
+ * the browser refuses every geolocation call, never shows the permission prompt,
+ * and reports PERMISSION_DENIED — so the customer was told they had blocked
+ * something they had not, and no amount of allowing it in site settings helped.
+ * `geolocation=(self)` is what lets the origin that asks, and it is asserted here
+ * rather than trusted to a comment, because the failure is invisible until a real
+ * customer taps the button.
+ */
+describe('geolocation is allowed to ask', () => {
+  test('the API permits geolocation for this origin, and denies the camera and microphone', async () => {
+    const res = await fetch(`${base}/api/catalog`);
+    const policy = res.headers.get('permissions-policy') ?? '';
+    assert.match(policy, /geolocation=\(self\)/, 'geolocation must not be denied to this origin');
+    assert.doesNotMatch(policy, /geolocation=\(\)/, 'an empty allowlist blocks the prompt entirely');
+    /* Nothing on this site uses these, so they stay fully off. */
+    assert.match(policy, /camera=\(\)/);
+    assert.match(policy, /microphone=\(\)/);
   });
 });

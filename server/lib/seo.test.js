@@ -248,7 +248,7 @@ describe('the head served for a route', () => {
   test('carries that route title, description, canonical and open graph', () => {
     const html = headHtml('/menu', { siteUrl: SITE });
     assert.match(html, /<title>The Menu &amp; Prices — Heritage Bites<\/title>/);
-    assert.match(html, /<meta name="description" content="Every plate on the Heritage Bites menu/);
+    assert.match(html, /<meta name="description" content="The full Heritage Bites menu and prices/);
     assert.match(html, new RegExp(`<link rel="canonical" href="${SITE}/menu" />`));
     assert.match(html, new RegExp(`<meta property="og:url" content="${SITE}/menu" />`));
     assert.match(html, new RegExp(`<meta property="og:image" content="${SITE}/img/social-card.jpg" />`));

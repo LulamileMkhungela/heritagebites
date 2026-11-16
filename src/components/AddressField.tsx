@@ -15,8 +15,8 @@ import type { Settings } from '../lib/types';
  *   2. Check the address against the delivery area the customer chose. An
  *      address that names the *other* one of the two included suburbs is a hard
  *      error — the kitchen would be sent outside the boundary the customer
- *      believes they ordered inside. "Other — outside Sandton & Rosebank" is
- *      never a contradiction; the distance check prices that order instead. And
+ *      believes they ordered inside. Choosing "another area" is never a
+ *      contradiction; the distance check prices that order instead. And
  *      an address that names no area at all only warrants a "check the suburb"
  *      note, because plenty of real addresses are just a street and a number.
  *

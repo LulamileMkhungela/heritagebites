@@ -183,7 +183,13 @@ describe('the page head', () => {
      * whatever it had before. Check every icon path named in the head.
      */
     for (const match of shell.matchAll(/<link rel="(?:icon|apple-touch-icon|manifest)" href="([^"]+)"/g)) {
-      const file = match[1].replace(/^\//, '');
+      /*
+       * `/favicon.ico` is served from `public/`, and `./web/favicon.ico` is the
+       * same file after `npm run build:pages` copies `public/` into `web/`. Both
+       * spellings are real; either way the file has to exist, because a link to
+       * an icon that is not there leaves the tab showing whatever it had before.
+       */
+      const file = match[1].replace(/^(\.\/)?web\//, '').replace(/^\//, '');
       assert.ok(existsSync(join(PUBLIC, file)), `the head links ${match[1]} but public/${file} does not exist`);
     }
   });

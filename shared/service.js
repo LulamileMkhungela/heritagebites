@@ -446,13 +446,27 @@ export function deliveryAddressProblem(address, area, settings, hintArea = null)
  * Bryanston had no honest answer to "which of these two suburbs are you in".
  * Picking a lie is worse than a third option, so the third option is "other" and
  * the distance check does the deciding.
+ *
+ * The wording is "Another area" and not "Other — outside Sandton & Rosebank"
+ * (owner, 16 Nov 2026: "remove Outside Sandton & Rosebank"). That phrase
+ * restated the two-suburb boundary as a wall, one line after the site had
+ * explained there is one 15 km radius — so the customer read a closed list and a
+ * fee they could not see the reason for. The option is simply the third answer to
+ * "where are you": somewhere else, priced by its distance.
  */
-export const OUTSIDE_AREA = 'Other — outside Sandton & Rosebank';
+export const OUTSIDE_AREA = 'Another area — within 15 km';
 
-/** Is this select value the "somewhere else" option? */
+/**
+ * Is this select value the "somewhere else" option?
+ *
+ * Both spellings are accepted on purpose. A browser holding a cached bundle, or a
+ * saved checkout form session, still sends the old long label; refusing it would
+ * turn an existing customer's saved area into an empty choice. The new one is
+ * what every surface shows from now on.
+ */
 export function isOutsideAreaChoice(area) {
   const value = String(area ?? '').trim().toLowerCase();
-  return value.startsWith('other') || value === 'other';
+  return value.startsWith('other') || value.startsWith('another area') || value === 'other';
 }
 
 /**

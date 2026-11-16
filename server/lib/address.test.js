@@ -38,7 +38,13 @@ const settings = { deliveryAreas: ['Rosebank', 'Sandton'] };
 
 /** Is a point inside an envelope? Used by the envelope tests below. */
 const inBox14 = (b, lat, lng) => lat >= b.minLat && lat <= b.maxLat && lng >= b.minLon && lng <= b.maxLon;
-const OUTSIDE = 'Other — outside Sandton & Rosebank';
+/*
+ * The third option, spelled the way the site now shows it (owner, 16 Nov 2026:
+ * "remove Outside Sandton & Rosebank"). The old long label is still recognised,
+ * which the last test in this group checks, so a cached bundle keeps working.
+ */
+const OUTSIDE = 'Another area — within 15 km';
+const OUTSIDE_LEGACY = 'Other — outside Sandton & Rosebank';
 
 /* ------------------------- The delivery radius -------------------------- */
 
@@ -474,11 +480,21 @@ test('an address outside the two suburbs is no longer a contradiction', () => {
   assert.equal(wrong?.level, 'error');
 });
 
-test('the area select offers the two suburbs and "other"', () => {
+test('the area select offers the two suburbs and "another area"', () => {
   const options = deliveryAreaOptions(settings);
   assert.deepEqual(options.slice(0, 2), ['Rosebank', 'Sandton']);
   assert.equal(options.length, 3);
-  assert.equal(isOutsideAreaChoice(options[2]), true, 'the third option is the outside choice');
+  assert.equal(options[2], OUTSIDE);
+  /*
+   * The label no longer restates the two-suburb boundary. The owner asked for
+   * "Outside Sandton & Rosebank" gone, and a select that repeats two suburb names
+   * as a wall is the closed-list reading the radius replaced.
+   */
+  assert.doesNotMatch(options[2], /outside/i);
+  assert.match(options[2], /15 km/);
+  assert.equal(isOutsideAreaChoice(options[2]), true, 'the third option is the elsewhere choice');
+  /* The old long label still counts as it, so a cached client is not stranded. */
+  assert.equal(isOutsideAreaChoice(OUTSIDE_LEGACY), true);
   assert.equal(isOutsideAreaChoice('Rosebank'), false);
   assert.equal(isOutsideAreaChoice('Sandton'), false);
 });

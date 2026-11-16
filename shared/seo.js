@@ -72,14 +72,14 @@ export const PAGES = {
   '/menu': {
     title: 'The Menu & Prices',
     description:
-      'Every plate on the Heritage Bites menu: traditional at R100, contemporary at R130, each with one starch and one side. Cooked twice a week, delivery included.',
+      'The full Heritage Bites menu and prices: traditional plates at R100, contemporary at R130, with as many starches and vegetable sides as you like.',
     priority: 0.9,
     changefreq: 'weekly',
   },
   '/specials': {
     title: "This Week's Cooking & Delivery",
     description:
-      'What is cooking this week and how service works: Thursdays and Fridays, 12:00 to 13:30, delivered in Sandton and Rosebank and up to 15 km from the kitchen.',
+      'What is cooking this week, and how service works: Thursdays and Fridays, delivered in Sandton and Rosebank and up to 15 km from the kitchen.',
     priority: 0.8,
     changefreq: 'daily',
   },

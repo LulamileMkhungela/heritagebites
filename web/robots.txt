@@ -7,4 +7,4 @@ Disallow: /checkout
 Disallow: /order/
 Disallow: /alerts
 
-Sitemap: https://lulamilemkhungela.github.io/heritagebites/sitemap.xml
+Sitemap: https://lulamilemkhungela.github.io/heritagebites/web/sitemap.xml
