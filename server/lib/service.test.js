@@ -7,8 +7,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { serviceStatus, deliveryAreaFor, deliveryAreasLabel, serviceWindowFor, sastNow, windowLabel, parseSpecialServiceDays, specialServiceDayFor, mergeSpecialServiceDays, extraCost, extraLabel, maxPerExtra } from './service.js';
-import { plateMenus } from '../seed.js';
+import { serviceStatus, deliveryAreaFor, deliveryAreasLabel, serviceWindowFor, sastNow, windowLabel, parseSpecialServiceDays, specialServiceDayFor, mergeSpecialServiceDays, extraCost, extraLabel, maxPerExtra, bookableDates, bookableDateFor } from './service.js';
+import { plateMenus, menu } from '../seed.js';
 
 const settings = {
   hours: [
@@ -308,12 +308,140 @@ test('the drink in the seed allows four bottles on one plate', () => {
    * The catalogue and the helpers have to agree. A seed that says "max: 1" while
    * the UI renders a stepper would let a customer tap a second bottle and watch
    * the server charge for one.
+   *
+   * The `max` of a group was overloaded when starch and vegetable side became
+   * multi-select (owner, 16 Nov 2026): for a *priced* group it still means "how
+   * many of one item", but for an included group it now means "how many
+   * selections fit". That is why the assertions below split on `priced` rather
+   * than assuming every non-drink group is one.
    */
   const group = plateMenus[0].groups.find((g) => g.id === 'drink');
   assert.ok(group?.priced, 'the drink group is priced');
   assert.equal(maxPerExtra(group, group.items[0]), 4);
-  /* Every other group stays a single choice. */
-  for (const g of plateMenus[0].groups.filter((x) => x.id !== 'drink')) {
-    assert.equal(maxPerExtra(g, g.items[0]), 1, `${g.id} must not carry a count`);
+
+  /* Protein is still exactly one — a plate carries one protein. */
+  const protein = plateMenus[0].groups.find((g) => g.id === 'protein');
+  assert.equal(maxPerExtra(protein, protein.items[0]), 1, 'protein must stay a single choice');
+
+  /* Starch and vegetable side take up to three each, and each item is still one
+     portion — the cap is on selections, not on portions of one thing. */
+  for (const id of ['starch', 'veg']) {
+    const g = plateMenus[0].groups.find((x) => x.id === id);
+    assert.equal(g.max, 3, `${id} allows three selections`);
+    assert.equal(g.items[0].max, undefined, `${id} items carry no count of their own`);
   }
+});
+
+test('the multi-select groups are the same shape on both menus', () => {
+  /* The traditional and contemporary builders are two records that must answer
+     the same question the same way, or the rule would depend on which plate a
+     customer picked. */
+  for (const plate of plateMenus) {
+    const starch = plate.groups.find((g) => g.id === 'starch');
+    const veg = plate.groups.find((g) => g.id === 'veg');
+    const protein = plate.groups.find((g) => g.id === 'protein');
+    assert.equal(starch.max, 3, `${plate.id}: starch holds three`);
+    assert.equal(veg.max, 3, `${plate.id}: vegetable side holds three`);
+    assert.equal(protein.max, 1, `${plate.id}: protein holds one`);
+  }
+});
+
+test('a dish card offers the same multi-select starch and side', () => {
+  /*
+   * The plate builder is not the only way to reach these questions — tapping a
+   * single dish opens a card with the same groups. If the card stayed
+   * single-choice the rule would change depending on which button was pressed.
+   */
+  const dish = menu.find((m) => m.id === 'mogodu-plate') ?? menu.find((m) => Array.isArray(m.options) && m.options.length);
+  const starch = dish.options.find((o) => o.id === 'starch');
+  const veg = dish.options.find((o) => o.id === 'veg');
+  assert.equal(starch.multiple, true, 'dish card starch is multi-select');
+  assert.equal(starch.max, 3);
+  assert.equal(veg.multiple, true, 'dish card vegetable side is multi-select');
+  assert.equal(veg.max, 3);
+});
+
+
+describe('booking ahead', () => {
+  /* A Saturday, so "today" is not a cooking day and the list must start later. */
+  const sabbath = sast('2026-11-14', '09:00');
+
+  test('a rest day offers every Thursday and Friday ahead, not just the next one', () => {
+    const days = bookableDates(settings, sabbath);
+    assert.ok(days.length >= 8, `expected several weeks of days, got ${days.length}`);
+    /* The first two are the coming Thursday and Friday. */
+    assert.equal(days[0].date, '2026-11-19');
+    assert.equal(days[0].label, 'Thursday 19 Nov');
+    assert.equal(days[1].date, '2026-11-20');
+    /* And the list keeps going — the whole point of the owner's request. */
+    assert.equal(days[2].date, '2026-11-26');
+    assert.equal(days[3].date, '2026-11-27');
+    assert.equal(days[4].date, '2026-12-03');
+  });
+
+  test('every day offered is a Thursday or a Friday, and the window is the kitchen window', () => {
+    for (const d of bookableDates(settings, sabbath)) {
+      const weekday = new Date(`${d.date}T00:00:00Z`).getUTCDay();
+      assert.ok(weekday === 4 || weekday === 5, `${d.date} is neither Thursday nor Friday`);
+      assert.equal(d.open, '12:00');
+      assert.equal(d.close, '13:30');
+    }
+  });
+
+  test('today is offered while it is still orderable and dropped once it is not', () => {
+    /* Thursday morning: today is a cooking day that has not started. */
+    const before = bookableDates(settings, sast('2026-11-19', '08:00'));
+    assert.equal(before[0].date, '2026-11-19');
+    assert.equal(before[0].isToday, true);
+
+    /* Thursday afternoon, window gone: today must not be on the list. */
+    const after = bookableDates(settings, sast('2026-11-19', '15:00'));
+    assert.equal(after[0].date, '2026-11-20');
+    assert.ok(!after.some((d) => d.date === '2026-11-19'), 'a closed window is not bookable');
+  });
+
+  test('the horizon is bounded, so the diary does not stretch to next year', () => {
+    const days = bookableDates(settings, sabbath, { limit: 200 });
+    const last = days[days.length - 1];
+    const spanDays = (new Date(`${last.date}T00:00:00Z`) - new Date('2026-11-14T00:00:00Z')) / 86400000;
+    assert.ok(spanDays <= 8 * 7, `the 8-week horizon was exceeded (${spanDays} days)`);
+  });
+
+  test('a special opening appears in the list as well as on the calendar', () => {
+    const s = withSpecial([{ date: '2026-11-21', open: '10:00', close: '14:00', label: 'Saturday market' }]);
+    const days = bookableDates(s, sabbath);
+    const market = days.find((d) => d.date === '2026-11-21');
+    assert.ok(market, 'the special date is bookable');
+    assert.equal(market.label, 'Saturday market');
+    assert.equal(market.open, '10:00');
+    assert.equal(market.special, true);
+  });
+
+  test('an order can name a day, and a day outside the diary is refused', () => {
+    const chosen = bookableDateFor(settings, '2026-12-03', sabbath);
+    assert.ok(chosen, 'December 3rd is a Thursday, eight weeks inside the horizon from mid-November');
+    assert.equal(chosen.label, 'Thursday 3 Dec');
+    assert.equal(chosen.open, '12:00');
+
+    /* Not a cooking day, not a real date, and absurdly far out. */
+    assert.equal(bookableDateFor(settings, '2026-11-22', sabbath), null, 'a Sunday is not a cooking day');
+    assert.equal(bookableDateFor(settings, '2026-02-31', sabbath), null, 'a date that does not exist');
+    assert.equal(bookableDateFor(settings, '2031-01-02', sabbath), null, 'past the horizon');
+    assert.equal(bookableDateFor(settings, '', sabbath), null);
+    assert.equal(bookableDateFor(settings, null, sabbath), null);
+  });
+
+  test('a booked order stores the day the customer chose, not the next window', () => {
+    const chosen = bookableDateFor(settings, '2026-12-03', sabbath);
+    const note = serviceWindowFor(settings, sabbath, chosen);
+    assert.equal(note.plannedFor, 'Thursday 3 Dec');
+    assert.equal(note.date, '2026-12-03');
+    assert.equal(note.isPreOrder, true);
+    assert.equal(note.booked, true);
+
+    /* With no booking the old behaviour is unchanged. */
+    const implicit = serviceWindowFor(settings, sabbath);
+    assert.equal(implicit.plannedFor, 'Thursday 12:00–13:30');
+    assert.equal(implicit.booked, false);
+  });
 });

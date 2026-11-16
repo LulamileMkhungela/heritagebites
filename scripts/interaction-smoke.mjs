@@ -118,6 +118,18 @@ function boot(path, { seedCart } = {}) {
   w.__geo = { lat: -26.1075, lng: 28.055 };
   w.__geoDenied = false;
   /*
+   * The suite runs against http://127.0.0.1, but a browser only exposes
+   * geolocation on a secure origin. The checkout now checks `isSecureContext`
+   * *before* touching `navigator.geolocation` — so on a plain-http page it
+   * reports "insecure" and never asks, which is correct in life and would make
+   * every location step here test the wrong branch.
+   *
+   * localhost is a secure context in every real browser, so the honest stub is
+   * to declare this origin secure, exactly as the browser would for the preview
+   * at 127.0.0.1. The insecure branch has its own step below.
+   */
+  Object.defineProperty(w, 'isSecureContext', { configurable: true, value: true });
+  /*
    * Every call's options, in order. The site's claim is that it asks for a
    * *precise* fix — that is what the radius needs — and "does it really" is only
    * answerable by looking at what was passed to the browser.
@@ -993,7 +1005,11 @@ async function useMyLocation(session) {
   await session.waitFor(
     () => /Location checked/i.test(session.text())
       || /km away/i.test(session.text())
-      || /Location is blocked|could not get a location|This browser cannot share/i.test(session.text()),
+      /* Every refusal the checkout can show. The wording changed when the
+         insecure-origin bug was fixed — the old message blamed a browser switch
+         and this one names the real reason — so the pattern matches the meaning
+         ("no location") rather than one sentence. */
+      || /not sharing a location|could not get a location|This browser cannot share|secure \(https\) connection/i.test(session.text()),
     'the location check to come back',
     8000,
   );
@@ -1099,11 +1115,55 @@ await step('a blocked location says where the switch is, and still lets the cust
     throw new Error(`a blocked browser was asked again (${s7e.w.__geoCalls.length} calls) — the prompt must appear once`);
   }
   const page = s7e.text();
-  if (!/blocked/i.test(page) || !/site settings/i.test(page)) {
-    throw new Error(`the refusal does not say where to fix it: ${page.slice(0, 400)}`);
+  /*
+   * Where the switch is: in the address bar, beside the address. The old copy
+   * said "site settings", which is the right place on some browsers and a dead
+   * end on others — and the owner reported it as wrong advice. The address-bar
+   * icon is the one every Chromium browser shows.
+   */
+  if (!/address bar|beside the address/i.test(page)) {
+    throw new Error(`the refusal does not say where the switch is: ${page.slice(0, 500)}`);
   }
   if (!/pick it from the list/i.test(page)) throw new Error('the refusal offers no way forward');
-  return 'one prompt, blocked message with the browser switch, address still offered';
+  return 'one prompt, the address-bar switch named, the address box still offered';
+});
+
+await step('on an insecure origin the location button explains itself instead of blaming the customer', async () => {
+  /*
+   * The owner's report (16 Nov 2026): "why Location is blocked for this site.
+   * Allow it in your browser's site settings… -u must ask for location
+   * permission".
+   *
+   * They had blocked nothing. Browsers refuse geolocation on a non-secure
+   * origin without ever showing a prompt, and the checkout used to report that
+   * as PERMISSION_DENIED — so a customer who had granted nothing was sent to
+   * look for a switch that would not fix it, and the site never asked.
+   *
+   * This is that exact situation, staged: an insecure context with a geolocation
+   * stub that would answer if it were asked. The assertions are that the
+   * question is never put to the browser, and that the message names the real
+   * reason and points at the address box.
+   */
+  const s7i = boot('/checkout', { seedCart: s7.seedCart });
+  await s7i.waitFor(() => /Almost there/i.test(s7i.text()), 'checkout', 20000);
+  /* A page served over http: exactly what the owner was looking at. */
+  Object.defineProperty(s7i.w, 'isSecureContext', { configurable: true, value: false });
+  s7i.w.__geoCalls.length = 0;
+  await useMyLocation(s7i);
+
+  if (s7i.w.__geoCalls.length !== 0) {
+    throw new Error(`geolocation was called on an insecure origin (${s7i.w.__geoCalls.length} calls) — the browser cannot prompt there`);
+  }
+  const page = s7i.text();
+  if (!/https/i.test(page)) {
+    throw new Error(`the insecure message does not say why: ${page.slice(0, 500)}`);
+  }
+  if (!/address/i.test(page)) throw new Error('the insecure message offers no way forward');
+  /* It must NOT send them to a settings switch, which is the false advice. */
+  if (/site settings/i.test(page)) {
+    throw new Error('the insecure message still blames a browser setting that would not help');
+  }
+  return 'no prompt attempted on http, honest message, address box offered';
 });
 
 await step('a customer outside the delivery radius is refused, and told how far out they are', async () => {
@@ -1217,6 +1277,55 @@ await step('the WhatsApp order message carries the delivery address and the Yoco
     }
   }
   return 'delivery address, area and the Yoco payment ask all in the message';
+});
+
+await step('a customer can book any cooking day, and the WhatsApp message says which one', async () => {
+  /*
+   * Owner, 16 Nov 2026: "users are not limited in waiting for thursday but they
+   * can order in advance for any thursday/friday" and "on whatsapp message you
+   * can update the wording to mwntion its an order from this day for a specific
+   * day".
+   *
+   * Both halves are asserted here. The list must offer more than the one next
+   * window — that was the complaint — and picking a day must change the message
+   * that opens in WhatsApp, not just the page.
+   */
+  const days = [...s7.doc.querySelectorAll('button[aria-pressed]')].filter((b) =>
+    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/.test((b.textContent ?? '').trim()),
+  );
+  if (days.length < 4) {
+    throw new Error(`the day picker offers ${days.length} day(s) — it must offer the cooking weeks ahead, not just the next one`);
+  }
+
+  /* Every day offered must be a Thursday or a Friday. */
+  for (const day of days) {
+    const name = (day.textContent ?? '').trim().split(' ')[0];
+    if (name !== 'Thursday' && name !== 'Friday') {
+      throw new Error(`the picker offers ${name}, and the kitchen only cooks Thursday and Friday`);
+    }
+  }
+
+  const waText = () => {
+    const link = [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')]
+      .find((a) => /Complete order on WhatsApp|Ask on WhatsApp/i.test(a.textContent ?? ''));
+    return link ? new URL(link.href).searchParams.get('text') ?? '' : '';
+  };
+
+  /* Pick the furthest day offered, so the wording cannot be "today". */
+  const target = days[days.length - 1];
+  /* The button holds the day and its window in two spans; the day is the first. */
+  const targetLabel = (target.querySelector('span span')?.textContent ?? '').trim();
+  target.click();
+  await sleep(200);
+
+  const after = waText();
+  if (!/Order placed:/i.test(after) || !/Cooking day:/i.test(after)) {
+    throw new Error(`the message does not separate the day it was sent from the day it is for: ${after.slice(0, 240)}`);
+  }
+  if (!after.includes(`Cooking day: ${targetLabel}`)) {
+    throw new Error(`the message names the wrong cooking day. Wanted "${targetLabel}", got: ${after.split('\n').slice(0, 5).join(' | ')}`);
+  }
+  return `${days.length} cooking days offered; the message names "Cooking day: ${targetLabel}"`;
 });
 
 await step('an address that contradicts the chosen area is refused with both names', async () => {
@@ -1562,21 +1671,20 @@ await step('the plate builder requires its mandatory groups before adding', asyn
   return `${chosen} required group(s) satisfied`;
 });
 
-await step('required groups are choices and the add-on is a checkbox', async () => {
+await step('starch and vegetable side take more than one; the drink is an add-on', async () => {
   /*
-   * Owner, 15 Nov 2026: "did you add the add extras as checkbox on Choose your
-   * starch, Choose your vegetable side, Add a soft drink".
+   * Owner, 16 Nov 2026: "choose starch, vegetables must be multi select where
+   * user can select more than 1 item".
    *
-   * The distinction is the answer, and it is not cosmetic:
+   * This reverses the rule this step used to assert, and the reversal is the
+   * point: a plate with pap *and* dumpling is an ordinary plate here, so the
+   * two required groups are a row of checkboxes that hold several answers.
+   * Protein stays a radio — a plate carries one protein — and the soft drink
+   * stays an unticked add-on, because a R25 bottle nobody asked for is money
+   * taken for nothing.
    *
-   *   - Starch and vegetable side are *choices*: exactly one, and picking
-   *     another replaces it. A checkbox would let a plate hold two starches.
-   *   - The soft drink is an *add-on*: none by default, tick to take one, tick
-   *     again to put it back. A radio group cannot express "no drink" at all.
-   *
-   * So the two required groups expose role=radio and the drink exposes
-   * role=checkbox — and the drink starts unticked, because a R25 bottle nobody
-   * asked for is money taken for nothing.
+   * The behaviour is checked, not just the role: two starches must actually be
+   * held at once, and the add-to-basket line must still say the plate price.
    */
   const dlg = builderDialog();
   if (!dlg) throw new Error('the builder is not open');
@@ -1591,18 +1699,44 @@ await step('required groups are choices and the add-on is a checkbox', async () 
 
   const starch = semantics.find((x) => /starch/i.test(x.legend));
   const veg = semantics.find((x) => /vegetable side/i.test(x.legend));
+  const protein = semantics.find((x) => /protein/i.test(x.legend));
   const drink = semantics.find((x) => /soft drink/i.test(x.legend));
 
-  if (!starch || !veg || !drink) throw new Error(`could not find all three groups: ${JSON.stringify(semantics)}`);
-  if (starch.radios === 0 || starch.checks > 0) throw new Error(`starch rendered as ${JSON.stringify(starch)}`);
-  if (veg.radios === 0 || veg.checks > 0) throw new Error(`vegetable side rendered as ${JSON.stringify(veg)}`);
+  if (!starch || !veg || !drink) throw new Error(`could not find all the groups: ${JSON.stringify(semantics)}`);
+  if (starch.checks === 0 || starch.radios > 0) throw new Error(`starch is not multi-select: ${JSON.stringify(starch)}`);
+  if (veg.checks === 0 || veg.radios > 0) throw new Error(`vegetable side is not multi-select: ${JSON.stringify(veg)}`);
+  if (protein && (protein.radios === 0 || protein.checks > 0)) {
+    throw new Error(`protein must stay a single choice: ${JSON.stringify(protein)}`);
+  }
   if (drink.checks === 0 || drink.radios > 0) throw new Error(`the drink is not a checkbox: ${JSON.stringify(drink)}`);
 
   /* The drink starts unticked. */
-  const drinkBox = [...dlg.querySelectorAll('[role="checkbox"]')][0];
-  if (drinkBox.getAttribute('aria-checked') === 'true') throw new Error('the soft drink starts ticked, which charges for a bottle nobody asked for');
+  const drinkBox = [...dlg.querySelectorAll('[role="checkbox"]')].reverse()[0];
+  if (drinkBox?.getAttribute('aria-checked') === 'true') {
+    throw new Error('the soft drink starts ticked, which charges for a bottle nobody asked for');
+  }
 
-  return 'starch + veg are radios, the drink is an unticked checkbox';
+  /* Two starches, held at once. The plate price must not move: a starch is
+     inside the plate price, not an extra on top of it. */
+  const groupFor = (needle) => fieldsets.find((fs) => needle.test(fs.querySelector('legend')?.textContent ?? ''));
+  const options = (fs) => [...(fs?.querySelectorAll('button[aria-checked]') ?? [])];
+
+  const starchGroup = groupFor(/starch/i);
+  const [firstStarch, secondStarch] = options(starchGroup);
+  if (!firstStarch || !secondStarch) throw new Error('the starch group does not offer two options');
+  firstStarch.click();
+  await sleep(120);
+  secondStarch.click();
+  await sleep(160);
+
+  const ticked = options(starchGroup).filter((b) => b.getAttribute('aria-checked') === 'true');
+  if (ticked.length !== 2) {
+    throw new Error(`two starches should be ticked at once, found ${ticked.length}: ${ticked.map((b) => b.textContent).join(', ')}`);
+  }
+  const price = (builderAdd()?.textContent ?? '').match(/R\s?([\d\s]+[.,]\d{2})/)?.[1]?.replace(/\s/g, '').replace(',', '.');
+  if (Number(price) > 200) throw new Error(`two starches changed the plate price to R${price}`);
+
+  return 'starch and veg hold two at once, protein is a radio, the drink is an unticked add-on';
 });
 
 await step('the soft drink takes a quantity, and prices per bottle', async () => {

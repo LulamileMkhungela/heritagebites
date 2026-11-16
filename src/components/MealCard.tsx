@@ -149,7 +149,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
     onClose();
   };
 
-  const toggle = (optionId: string, choiceId: string, multiple?: boolean, required = true) => {
+  const toggle = (optionId: string, choiceId: string, multiple?: boolean, required = true, max?: number) => {
     setPicked((prev) => {
       if (!multiple) {
         /* Tapping the chosen answer of an optional option clears it — that is
@@ -163,8 +163,18 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
         return { ...prev, [optionId]: choiceId };
       }
       const current = (Array.isArray(prev[optionId]) ? prev[optionId] : []) as string[];
-      const next = current.includes(choiceId) ? current.filter((c) => c !== choiceId) : [...current, choiceId];
-      return { ...prev, [optionId]: next };
+      if (current.includes(choiceId)) {
+        /* A required group keeps at least one answer; unticking the last one
+           would leave the dish incomplete and the error would arrive at the
+           basket instead of here. */
+        if (required && current.length === 1) return prev;
+        return { ...prev, [optionId]: current.filter((c) => c !== choiceId) };
+      }
+      /* The catalogue's own cap, so the button cannot add a fourth starch the
+         server would refuse. */
+      const cap = Math.max(1, Math.min(20, Math.floor(Number(max) || 1)));
+      if (current.length >= cap) return prev;
+      return { ...prev, [optionId]: [...current, choiceId] };
     });
   };
 
@@ -258,7 +268,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                         <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
                           <button
                             type="button"
-                            onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required)) : setCount(count - 1))}
+                            onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max) : setCount(count - 1))}
                             className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
                             aria-label={count <= 1 ? `Remove ${c.label}` : `One fewer ${c.label}`}
                           >
@@ -289,14 +299,20 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                    * cannot express "none of these", which is exactly what an
                    * optional extra most often means.
                    */
-                  const isChoice = Boolean(o.required);
+                  /*
+                   * A radio only where the group holds ONE answer. A required
+                   * group that takes several (starch, vegetable side) is a row of
+                   * checkboxes — its required star says "pick at least one", not
+                   * "pick exactly one".
+                   */
+                  const isChoice = Boolean(o.required) && !o.multiple;
                   return (
                     <button
                       key={c.id}
                       type="button"
                       role={isChoice ? 'radio' : 'checkbox'}
                       aria-checked={isOn}
-                      onClick={() => toggle(o.id, c.id, o.multiple, Boolean(o.required))}
+                      onClick={() => toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max)}
                       className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                     >
                       <span className="flex min-w-0 items-center gap-2">

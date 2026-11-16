@@ -65,7 +65,18 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 }
 
 async function registerWorker(): Promise<ServiceWorkerRegistration> {
-  await navigator.serviceWorker.register(workerUrl, { scope: BASE_URL.replace(/\/$/, '') || '/' });
+  /*
+   * `updateViaCache: 'none'` skips the HTTP cache when checking for a new
+   * worker. Without it a browser can hold the old `sw.js` for up to a day, which
+   * means the cache-purging `activate` above never runs — the exact situation
+   * the owner reported when a preview kept showing an old build.
+   */
+  const registration = await navigator.serviceWorker.register(workerUrl, {
+    scope: BASE_URL.replace(/\/$/, '') || '/',
+    updateViaCache: 'none',
+  });
+  /* Check now rather than at the browser's own convenience. */
+  registration.update().catch(() => {});
   return navigator.serviceWorker.ready;
 }
 

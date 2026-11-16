@@ -48,6 +48,8 @@ import {
   parseSpecialServiceDays,
   serviceStatus,
   serviceWindowFor,
+  bookableDateFor,
+  bookableDates,
 } from './lib/service.js';
 /*
  * Distance rules live in shared/address.js so the browser and the server make
@@ -352,7 +354,14 @@ function priceLines(clientLines) {
           continue;
         }
         if (group.max && picked.length > group.max) {
-          errors.push(`${plate.name}: you can choose at most ${group.max} for ${group.label.toLowerCase()}.`);
+          /*
+             * "at most 3 for choose your starch" reads like a machine, and
+             * appending an "s" to the stripped label produced "starchs". The
+             * group id already names the thing in the plural where it has one,
+             * so the copy is chosen rather than derived.
+             */
+          const many = group.id === 'starch' ? 'starches' : group.id === 'veg' ? 'vegetable sides' : group.id;
+          errors.push(`${plate.name}: you can choose up to ${group.max} ${many}.`);
           invalid = true;
           continue;
         }
@@ -788,6 +797,13 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
      * never disagree with the server about whether the shop is open.
      */
     service: serviceStatus(settings, clockNow()),
+    /*
+     * The cooking days a customer can book ahead (owner, 16 Nov 2026: "they can
+     * order in advance for any Thursday/Friday"). Served from the same shared
+     * rule the order route validates against, so the day the checkout offers and
+     * the day the kitchen will accept can never be different lists.
+     */
+    bookableDates: bookableDates(settings, clockNow(), { limit: 16 }),
     payments: paymentConfig(),
     contact: { inboxConfigured: contactEndpoint() !== null },
     /*
@@ -863,7 +879,7 @@ function cardFieldsSent(payment) {
 }
 
 app.post('/api/orders', LIMITS.order, async (req, res) => {
-  const { items, customer = {}, code = '', payment = {}, channel = 'card' } = req.body ?? {};
+  const { items, customer = {}, code = '', payment = {}, channel = 'card', serviceWindow = null } = req.body ?? {};
   /* Delivery only. A client that still sends `collection` is corrected, not
      rejected, so a cached tab does not strand a customer at a dead option. */
   const fulfilment = 'delivery';
@@ -899,11 +915,41 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
    * to do with what it is testing. It is never set by the app itself, and the
    * gate below stays wired so its own test can exercise the closed path.
    */
+  /*
+   * A customer may book any cooking day ahead, not just tomorrow (owner, 16 Nov
+   * 2026: "users are not limited in waiting for Thursday… they can order in
+   * advance for any Thursday/Friday"). `serviceWindow.date` is that choice,
+   * checked against the same list the checkout offers so a hand-made request
+   * cannot book a plate for a day the kitchen never cooks.
+   */
+  const settingsNow = getSettings();
+  const requestedDate = String(serviceWindow?.date ?? '').trim();
+  const booking = requestedDate ? bookableDateFor(settingsNow, requestedDate, clockNow()) : null;
+  if (requestedDate && !booking) {
+    return res.status(422).json({
+      errors: ["We do not cook on that day, or it is too far ahead. Pick one of the cooking days we list and the order will be booked for it."],
+      unavailableDate: requestedDate,
+      bookableDates: bookableDates(settingsNow, clockNow(), { limit: 12 }),
+    });
+  }
+
+  /*
+   * The closed gate is about *today*, not about the site.
+   *
+   * It exists because the site used to take an order at 15:00 on a Friday for a
+   * window that closed at 13:30. A customer who has named a future cooking day
+   * is not asking for today at all, so refusing them would reproduce the very
+   * bug the owner reported from the other side: a Saturday afternoon order for
+   * next Friday must go through. With no date chosen, the rule is unchanged.
+   */
   const ordersForcedOpen = process.env.HB_ORDERS_OPEN === 'true';
-  if (!ordersForcedOpen && serviceStatus(getSettings(), clockNow()).orderingClosed) {
+  if (!ordersForcedOpen && !booking && serviceStatus(settingsNow, clockNow()).orderingClosed) {
     return res.status(409).json({
-      errors: ["Today's window has closed, so we are not taking orders. Message us on WhatsApp and we will tell you if the kitchen can still prepare it."],
+      errors: [
+        "Today's window has closed, so we are not taking orders for today. Pick one of our cooking days and we will book it for that day instead — or message us on WhatsApp and we will tell you if the kitchen can still prepare it for today.",
+      ],
       closed: true,
+      bookableDates: bookableDates(settingsNow, clockNow(), { limit: 12 }),
     });
   }
 
@@ -1062,7 +1108,7 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
      * Thursday or Friday it is for today; outside it is a pre-order and the
      * receipt, email alert and customer all say which window it is cooked in.
      */
-    serviceWindow: serviceWindowFor(getSettings()),
+    serviceWindow: serviceWindowFor(settingsNow, clockNow(), booking),
     loyalty: { pointsEarned: loyaltyPointsFor(totals.total, getSettings().loyaltyRateCents), pointsRedeemed: 0 },
     timeline: [],
   };

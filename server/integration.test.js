@@ -301,6 +301,41 @@ describe('catalogue + search', () => {
     assert.equal(quoted.status, 422, 'an archive dish cannot be priced');
   });
 
+  /*
+   * Owner, 16 Nov 2026: starch and vegetable side are multi-select. The browser
+   * is not the enforcement point — a hand-made request is the cheap way to test
+   * that the cap holds, and that the cap is not so tight it undoes the request.
+   */
+  test('a plate takes several starches and sides, up to the catalogue cap', async () => {
+    const quote = (selections) =>
+      fetch(`${base}/api/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{ kind: 'plate', plateId: 'traditional', qty: 1, selections }],
+          fulfilment: 'delivery',
+          customer: { lat: -26.1075, lng: 28.055, suburb: 'Sandton', address: '12 Rivonia Road, Sandton' },
+        }),
+      }).then(json);
+
+    /* Two starches and two vegetables, all included in the plate price. */
+    const ok = await quote({ protein: ['mogodu'], starch: ['pap', 'dumpling'], veg: ['chakalaka', 'morogo'] });
+    assert.equal(ok.errors, undefined, `two of each must be accepted: ${JSON.stringify(ok.errors)}`);
+    assert.equal(ok.lines[0].unitPrice, 100, 'starches are inside the plate price, not added to it');
+    const labels = ok.lines[0].options.map((o) => o.label);
+    for (const wanted of ['Pap', 'Dumpling', 'Chakalaka', 'Morogo']) {
+      assert.ok(labels.includes(wanted), `${wanted} must reach the kitchen line (got ${labels.join(', ')})`);
+    }
+
+    /* Four is one too many, and the refusal says so in words a person wrote. */
+    const tooMany = await quote({ protein: ['mogodu'], starch: ['pap', 'dumpling', 'samp', 'mabele'], veg: ['chakalaka'] });
+    assert.ok(tooMany.errors?.some((e) => /up to 3 starches/i.test(e)), `unexpected refusal: ${JSON.stringify(tooMany.errors)}`);
+
+    /* And a group may not be left empty just because it can hold several. */
+    const empty = await quote({ protein: ['mogodu'], starch: [], veg: ['chakalaka'] });
+    assert.ok(empty.errors?.some((e) => /choose your starch/i.test(e)), 'a required group still needs one answer');
+  });
+
   test('search finds plates by local name', async () => {
     const byLocal = await fetch(`${base}/api/search?q=tshotlo`).then(json);
     assert.equal(byLocal.results[0].id, 'tshotlo-plate');
@@ -520,6 +555,60 @@ describe('the service window gate', () => {
         assert.equal(res.status, 409, 'a window that has gone by must not accept an order');
         assert.equal(body.closed, true);
         assert.match(body.errors[0], /WhatsApp/i, 'the refusal must offer a way through');
+      } finally {
+        delete process.env.HB_CLOCK_LABEL;
+      }
+    } finally {
+      if (previous === undefined) delete process.env.HB_ORDERS_OPEN;
+      else process.env.HB_ORDERS_OPEN = previous;
+    }
+  });
+
+  /*
+   * The owner's complaint, both halves of it (16 Nov 2026): "users are not
+   * limited in waiting for Thursday… they can order in advance for any
+   * Thursday/Friday". A customer who names a later cooking day is not asking for
+   * today, so today's closed window must not refuse them.
+   */
+  test("a future cooking day is accepted even after today\'s window has closed", async () => {
+    const previous = process.env.HB_ORDERS_OPEN;
+    delete process.env.HB_ORDERS_OPEN;
+    try {
+      /* Friday 13 Nov at 15:09 — today is closed. Next Thursday is the 19th. */
+      process.env.HB_CLOCK_LABEL = '2026-11-13T15:09:00+02:00';
+      try {
+        const { res, body } = await placeOrder({ serviceWindow: { date: '2026-11-19' } });
+        assert.equal(res.status, 201, 'a booked future day must be accepted');
+        assert.equal(body.order.serviceWindow.date, '2026-11-19');
+        assert.match(body.order.serviceWindow.plannedFor, /Thursday 19 Nov/);
+        assert.equal(body.order.serviceWindow.booked, true);
+        assert.equal(body.order.serviceWindow.isPreOrder, true);
+      } finally {
+        delete process.env.HB_CLOCK_LABEL;
+      }
+    } finally {
+      if (previous === undefined) delete process.env.HB_ORDERS_OPEN;
+      else process.env.HB_ORDERS_OPEN = previous;
+    }
+  });
+
+  test('a day the kitchen never cooks is refused, whatever the client claims', async () => {
+    const previous = process.env.HB_ORDERS_OPEN;
+    delete process.env.HB_ORDERS_OPEN;
+    try {
+      process.env.HB_CLOCK_LABEL = '2026-11-13T15:09:00+02:00';
+      try {
+        /* A Sunday, and a Thursday nine months out. */
+        for (const date of ['2026-11-22', '2027-08-05']) {
+          const { res, body } = await placeOrder({ serviceWindow: { date } });
+          assert.equal(res.status, 422, `${date} must not be bookable`);
+          assert.equal(body.unavailableDate, date);
+          assert.ok(Array.isArray(body.bookableDates) && body.bookableDates.length > 0, 'the error must offer the real days');
+          for (const d of body.bookableDates) {
+            const weekday = new Date(`${d.date}T00:00:00Z`).getUTCDay();
+            assert.ok(weekday === 4 || weekday === 5, `${d.date} is not a cooking day`);
+          }
+        }
       } finally {
         delete process.env.HB_CLOCK_LABEL;
       }

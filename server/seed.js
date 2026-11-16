@@ -62,10 +62,24 @@ const contemporarySides = [
   { id: 'glazed-carrots', label: 'Glazed carrots', priceDelta: 0 },
 ];
 
+/*
+ * Starch and vegetable side take more than one (owner, 15 Nov 2026: "choose
+ * starch, vegetables must be multi select where user can select more than 1
+ * item").
+ *
+ * These are the *dish card* groups — the same two questions the plate builder
+ * asks, reached by tapping a single dish instead of building a plate. They must
+ * answer the request identically, or the rule would depend on which button the
+ * customer happened to press. `multiple` makes them a row of checkboxes, and
+ * `max: 3` is the same cap the plate builder uses: pap and dumpling together is
+ * an ordinary plate, nine starches is not.
+ */
 const starchGroup = (choices, id = 'starch') => ({
   id,
   label: 'Choose your starch',
   required: true,
+  multiple: true,
+  max: 3,
   choices,
 });
 
@@ -73,6 +87,8 @@ const sideGroup = (choices, id = 'veg') => ({
   id,
   label: 'Choose your vegetable side',
   required: true,
+  multiple: true,
+  max: 3,
   choices,
 });
 
@@ -154,7 +170,7 @@ export const plateMenus = [
     name: 'Traditional Plate',
     price: 100,
     blurb:
-      'One protein, one starch and one vegetable side, from the traditional kitchen.',
+      'One protein, and as many starches and vegetable sides as you like (up to three of each), from the traditional kitchen.',
     image: img('plate-mogodu'),
     groups: [
       {
@@ -167,8 +183,19 @@ export const plateMenus = [
           { id: 'smiley', label: 'Smiley (sheep head)', price: 100 },
         ],
       },
-      { id: 'starch', label: 'Choose your starch', required: true, max: 1, items: traditionalStarches.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
-      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 1, items: traditionalSides.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
+      /*
+       * Starch and vegetable side take more than one (owner, 15 Nov 2026:
+       * "choose starch, vegetables must be multi select where user can select
+       * more than 1 item").
+       *
+       * A plate with pap AND dumpling is an ordinary plate in this kitchen — the
+       * two are eaten together, not chosen between. The cap of 3 keeps a plate a
+       * plate: it stops a customer assembling nine starches and calling it a
+       * R100 meal. The items stay at `price: 100` (the plate price) because
+       * every component is already inside it; the amount means nothing.
+       */
+      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: traditionalStarches.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
+      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: traditionalSides.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
       drinksGroup(),
     ],
   },
@@ -177,7 +204,7 @@ export const plateMenus = [
     name: 'Contemporary Plate',
     price: 130,
     blurb:
-      'One protein, one starch and one vegetable side, from the contemporary kitchen.',
+      'One protein, and as many starches and vegetable sides as you like (up to three of each), from the contemporary kitchen.',
     image: img('plate-short-rib'),
     groups: [
       {
@@ -188,8 +215,9 @@ export const plateMenus = [
           { id: 'lamb-stew', label: 'Lamb stew', price: 130 },
         ],
       },
-      { id: 'starch', label: 'Choose your starch', required: true, max: 1, items: contemporaryStarches.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
-      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 1, items: contemporarySides.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
+      /* Multi-select, same rule and same cap as the traditional plate. */
+      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: contemporaryStarches.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
+      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: contemporarySides.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
       drinksGroup(),
     ],
   },
@@ -418,7 +446,7 @@ export const menu = [
     category: 'traditional',
     price: 100,
     image: img('plate-mogodu'),
-    description: 'Beef tripe, slow-cooked in a rich onion-and-tomato gravy, with one starch and one vegetable side.',
+    description: 'Beef tripe, slow-cooked in a rich onion-and-tomato gravy, with your starches and vegetable sides.',
     story:
       'Mogodu is judged by the time it is given. It is the plate our regulars order first, and the one we are proudest to send out.',
     tags: ['tripe'],
@@ -440,7 +468,7 @@ export const menu = [
     category: 'traditional',
     price: 100,
     image: img('plate-tshotlo'),
-    description: 'Pounded beef cooked until it pulls apart, with one starch and one vegetable side.',
+    description: 'Pounded beef cooked until it pulls apart, with your starches and vegetable sides.',
     story:
       'Tshotlo is the plate that feeds a table. The beef is cooked long and pounded so the sauce and the meat become one thing.',
     tags: ['pounded beef'],
@@ -462,7 +490,7 @@ export const menu = [
     category: 'traditional',
     price: 100,
     image: img('plate-chicken-hardbody'),
-    description: 'Chicken cooked hardbody style in a savoury gravy, with one starch and one vegetable side.',
+    description: 'Chicken cooked hardbody style in a savoury gravy, with your starches and vegetable sides.',
     story: '',
     tags: ['chicken'],
     spice: 1,
@@ -484,7 +512,7 @@ export const menu = [
     price: 100,
     image: PLACEHOLDER,
     imagePending: true,
-    description: 'Beef trotters braised until the gravy turns glossy, with one starch and one vegetable side.',
+    description: 'Beef trotters braised until the gravy turns glossy, with your starches and vegetable sides.',
     story: '',
     tags: ['trotters'],
     spice: 1,
@@ -506,7 +534,7 @@ export const menu = [
     price: 100,
     image: PLACEHOLDER,
     imagePending: true,
-    description: 'Sheep head, cooked and served the traditional way, with one starch and one vegetable side.',
+    description: 'Sheep head, cooked and served the traditional way, with your starches and vegetable sides.',
     story: '',
     tags: ['sheep head'],
     spice: 1,
@@ -529,7 +557,7 @@ export const menu = [
     category: 'contemporary',
     price: 130,
     image: img('plate-wings'),
-    description: 'Chicken wings basted to order — honey soy or chilli sriracha — with one starch and one vegetable side.',
+    description: 'Chicken wings basted to order — honey soy or chilli sriracha — with your starches and vegetable sides.',
     story: '',
     tags: ['chicken', 'wings'],
     spice: 2,
@@ -550,7 +578,7 @@ export const menu = [
     category: 'contemporary',
     price: 130,
     image: img('plate-short-rib'),
-    description: 'BBQ beef short rib, grilled and glazed, with one starch and one vegetable side.',
+    description: 'BBQ beef short rib, grilled and glazed, with your starches and vegetable sides.',
     story: '',
     tags: ['beef', 'grilled'],
     spice: 1,
@@ -571,7 +599,7 @@ export const menu = [
     category: 'contemporary',
     price: 130,
     image: img('plate-lamb-stew'),
-    description: 'Lamb stewed until tender in a rich gravy, with one starch and one vegetable side.',
+    description: 'Lamb stewed until tender in a rich gravy, with your starches and vegetable sides.',
     story: '',
     tags: ['lamb', 'stew'],
     spice: 1,

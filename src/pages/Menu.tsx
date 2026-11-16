@@ -5,7 +5,7 @@ import { useCart } from '../store/cart';
 import { zar } from '../lib/format';
 import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
-import type { ComingSoonItem, MenuItem, PlateMenu } from '../lib/types';
+import type { ComingSoonItem, MenuItem, PlateGroup, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
 import { extraCost, maxPerExtra } from '../../shared/service.js';
 import { currentSiteUrl, usePageSeo } from '../lib/seo';
@@ -548,7 +548,15 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
  */
 function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => void }) {
   const addPlate = useCart((s) => s.addPlate);
-  const [picked, setPicked] = useState<Record<string, string>>({});
+  /*
+   * `picked` holds a *list* per group, not one id.
+   *
+   * Owner, 15 Nov 2026: "choose starch, vegetables must be multi select where
+   * user can select more than 1 item". A plate with pap and dumpling is an
+   * ordinary plate here, so a group has to be able to hold two answers — and the
+   * single-value map could not, whatever the visible control looked like.
+   */
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
   /*
    * How many of a priced extra, keyed by "groupId:itemId".
    *
@@ -560,12 +568,40 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [qty, setQty] = useState(1);
 
-  /* Tapping the chosen answer clears it, which is how an optional group (the
-     drink) is declined. Required groups are guarded by `missing` below. */
-  const toggle = (groupId: string, itemId: string) =>
-    setPicked((prev) => ({ ...prev, [groupId]: prev[groupId] === itemId ? '' : itemId }));
+  /**
+   * Tap an item: add it if it is not there, remove it if it is.
+   *
+   * The difference between a group that holds several and one that holds a
+   * single answer is the group's own `max`:
+   *
+   *   - `max > 1` (starch, vegetable side) — ticking a second adds it. Tapping a
+   *     ticked one removes it, unless it is the last one in a required group,
+   *     where removing it would leave the plate incomplete.
+   *   - `max === 1` (protein, the drink) — a new choice REPLACES the old one,
+   *     and tapping the chosen one clears it, which is how an optional single is
+   *     declined.
+   */
+  const toggle = (group: PlateGroup, itemId: string) =>
+    setPicked((prev) => {
+      const current = prev[group.id] ?? [];
+      const on = current.includes(itemId);
+      const several = Number(group.max) > 1;
 
-  const missing = plate.groups.filter((g) => g.required && !picked[g.id]);
+      if (!several) {
+        if (on) return { ...prev, [group.id]: group.required ? current : [] };
+        return { ...prev, [group.id]: [itemId] };
+      }
+
+      if (on) {
+        /* Never leave a required group empty by unticking its last item. */
+        if (group.required && current.length === 1) return prev;
+        return { ...prev, [group.id]: current.filter((id) => id !== itemId) };
+      }
+      if (current.length >= Number(group.max)) return prev;
+      return { ...prev, [group.id]: [...current, itemId] };
+    });
+
+  const missing = plate.groups.filter((g) => g.required && (picked[g.id]?.length ?? 0) === 0);
   const missingLabel = missing[0]?.label.replace(/^choose your\s+/i, '') ?? '';
 
   /*
@@ -576,7 +612,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
    */
   const extras = plate.groups.reduce((sum, g) => {
     if (!g.priced) return sum;
-    const it = g.items.find((i) => i.id === picked[g.id]);
+    const it = g.items.find((i) => i.id === (picked[g.id] ?? [])[0]);
     if (!it) return sum;
     /* Price × how many. The clamp is the catalogue's, so the button cannot add a
        fifth bottle the server would refuse. */
@@ -588,20 +624,25 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   const submit = () => {
     if (missing.length) return;
     const picks = plate.groups.flatMap((g) => {
-      const id = picked[g.id];
-      if (!id) return [];
-      const it = g.items.find((i) => i.id === id);
-      if (!it) return [];
-      /* A priced group carries its amount, so the basket line explains the
-         difference between the plate price and what is being charged. */
-      const count = g.priced ? Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1)) : 1;
-      return [{
-        optionId: g.id,
-        choiceId: `${g.id}:${id}`,
-        label: it.label,
-        priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : 0,
-        ...(count > 1 ? { qty: count } : {}),
-      }];
+      /*
+       * Every ticked item in the group. A multi-select group contributes two or
+       * three picks and the kitchen is told all of them — "Pap · Dumpling ·
+       * Chakalaka" — rather than one being silently dropped by the basket.
+       */
+      return (picked[g.id] ?? []).flatMap((id) => {
+        const it = g.items.find((i) => i.id === id);
+        if (!it) return [];
+        /* A priced group carries its amount, so the basket line explains the
+           difference between the plate price and what is being charged. */
+        const count = g.priced ? Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1)) : 1;
+        return [{
+          optionId: g.id,
+          choiceId: `${g.id}:${id}`,
+          label: it.label,
+          priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : 0,
+          ...(count > 1 ? { qty: count } : {}),
+        }];
+      });
     });
     addPlate({
       /* The count is part of the identity: one plate with one beer and one plate
@@ -643,13 +684,13 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                 </legend>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {g.items.map((it) => {
-                    const on = picked[g.id] === it.id;
+                    const on = (picked[g.id] ?? []).includes(it.id);
                     /*
                      * A priced extra gets a stepper once added — the same control
                      * the dish card uses, so the drink behaves identically
                      * whichever way a customer reaches it. Everything else stays a
-                     * plain toggle: a starch is one, and picking another replaces
-                     * it rather than adding a second.
+                     * plain toggle. Starch and vegetable side now hold several, so a
+                     * second tick adds rather than replaces.
                      */
                     const cap = maxPerExtra(g, it);
                     const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
@@ -672,7 +713,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                           <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
                             <button
                               type="button"
-                              onClick={() => (count <= 1 ? toggle(g.id, it.id) : setCount(count - 1))}
+                              onClick={() => (count <= 1 ? toggle(g, it.id) : setCount(count - 1))}
                               className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
                               aria-label={count <= 1 ? `Remove ${it.label}` : `One fewer ${it.label}`}
                             >
@@ -694,21 +735,22 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                     }
 
                     /*
-                     * Starch and vegetable side are a choice — one of these, so
-                     * they read as radio buttons. The soft drink is an add-on, so
-                     * it reads as a checkbox: unticked by default, tick to take
-                     * it, tick again to put it back. Same shape as the dish card,
-                     * because the owner asked for checkboxes and because a radio
-                     * group cannot say "no drink".
+                     * Starch and vegetable side take more than one (owner, 15 Nov
+                     * 2026), so they are a group of checkboxes, not a radio pair:
+                     * "Pap · Dumpling" and "Chakalaka · Atchaar" are both ordinary
+                     * requests. Only a group that holds a single answer stays a
+                     * radio — the protein, where picking another replaces the
+                     * first. The soft drink is a checkbox too: unticked by
+                     * default, tick to take it, tick again to put it back.
                      */
-                    const isChoice = !g.priced;
+                    const isChoice = !g.priced && Number(g.max) <= 1;
                     return (
                       <button
                         key={it.id}
                         type="button"
                         role={isChoice ? 'radio' : 'checkbox'}
                         aria-checked={on}
-                        onClick={() => toggle(g.id, it.id)}
+                        onClick={() => toggle(g, it.id)}
                         className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                       >
                         <span className="flex min-w-0 items-center gap-2">

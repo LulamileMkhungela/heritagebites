@@ -30,7 +30,7 @@
 
 export type LocationResult =
   | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
-  | { status: 'denied'; reason: 'blocked' | 'unavailable' | 'timeout' | 'unsupported' };
+  | { status: 'denied'; reason: 'insecure' | 'blocked' | 'unavailable' | 'timeout' | 'unsupported' };
 
 interface Coords {
   lat: number;
@@ -59,6 +59,22 @@ function askPosition(options: PositionOptions): Promise<Coords> {
 export async function requestLocation(): Promise<LocationResult> {
   if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
     return { status: 'denied', reason: 'unsupported' };
+  }
+
+  /*
+   * The order matters, and it is the bug the owner hit.
+   *
+   * Browsers only expose geolocation on a secure origin — https, or localhost.
+   * On plain http (an IP address, a LAN host, some preview links) the permission
+   * prompt NEVER APPEARS: `getCurrentPosition` fails immediately with
+   * PERMISSION_DENIED, and this code used to report that as "you blocked it,
+   * allow it in your site settings". The customer had blocked nothing, and the
+   * advice sent them hunting for a switch that would not help.
+   *
+   * Checking `isSecureContext` first means the message can say the true reason.
+   */
+  if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    return { status: 'denied', reason: 'insecure' };
   }
 
   /* Precise first. A GPS fix is worth waiting for; it is what the radius needs. */
@@ -92,8 +108,23 @@ export async function requestLocation(): Promise<LocationResult> {
  */
 export function deniedMessage(reason: Extract<LocationResult, { status: 'denied' }>['reason']): string {
   switch (reason) {
+    case 'insecure':
+      /*
+       * The honest version of the message that used to say "blocked". This
+       * happens on any http:// address and is not something the customer can fix
+       * from their side, so the advice has to be a working alternative — the
+       * address box — rather than a switch that does not exist for them.
+       */
+      return 'Location needs a secure (https) connection, so this page cannot ask for it. Type your address and pick it from the list — that works just as well.';
     case 'blocked':
-      return 'Location is blocked for this site. Allow it in your browser’s site settings, or type your address and pick it from the list.';
+      /*
+       * Two causes look identical here: the customer tapped Block on a previous
+       * visit, or the browser is refusing for its own reasons. The prompt
+       * cannot be re-shown by the page — only the customer can change it — so
+       * the message says where the switch is AND that the address box is a full
+       * alternative, because the second one is usually faster.
+       */
+      return 'Your browser is not sharing a location with this site — that switch is in the address bar (the icon beside the address), under Location. Allow it there and tap the button again, or type your address and pick it from the list.';
     case 'unsupported':
       return 'This browser cannot share a location. Type your address and pick it from the list instead.';
     case 'timeout':

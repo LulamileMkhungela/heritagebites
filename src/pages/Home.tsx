@@ -133,15 +133,19 @@ function Hero({ onOrder }: { onOrder: () => void }) {
           </div>
 
           {/*
-            Three figures in a row overflows on a 360px phone: "R100,00" at
-            text-3xl is wider than a third of the screen, so it ran into the
-            service window beside it. The figures scale with the viewport and
-            the row is allowed to wrap to two lines rather than collide.
+            Two figures, not three.
+
+            The middle one used to be the service window ("12:00–13:30"), and the
+            owner asked for it gone (16 Nov 2026): the footer's Kitchen hours
+            already prints both days with their exact times, so the same range
+            was stated twice on every screen — once as a headline figure, once as
+            the detail. A range nobody can act on is not a headline; the number of
+            service days is, because it tells a first-time visitor this is a
+            two-day kitchen before they plan around it.
           */}
-          <dl className="mt-10 grid max-w-lg grid-cols-2 gap-x-4 gap-y-5 border-t border-bone/15 pt-6 sm:grid-cols-3">
+          <dl className="mt-10 grid max-w-lg grid-cols-2 gap-x-4 gap-y-5 border-t border-bone/15 pt-6">
             {[
               [zar(traditional?.price ?? 100), 'traditional plate'],
-              [`${s?.serviceWindow.open ?? '12:00'}–${s?.serviceWindow.close ?? '13:30'}`, 'service window'],
               ['2', 'service days a week'],
             ].map(([v, k]) => (
               <div key={k}>
@@ -329,11 +333,11 @@ function PlateMenuCTA() {
     <section className="border-y-2 border-ink/10 bg-bone-2 py-16">
       <div className="mx-auto max-w-7xl px-4">
         <SectionLabel>Build it yourself</SectionLabel>
-        <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">One protein, one starch, one side</h2>
+        <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">One protein, your starches, your sides</h2>
         <p className="mt-3 max-w-2xl text-ink/65">
           Choose from the traditional kitchen at {zar(traditional?.price ?? 100)} a plate, or the contemporary kitchen at{' '}
-          {zar(contemporary?.price ?? 130)}. Starch and vegetable side are included; delivery is the only extra, and it is
-          priced at checkout.
+          {zar(contemporary?.price ?? 130)}. Starches and vegetable sides are included — take more than one if you eat them
+          together; delivery is the only extra, and it is priced at checkout.
         </p>
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           {catalog.plateMenus.map((plate) => (
@@ -445,7 +449,14 @@ function ServiceRules() {
           ? `${zar(settings.deliveryFlat)}, free over ${zar(settings.freeDeliveryAbove)}`
           : zar(settings.deliveryFlat),
     ],
-    ['Outside Sandton & Rosebank', `A delivery fee applies, up to ${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen`],
+    /*
+     * The "Outside Sandton & Rosebank — a delivery fee applies" row is gone
+     * (owner, 16 Nov 2026). It repeated the two suburbs as a boundary and then
+     * put a fee on everything outside them, which is not the rule and never was:
+     * there is one radius, 15 km, and the fee bands are what vary. The row above
+     * now carries that answer on its own, so the table does not contradict
+     * itself in the customer's reading.
+     */
   ];
 
   return (

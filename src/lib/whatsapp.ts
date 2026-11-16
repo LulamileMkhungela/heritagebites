@@ -17,7 +17,7 @@
  *     line list is capped and the count says so.
  */
 import { zar } from './format';
-import { extraLabel } from '../../shared/service.js';
+import { extraLabel, sastNow } from '../../shared/service.js';
 import type { CartLine, Fulfilment } from './types';
 
 /** Used when the catalogue has not loaded yet or has no number configured. */
@@ -43,6 +43,39 @@ export interface OrderMessageOptions {
   payment?: 'yoco' | 'cash';
   /** Extra line at the top, e.g. "Can I get this for Friday?" */
   intro?: string;
+  /**
+   * The cooking day the customer booked the order for.
+   *
+   * The owner asked for this in as many words (16 Nov 2026): the message "must
+   * mention it is an order from this day for a specific day". Without it the
+   * kitchen reads a Saturday message as a Saturday order, and a booking for two
+   * Fridays' time looks like a late lunch. `forDate` is the day they chose; the
+   * date it was sent is added by the message itself.
+   *
+   * `shortLabel` is the human form the catalogue serves ("Friday 4 Dec"), so the
+   * wording cannot drift from the day picker on the checkout.
+   */
+  booking?: { label: string; isToday?: boolean } | null;
+  /** The moment the message was written, defaulting to now. */
+  placedAt?: Date;
+}
+
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * "Wednesday 19 Nov", in Johannesburg time.
+ *
+ * Built from `sastNow` rather than `toLocaleDateString`, because the browser is
+ * not necessarily in South Africa: a customer checking out from London must
+ * still produce a message that says which South African day the order was
+ * placed. The shared helper is the same clock the server uses, so the two
+ * cannot disagree about what "today" is.
+ */
+export function sastLabel(now: Date = new Date()): string {
+  const at = sastNow(now);
+  const [, month, day] = at.dateKey.split('-').map(Number);
+  return `${WEEKDAY_SHORT[at.day]} ${day} ${MONTHS_SHORT[month - 1]}`;
 }
 
 /** How many basket lines are listed in full before summarising the rest. */
@@ -68,8 +101,30 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
     rows.push(`• …and ${lines.length - MAX_LINES} more item${lines.length - MAX_LINES === 1 ? '' : 's'}`);
   }
 
+  /*
+   * "Today is Wednesday 19 Nov. This order is for Friday 21 Nov."
+   *
+   * The first line is the one the kitchen triages from, so it carries both
+   * facts: when the customer sent it, and which cooking day it is for. A
+   * booking made on a Saturday for next Friday used to arrive looking like a
+   * Saturday order — this is the fix the owner asked for, in their own words
+   * ("mention it is an order from this day for a specific day").
+   */
+  const placedAt = opts.placedAt ?? new Date();
+  const sentLabel = sastLabel(placedAt);
+  const bookingLabel = opts.booking?.label?.trim() || '';
+
   const parts: string[] = [];
-  parts.push(opts.intro?.trim() || 'Hi Heritage Bites! I would like to order:');
+  if (bookingLabel) {
+    parts.push(
+      opts.intro?.trim() ||
+        `Hi Heritage Bites! This is an order placed ${sentLabel}, for ${bookingLabel}.`,
+    );
+    parts.push(`Order placed: ${sentLabel}`);
+    parts.push(`Cooking day: ${bookingLabel}`);
+  } else {
+    parts.push(opts.intro?.trim() || 'Hi Heritage Bites! I would like to order:');
+  }
   parts.push('');
   parts.push(rows.join('\n'));
   parts.push('');

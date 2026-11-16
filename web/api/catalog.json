@@ -119,7 +119,7 @@
       "category": "traditional",
       "price": 100,
       "image": "/img/plate-mogodu.jpg",
-      "description": "Beef tripe, slow-cooked in a rich onion-and-tomato gravy, with one starch and one vegetable side.",
+      "description": "Beef tripe, slow-cooked in a rich onion-and-tomato gravy, with your starches and vegetable sides.",
       "story": "Mogodu is judged by the time it is given. It is the plate our regulars order first, and the one we are proudest to send out.",
       "tags": [
         "tripe"
@@ -135,6 +135,8 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "pap",
@@ -162,6 +164,8 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "braised-cabbage",
@@ -226,7 +230,7 @@
       "category": "traditional",
       "price": 100,
       "image": "/img/plate-tshotlo.jpg",
-      "description": "Pounded beef cooked until it pulls apart, with one starch and one vegetable side.",
+      "description": "Pounded beef cooked until it pulls apart, with your starches and vegetable sides.",
       "story": "Tshotlo is the plate that feeds a table. The beef is cooked long and pounded so the sauce and the meat become one thing.",
       "tags": [
         "pounded beef"
@@ -242,6 +246,8 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "pap",
@@ -269,6 +275,8 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "braised-cabbage",
@@ -333,7 +341,7 @@
       "category": "traditional",
       "price": 100,
       "image": "/img/plate-chicken-hardbody.jpg",
-      "description": "Chicken cooked hardbody style in a savoury gravy, with one starch and one vegetable side.",
+      "description": "Chicken cooked hardbody style in a savoury gravy, with your starches and vegetable sides.",
       "story": "",
       "tags": [
         "chicken"
@@ -349,6 +357,8 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "pap",
@@ -376,6 +386,8 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "braised-cabbage",
@@ -441,7 +453,7 @@
       "price": 100,
       "image": "/img/plate-placeholder.svg",
       "imagePending": true,
-      "description": "Beef trotters braised until the gravy turns glossy, with one starch and one vegetable side.",
+      "description": "Beef trotters braised until the gravy turns glossy, with your starches and vegetable sides.",
       "story": "",
       "tags": [
         "trotters"
@@ -457,6 +469,8 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "pap",
@@ -484,6 +498,8 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "braised-cabbage",
@@ -549,7 +565,7 @@
       "price": 100,
       "image": "/img/plate-placeholder.svg",
       "imagePending": true,
-      "description": "Sheep head, cooked and served the traditional way, with one starch and one vegetable side.",
+      "description": "Sheep head, cooked and served the traditional way, with your starches and vegetable sides.",
       "story": "",
       "tags": [
         "sheep head"
@@ -565,6 +581,8 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "pap",
@@ -592,6 +610,8 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "braised-cabbage",
@@ -656,7 +676,7 @@
       "category": "contemporary",
       "price": 130,
       "image": "/img/plate-wings.jpg",
-      "description": "Chicken wings basted to order — honey soy or chilli sriracha — with one starch and one vegetable side.",
+      "description": "Chicken wings basted to order — honey soy or chilli sriracha — with your starches and vegetable sides.",
       "story": "",
       "tags": [
         "chicken",
@@ -690,6 +710,8 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "potato-mash",
@@ -722,6 +744,8 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "braised-cabbage",
@@ -781,7 +805,7 @@
       "category": "contemporary",
       "price": 130,
       "image": "/img/plate-short-rib.jpg",
-      "description": "BBQ beef short rib, grilled and glazed, with one starch and one vegetable side.",
+      "description": "BBQ beef short rib, grilled and glazed, with your starches and vegetable sides.",
       "story": "",
       "tags": [
         "beef",
@@ -798,6 +822,8 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "potato-mash",
@@ -830,6 +856,8 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "braised-cabbage",
@@ -889,7 +917,7 @@
       "category": "contemporary",
       "price": 130,
       "image": "/img/plate-lamb-stew.jpg",
-      "description": "Lamb stewed until tender in a rich gravy, with one starch and one vegetable side.",
+      "description": "Lamb stewed until tender in a rich gravy, with your starches and vegetable sides.",
       "story": "",
       "tags": [
         "lamb",
@@ -906,6 +934,8 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "potato-mash",
@@ -938,6 +968,8 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
+          "multiple": true,
+          "max": 3,
           "choices": [
             {
               "id": "braised-cabbage",
@@ -993,7 +1025,7 @@
       "id": "traditional",
       "name": "Traditional Plate",
       "price": 100,
-      "blurb": "One protein, one starch and one vegetable side, from the traditional kitchen.",
+      "blurb": "One protein, and as many starches and vegetable sides as you like (up to three of each), from the traditional kitchen.",
       "image": "/img/plate-mogodu.jpg",
       "groups": [
         {
@@ -1033,7 +1065,7 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
-          "max": 1,
+          "max": 3,
           "items": [
             {
               "id": "pap",
@@ -1061,7 +1093,7 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
-          "max": 1,
+          "max": 3,
           "items": [
             {
               "id": "braised-cabbage",
@@ -1121,7 +1153,7 @@
       "id": "contemporary",
       "name": "Contemporary Plate",
       "price": 130,
-      "blurb": "One protein, one starch and one vegetable side, from the contemporary kitchen.",
+      "blurb": "One protein, and as many starches and vegetable sides as you like (up to three of each), from the contemporary kitchen.",
       "image": "/img/plate-short-rib.jpg",
       "groups": [
         {
@@ -1151,7 +1183,7 @@
           "id": "starch",
           "label": "Choose your starch",
           "required": true,
-          "max": 1,
+          "max": 3,
           "items": [
             {
               "id": "potato-mash",
@@ -1184,7 +1216,7 @@
           "id": "veg",
           "label": "Choose your vegetable side",
           "required": true,
-          "max": 1,
+          "max": 3,
           "items": [
             {
               "id": "braised-cabbage",
@@ -1468,7 +1500,7 @@
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Monday",
-    "timeLabel": "13:30",
+    "timeLabel": "19:31",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Monday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
@@ -1480,6 +1512,168 @@
       "Friday"
     ]
   },
+  "bookableDates": [
+    {
+      "date": "2026-11-19",
+      "dayLabel": "Thursday",
+      "label": "Thursday 19 Nov",
+      "shortLabel": "Thursday 19 Nov",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-11-20",
+      "dayLabel": "Friday",
+      "label": "Friday 20 Nov",
+      "shortLabel": "Friday 20 Nov",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-11-26",
+      "dayLabel": "Thursday",
+      "label": "Thursday 26 Nov",
+      "shortLabel": "Thursday 26 Nov",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-11-27",
+      "dayLabel": "Friday",
+      "label": "Friday 27 Nov",
+      "shortLabel": "Friday 27 Nov",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-03",
+      "dayLabel": "Thursday",
+      "label": "Thursday 3 Dec",
+      "shortLabel": "Thursday 3 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-04",
+      "dayLabel": "Friday",
+      "label": "Friday 4 Dec",
+      "shortLabel": "Friday 4 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-10",
+      "dayLabel": "Thursday",
+      "label": "Thursday 10 Dec",
+      "shortLabel": "Thursday 10 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-11",
+      "dayLabel": "Friday",
+      "label": "Friday 11 Dec",
+      "shortLabel": "Friday 11 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-17",
+      "dayLabel": "Thursday",
+      "label": "Thursday 17 Dec",
+      "shortLabel": "Thursday 17 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-18",
+      "dayLabel": "Friday",
+      "label": "Friday 18 Dec",
+      "shortLabel": "Friday 18 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-24",
+      "dayLabel": "Thursday",
+      "label": "Thursday 24 Dec",
+      "shortLabel": "Thursday 24 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-25",
+      "dayLabel": "Friday",
+      "label": "Friday 25 Dec",
+      "shortLabel": "Friday 25 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2026-12-31",
+      "dayLabel": "Thursday",
+      "label": "Thursday 31 Dec",
+      "shortLabel": "Thursday 31 Dec",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2027-01-01",
+      "dayLabel": "Friday",
+      "label": "Friday 1 Jan",
+      "shortLabel": "Friday 1 Jan",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2027-01-07",
+      "dayLabel": "Thursday",
+      "label": "Thursday 7 Jan",
+      "shortLabel": "Thursday 7 Jan",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2027-01-08",
+      "dayLabel": "Friday",
+      "label": "Friday 8 Jan",
+      "shortLabel": "Friday 8 Jan",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    }
+  ],
   "payments": {
     "provider": "yoco",
     "online": false,

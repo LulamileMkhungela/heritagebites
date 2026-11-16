@@ -147,6 +147,18 @@ function LiveCheckout() {
    */
   const online = Boolean(payments?.online);
   const [method, setMethodRaw] = useState<PayMethod>('card');
+  /*
+   * Which cooking day this order is for.
+   *
+   * Empty means "the next one", which is what an order sent on the day has
+   * always meant. A date means the customer booked ahead — the owner's request
+   * of 16 Nov 2026 was precisely that nobody should have to wait for the *next*
+   * Thursday when a later one suits them better. The list itself comes from the
+   * server, so it is the same list the kitchen validates the order against.
+   */
+  const bookable = catalog?.bookableDates ?? [];
+  const [plannedDate, setPlannedDate] = useState('');
+  const planned = bookable.find((d) => d.date === plannedDate) ?? null;
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   /*
@@ -181,7 +193,7 @@ function LiveCheckout() {
     | { status: 'idle' }
     | { status: 'asking' }
     | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
-    | { status: 'denied'; reason: 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
+    | { status: 'denied'; reason: 'insecure' | 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
   >({ status: 'idle' });
   const [quote, setQuote] = useState<{ subtotal: number; delivery: number; total: number } | null>(null);
   const [state, setState] = useState<'idle' | 'quoting' | 'paying'>('idle');
@@ -234,7 +246,15 @@ function LiveCheckout() {
    * and on a rest day the site takes pre-orders for the next window on purpose
    * — the copy above promises exactly that — so those are not `closed`.
    */
-  const closed = Boolean(service?.orderingClosed);
+  /*
+   * Closed *for today* only. A customer who has booked a later cooking day is
+   * not asking for today, so the gate must not stop them — the server makes the
+   * same distinction, and a page that refuses an order the API would accept is
+   * the worst kind of bug: it loses the sale and reports nothing.
+   */
+  const closedToday = Boolean(service?.orderingClosed);
+  /** Closed for *today* and no later day booked — the only state that gates. */
+  const closed = closedToday && !planned;
 
 
   /*
@@ -250,7 +270,8 @@ function LiveCheckout() {
     fulfilment,
     customer,
     payment: waPayment,
-    ...(closed ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
+    ...(planned ? { booking: { label: planned.label, isToday: planned.isToday } } : {}),
+    ...(closed && !planned ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
   });
 
   /*
@@ -443,6 +464,9 @@ function LiveCheckout() {
         customer: { ...customer, lat: measured?.lat ?? null, lng: measured?.lng ?? null },
         items: toApiItems(lines),
         payment: { method: method2 },
+        /* The day the customer picked. Absent means "the next window", which is
+           what the server has always assumed. */
+        ...(planned ? { serviceWindow: { date: planned.date } } : {}),
       });
 
       /* The basket is only emptied once the order exists on the server. */
@@ -556,9 +580,15 @@ function LiveCheckout() {
         <div className="mt-4 rounded-2xl border-2 border-ochre bg-ochre/10 p-4">
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">{service.headline}</p>
           <p className="mt-1 text-[13px] font-medium text-ink">{service.message}</p>
+          {/*
+            The panel only appears when nothing later is booked, so it never has
+            to explain a booking — the day picker below is the way out, and it
+            is the honest one: the kitchen cannot cook today, but it can cook
+            next Thursday and will say so.
+          */}
           <p className="mt-2 text-[13px] leading-relaxed text-ink/70">
-            We have stopped taking orders for today. If you need food sooner, message us — the kitchen will tell you whether
-            it can prepare your order anyway.
+            We have stopped taking orders for today, but you can book any cooking day below and check out normally. If
+            you need food sooner, message us — the kitchen will tell you whether it can prepare it anyway.
           </p>
           <a
             href={waOrderHref}
@@ -573,6 +603,71 @@ function LiveCheckout() {
 
       <form onSubmit={submit} className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_1fr]" noValidate>
         <div className="space-y-8">
+          {/*
+            Which cooking day.
+
+            The owner's request (16 Nov 2026): "users are not limited in waiting
+            for Thursday… they can order in advance for any Thursday/Friday".
+            Before this the site only ever named *the next* window, so a
+            customer planning a family lunch two weeks out had no way to say so.
+
+            A day, not a date picker: the kitchen cooks two days a week, and a
+            free calendar would offer a hundred days it cannot cook on. The
+            first choice is "the next cooking day", which is what an order
+            placed today means when the customer does not think about it.
+          */}
+          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
+            <p className="mt-1 text-xs leading-snug text-ink/55">
+              We cook on{' '}
+              {bookable.length > 1
+                ? `${settings?.hours.filter((h) => !h.closed).map((h) => h.label).join(' and ') ?? 'Thursdays and Fridays'}`
+                : 'Thursdays and Fridays'}
+              , {settings?.serviceWindow.open}–{settings?.serviceWindow.close}. Book any of them — today is not the
+              only option.
+            </p>
+            {bookable.length === 0 ? (
+              <p className="mt-3 text-sm text-ink/60">
+                The kitchen has not opened its diary yet. Add the basket and send it on WhatsApp — we will confirm a day
+                with you.
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {bookable.map((d) => {
+                  const on = plannedDate === d.date;
+                  return (
+                    <button
+                      key={d.date}
+                      type="button"
+                      onClick={() => setPlannedDate(on ? '' : d.date)}
+                      aria-pressed={on}
+                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block">{d.label}</span>
+                        <span className="font-mono text-[11px] text-ink/50">
+                          {d.open}–{d.close}
+                          {d.isToday && <span className="text-ochre-deep"> · today</span>}
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                      >
+                        {on && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <p className="mt-3 text-[12px] leading-relaxed text-ink/50">
+              {planned
+                ? `Booked for ${planned.label}. The order leaves today and the kitchen cooks it on that day — the WhatsApp message says so in as many words.`
+                : 'Leave this alone and the kitchen cooks it on the next cooking day, the same way an order placed on the day always has.'}
+            </p>
+          </fieldset>
+
           {/* Fulfilment */}
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
             <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</legend>
@@ -1041,6 +1136,14 @@ function PreviewCheckout() {
   const [customer, setCustomer] = useState({ name: '', phone: '', address: '', suburb: '', notes: '' });
   const [method, setMethod] = useState<'link' | 'cash'>('link');
   /*
+   * The same day choice the live checkout offers. On the static build the
+   * kitchen reads it in the WhatsApp message, which is the only record there is
+   * — so it matters more here, not less.
+   */
+  const bookable = catalog?.bookableDates ?? [];
+  const [plannedDate, setPlannedDate] = useState('');
+  const planned = bookable.find((d) => d.date === plannedDate) ?? null;
+  /*
    * The coordinates of the address the customer *picked*, as opposed to the ones
    * their device reported. The published site needs both: the address box is the
    * route for anyone who will not share a location, and the distance rule is the
@@ -1053,7 +1156,7 @@ function PreviewCheckout() {
     | { status: 'idle' }
     | { status: 'asking' }
     | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
-    | { status: 'denied'; reason: 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
+    | { status: 'denied'; reason: 'insecure' | 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
   >({ status: 'idle' });
 
   const rules = {
@@ -1097,6 +1200,7 @@ function PreviewCheckout() {
     fulfilment,
     payment: method === 'cash' ? 'cash' : 'yoco',
     customer,
+    ...(planned ? { booking: { label: planned.label, isToday: planned.isToday } } : {}),
   });
 
   return (
@@ -1110,6 +1214,56 @@ function PreviewCheckout() {
 
       <form onSubmit={(e) => e.preventDefault()} className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <div className="space-y-6">
+          {/* Which cooking day — the same choices the live checkout offers. */}
+          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
+            <p className="mt-1 text-xs leading-snug text-ink/55">
+              We cook Thursdays and Fridays, {settings?.serviceWindow.open}–{settings?.serviceWindow.close}. Book any of
+              them — today is not the only option.
+            </p>
+            {bookable.length === 0 ? (
+              <p className="mt-3 text-sm text-ink/60">
+                The diary is not open for booking on this build. Add the basket and send it on WhatsApp — we will confirm
+                a day with you.
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {bookable.map((d) => {
+                  const on = plannedDate === d.date;
+                  return (
+                    <button
+                      key={d.date}
+                      type="button"
+                      onClick={() => setPlannedDate(on ? '' : d.date)}
+                      aria-pressed={on}
+                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block">{d.label}</span>
+                        <span className="font-mono text-[11px] text-ink/50">
+                          {d.open}–{d.close}
+                          {d.isToday && <span className="text-ochre-deep"> · today</span>}
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                      >
+                        {on && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {planned && (
+              <p className="mt-3 text-[12px] leading-relaxed text-ink/50">
+                Your WhatsApp message will open with “order placed today, for {planned.label}”, so the kitchen knows
+                which day to cook it for.
+              </p>
+            )}
+          </fieldset>
+
           {/* Payment */}
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
             <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</legend>
