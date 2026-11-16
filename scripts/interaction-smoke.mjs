@@ -560,12 +560,17 @@ await step('choosing required options then adding puts the line in the basket', 
   /* A plate needs one starch and one vegetable side. Take the first choice in
      each required group — the sheet paints its story a tick before its option
      buttons mount, so wait for them rather than reading synchronously. */
-  await s1.waitFor(() => s1.byText('button[aria-pressed]', /^Pap$/)[0], 'the starch options to mount', 15000);
+  /*
+   * Option controls are radio (required) and checkbox (add-ons) now, so they
+   * expose aria-checked. Accept either attribute: the payment-method buttons are
+   * still toggles and this helper is used for both.
+   */
+  await s1.waitFor(() => s1.byText('button[aria-checked], button[aria-pressed]', /^Pap$/)[0], 'the starch options to mount', 15000);
   const groups = [...s1.doc.querySelectorAll('[role="dialog"] fieldset')];
   let chosen = 0;
   for (const fs of groups) {
     if (!fs.querySelector('.text-ochre-deep')) continue;
-    const opt = fs.querySelector('button[aria-pressed]');
+    const opt = fs.querySelector('button[aria-checked], button[aria-pressed]');
     if (!opt) throw new Error('required group has no options');
     s1.click(opt);
     chosen++;
@@ -1545,7 +1550,7 @@ await step('the plate builder requires its mandatory groups before adding', asyn
   for (const fs of groups) {
     const required = Boolean(fs.querySelector('.text-ochre-deep'));
     if (!required) continue;
-    const opt = [...fs.querySelectorAll('button[aria-pressed]')][0];
+    const opt = [...fs.querySelectorAll('button[aria-checked], button[aria-pressed]')][0];
     if (!opt) throw new Error('required group has no options');
     s5.click(opt);
     chosen++;
@@ -1555,6 +1560,49 @@ await step('the plate builder requires its mandatory groups before adding', asyn
   await s5.waitFor(() => /Add plate/i.test(builderAdd()?.textContent ?? ''), 'button to become Add plate', 8000);
   if (addBtn().disabled) throw new Error('add-plate still disabled after choosing every required group');
   return `${chosen} required group(s) satisfied`;
+});
+
+await step('required groups are choices and the add-on is a checkbox', async () => {
+  /*
+   * Owner, 15 Nov 2026: "did you add the add extras as checkbox on Choose your
+   * starch, Choose your vegetable side, Add a soft drink".
+   *
+   * The distinction is the answer, and it is not cosmetic:
+   *
+   *   - Starch and vegetable side are *choices*: exactly one, and picking
+   *     another replaces it. A checkbox would let a plate hold two starches.
+   *   - The soft drink is an *add-on*: none by default, tick to take one, tick
+   *     again to put it back. A radio group cannot express "no drink" at all.
+   *
+   * So the two required groups expose role=radio and the drink exposes
+   * role=checkbox — and the drink starts unticked, because a R25 bottle nobody
+   * asked for is money taken for nothing.
+   */
+  const dlg = builderDialog();
+  if (!dlg) throw new Error('the builder is not open');
+  const fieldsets = [...dlg.querySelectorAll('fieldset')];
+
+  const semantics = fieldsets.map((fs) => {
+    const legend = fs.querySelector('legend')?.textContent ?? '';
+    const radios = fs.querySelectorAll('[role="radio"]').length;
+    const checks = fs.querySelectorAll('[role="checkbox"]').length;
+    return { legend, radios, checks };
+  });
+
+  const starch = semantics.find((x) => /starch/i.test(x.legend));
+  const veg = semantics.find((x) => /vegetable side/i.test(x.legend));
+  const drink = semantics.find((x) => /soft drink/i.test(x.legend));
+
+  if (!starch || !veg || !drink) throw new Error(`could not find all three groups: ${JSON.stringify(semantics)}`);
+  if (starch.radios === 0 || starch.checks > 0) throw new Error(`starch rendered as ${JSON.stringify(starch)}`);
+  if (veg.radios === 0 || veg.checks > 0) throw new Error(`vegetable side rendered as ${JSON.stringify(veg)}`);
+  if (drink.checks === 0 || drink.radios > 0) throw new Error(`the drink is not a checkbox: ${JSON.stringify(drink)}`);
+
+  /* The drink starts unticked. */
+  const drinkBox = [...dlg.querySelectorAll('[role="checkbox"]')][0];
+  if (drinkBox.getAttribute('aria-checked') === 'true') throw new Error('the soft drink starts ticked, which charges for a bottle nobody asked for');
+
+  return 'starch + veg are radios, the drink is an unticked checkbox';
 });
 
 await step('the soft drink takes a quantity, and prices per bottle', async () => {

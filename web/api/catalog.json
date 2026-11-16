@@ -65,11 +65,11 @@
           "status": "coming-soon"
         },
         {
-          "id": "archive-motogo-magwinya",
-          "name": "Motogo & Magwinya",
+          "id": "archive-motogo",
+          "name": "Motogo",
           "price": 45,
           "image": "/img/mabele.jpg",
-          "description": "Warm sorghum porridge with two fat cakes on the side.",
+          "description": "Warm sorghum porridge, cooked slow and served the way it is meant to be eaten.",
           "status": "coming-soon"
         }
       ]
@@ -1467,12 +1467,12 @@
     "isServiceDay": false,
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Sunday",
-    "timeLabel": "20:38",
+    "dayLabel": "Monday",
+    "timeLabel": "13:30",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Sunday: closed",
+    "todayLabel": "Monday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Sunday is a rest day",
+    "headline": "Monday is a rest day",
     "message": "The pots are resting today — and honestly, so are we. We cook on Thursdays and Fridays, 12:00–13:30, and we are working towards being open every day. We are back Thursday 12:00–13:30.",
     "shortMessage": "We cook Thursdays and Fridays, 12:00–13:30. Your order goes in first on Thursday.",
     "serviceDays": [
@@ -1494,5 +1494,5 @@
   "notifications": {
     "push": false
   },
-  "today": 0
+  "today": 1
 }

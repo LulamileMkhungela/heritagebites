@@ -563,3 +563,23 @@ export function mapPhotonResponse(body, settings) {
   }
   return out;
 }
+
+/**
+ * A real Rosebank address, used as the reference point for "far".
+ *
+ * Owner, 15 Nov 2026: "use 33 Baker Street in Rosebank as reference-far". It is
+ * the far end of the included run — the address the delivery rule is checked
+ * against in tests and in the smoke suite, so "inside the area" means a place a
+ * customer actually lives, not a pair of coordinates somebody typed.
+ *
+ * It is a *fixture*, never a delivery origin. The order is still measured from
+ * `KITCHEN_ORIGIN`; this only proves that the edge of Rosebank is comfortably
+ * inside the free ring and well inside the 15 km limit.
+ */
+export const REFERENCE_FAR_ADDRESS = {
+  line: '33 Baker Street, Rosebank, Johannesburg',
+  suburb: 'Rosebank',
+  /* Approximate OpenStreetMap position for Baker Street, Rosebank. */
+  lat: -26.1403,
+  lng: 28.0443,
+};

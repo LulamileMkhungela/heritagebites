@@ -279,16 +279,39 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                     );
                   }
 
+                  /*
+                   * Required groups are a choice — one of these, so they read as
+                   * radio buttons. An optional, priced group is an add-on, and an
+                   * add-on reads as a checkbox: unticked by default, tick to take
+                   * it, tick again to put it back. That is the shape the owner
+                   * asked for ("add extras as checkbox") and the shape Uber Eats
+                   * uses, and the difference is not decoration — a radio group
+                   * cannot express "none of these", which is exactly what an
+                   * optional extra most often means.
+                   */
+                  const isChoice = Boolean(o.required);
                   return (
                     <button
                       key={c.id}
                       type="button"
+                      role={isChoice ? 'radio' : 'checkbox'}
+                      aria-checked={isOn}
                       onClick={() => toggle(o.id, c.id, o.multiple, Boolean(o.required))}
-                      aria-pressed={isOn}
-                      className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                     >
-                      <span>{c.label}</span>
-                      {c.priceDelta > 0 && <span className="font-mono text-xs text-ink/55">+ {zar(c.priceDelta)}</span>}
+                      <span className="flex min-w-0 items-center gap-2">
+                        {/* The visible control: a box for a checkbox, a dot for a radio. */}
+                        <span
+                          aria-hidden="true"
+                          className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${isOn ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                        >
+                          {isOn && (isChoice
+                            ? <span className="h-1.5 w-1.5 rounded-full bg-ink" />
+                            : <svg viewBox="0 0 12 12" className="h-3 w-3 text-ink" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
+                        </span>
+                        <span className="min-w-0">{c.label}</span>
+                      </span>
+                      {c.priceDelta > 0 && <span className="shrink-0 font-mono text-xs text-ink/55">+ {zar(c.priceDelta)}</span>}
                     </button>
                   );
                 })}

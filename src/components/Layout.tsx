@@ -323,7 +323,7 @@ function Footer() {
             <p className="font-display text-3xl font-semibold">Heritage Bites</p>
           </div>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-bone/65">
-            South African plates cooked with care, Thursdays and Fridays. Delivered in Sandton and Rosebank, and further afield by arrangement.
+            South African plates cooked with care, Thursdays and Fridays. Delivered in Sandton and Rosebank, and anywhere else within 15km.
           </p>
           {/*
             Two words each, on purpose: "Call us" and "Email us" are the whole

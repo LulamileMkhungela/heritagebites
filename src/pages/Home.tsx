@@ -429,7 +429,13 @@ function ServiceRules() {
   const rows = [
     ['Service days', settings.hours.filter((h) => !h.closed).map((h) => h.label).join(' and ')],
     ['Service window', `${settings.serviceWindow.open}–${settings.serviceWindow.close}`],
-    ['Delivery areas', settings.deliveryAreas.join(' and ')],
+    /*
+     * Owner, 15 Nov 2026: "Delivery areas — Rosebank, Sandton and other areas
+     * within 15km radius". The two names alone read as a closed list, which is
+     * the misconception that made a Bryanston customer think they could not
+     * order at all. The radius is part of the answer.
+     */
+    ['Delivery areas', `${settings.deliveryAreas.join(', ')} and other areas within ${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm}km radius`],
     ['Minimum order', `${zar(settings.minDeliveryOrder)} for delivery`],
     [
       'Delivery fee',

@@ -322,9 +322,17 @@ export const comingSoon = [
         description: 'Golden fat cakes, fried in the morning and best eaten warm.',
         status: 'coming-soon',
       },
+      /*
+       * Owner, 15 Nov 2026: "update Motogo & Magwinya into Motogo".
+       *
+       * The dish is the porridge. The fat cakes were a side the photo happened to
+       * show, and a name that promises two of them is a promise the kitchen has
+       * to keep on every plate — so the name and the description both say what
+       * is actually being sold.
+       */
       {
-        id: 'archive-motogo-magwinya', name: 'Motogo & Magwinya', price: 45, image: img('mabele'),
-        description: 'Warm sorghum porridge with two fat cakes on the side.',
+        id: 'archive-motogo', name: 'Motogo', price: 45, image: img('mabele'),
+        description: 'Warm sorghum porridge, cooked slow and served the way it is meant to be eaten.',
         status: 'coming-soon',
       },
       // The breakfast plate had no photograph of its own.

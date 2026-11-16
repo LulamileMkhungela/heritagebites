@@ -693,16 +693,36 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                       );
                     }
 
+                    /*
+                     * Starch and vegetable side are a choice — one of these, so
+                     * they read as radio buttons. The soft drink is an add-on, so
+                     * it reads as a checkbox: unticked by default, tick to take
+                     * it, tick again to put it back. Same shape as the dish card,
+                     * because the owner asked for checkboxes and because a radio
+                     * group cannot say "no drink".
+                     */
+                    const isChoice = !g.priced;
                     return (
                       <button
                         key={it.id}
                         type="button"
+                        role={isChoice ? 'radio' : 'checkbox'}
+                        aria-checked={on}
                         onClick={() => toggle(g.id, it.id)}
-                        aria-pressed={on}
-                        className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                        className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                       >
-                        <span>{it.label}</span>
-                        <span className={`font-mono text-xs ${g.priced ? 'font-semibold text-ink/70' : 'text-ink/40'}`}>
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            aria-hidden="true"
+                            className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                          >
+                            {on && (isChoice
+                              ? <span className="h-1.5 w-1.5 rounded-full bg-ink" />
+                              : <svg viewBox="0 0 12 12" className="h-3 w-3 text-ink" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
+                          </span>
+                          <span className="min-w-0">{it.label}</span>
+                        </span>
+                        <span className={`shrink-0 font-mono text-xs ${g.priced ? 'font-semibold text-ink/70' : 'text-ink/40'}`}>
                           {g.priced ? `+ ${zar(Number(it.price) || 0)}` : 'Included'}
                         </span>
                       </button>

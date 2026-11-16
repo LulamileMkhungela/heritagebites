@@ -22,6 +22,7 @@ import {
   DELIVERY_RADIUS_BBOX,
   DELIVERY_ZONES,
   KITCHEN_ORIGIN,
+  REFERENCE_FAR_ADDRESS,
   radiusBbox,
   radiusBboxParam,
   deliveryFeeForPoint,
@@ -34,6 +35,9 @@ import {
 } from '../../shared/address.js';
 
 const settings = { deliveryAreas: ['Rosebank', 'Sandton'] };
+
+/** Is a point inside an envelope? Used by the envelope tests below. */
+const inBox14 = (b, lat, lng) => lat >= b.minLat && lat <= b.maxLat && lng >= b.minLon && lng <= b.maxLon;
 const OUTSIDE = 'Other — outside Sandton & Rosebank';
 
 /* ------------------------- The delivery radius -------------------------- */
@@ -532,4 +536,29 @@ test('a 15 km radius still serves the two included suburbs outright', () => {
   /* Bryanston is the nearest real place outside it, and now also the furthest
      comfortably-inside-the-limit one. */
   assert.equal(deliveryZoneFor(-26.0515, 28.0207, { includedTo: 6, maxKm: 15, fee: 30 }).zone, 'surcharge');
+});
+
+/* --------------- The reference address the owner named ----------------- */
+
+test('33 Baker Street, Rosebank is inside the free ring, at 1.7 km', () => {
+  /*
+   * Owner, 15 Nov 2026: "use 33 Baker Street in Rosebank as reference-far".
+   *
+   * Rosebank's far edge is the address that decides whether "inside Sandton and
+   * Rosebank" is a promise the site keeps. At 1.7 km it is well inside both the
+   * 6 km included ring and the 15 km limit — there is no reading of the rule in
+   * which this address pays a fee or is refused.
+   */
+  const zone = deliveryZoneFor(REFERENCE_FAR_ADDRESS.lat, REFERENCE_FAR_ADDRESS.lng);
+  assert.equal(zone.zone, 'included');
+  assert.ok(zone.distanceKm < 6, `expected under the 6 km included ring, saw ${zone.distanceKm}`);
+  assert.ok(zone.distanceKm < DELIVERY_ZONES.maxKm, 'and far inside the 15 km limit');
+
+  /* It must also be findable in the address box — the ring is no use if the
+     search will not answer for the street. */
+  assert.equal(inBox14(DELIVERY_RADIUS_BBOX, REFERENCE_FAR_ADDRESS.lat, REFERENCE_FAR_ADDRESS.lng), true);
+
+  /* And the named suburb in the line is the one deliveryAreaFor reports, so a
+     customer who types it is not told they contradicted themselves. */
+  assert.equal(deliveryAddressProblem(REFERENCE_FAR_ADDRESS.line, 'Rosebank', settings), null);
 });

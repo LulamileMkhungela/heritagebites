@@ -24,7 +24,9 @@ export default function Specials() {
 
   const { settings, service, plateMenus } = catalog;
   const openDays = settings.hours.filter((h) => !h.closed);
-  const areas = settings.deliveryAreas.join(' & ');
+  /* Names plus the radius, for the same reason as the home page: two suburb
+     names alone read as the whole service area. */
+  const areas = `${settings.deliveryAreas.join(', ')} and other areas within ${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm}km radius`;
   const waLink = waHref(settings.whatsapp, 'Hi Heritage Bites! What is on special this week?');
 
   return (
