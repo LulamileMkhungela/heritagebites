@@ -262,6 +262,17 @@ describe('catalogue + search', () => {
     ]);
 
     const archived = c.comingSoon.flatMap((cat) => cat.items);
+
+    /*
+     * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
+     * Sides & Relishes". Every side a plate offers must have a card there, and it
+     * must be the same list the plate builder reads.
+     */
+    const sidesSection = c.comingSoon.find((cat) => cat.id === 'sides-relishes');
+    const sideCards = new Set(sidesSection.items.map((item) => item.id));
+    for (const side of [...new Set(c.plateMenus.flatMap((p) => p.groups.filter((g) => g.id === 'veg').flatMap((g) => g.items.map((i) => i.id))))]) {
+      assert.ok(sideCards.has(`archive-${side}`), `the vegetable side "${side}" is missing from Sides & Relishes`);
+    }
     /* Eight, because Heritage Pots (three cards) was hidden on 14 Nov 2026. */
     assert.ok(archived.length >= 8);
 
@@ -278,7 +289,17 @@ describe('catalogue + search', () => {
         /* The owner asked for archive cards to read like menu cards: name,
            guide price and a line of description. */
         assert.equal(typeof item.price, 'number', `${item.id} needs a guide price to show`);
-        assert.ok(item.price > 0, `${item.id} has a nonsense price`);
+        /*
+         * A vegetable side has no price of its own — it is chosen *inside* the
+         * R100/R130 plate — so `0` is the honest value for it and the card prints
+         * no price at all. Every other archive dish is a dish the kitchen would
+         * sell on its own, and a zero there would be a broken card.
+         */
+        const sideOfAPlate = cat.id === 'sides-relishes' && c.plateMenus.some((plate) =>
+          plate.groups.some((group) => group.id === 'veg' && group.items.some((i) => `archive-${i.id}` === item.id)),
+        );
+        if (sideOfAPlate) assert.equal(item.price, 0, `${item.id} is a side, so it carries no price`);
+        else assert.ok(item.price > 0, `${item.id} has a nonsense price`);
         assert.ok(item.description && item.description.length > 20, `${item.id} needs a description`);
         assert.equal(item.status, 'coming-soon');
         assert.ok(item.image.startsWith('/img/'), `${item.id} needs a photo to show`);
@@ -299,6 +320,41 @@ describe('catalogue + search', () => {
       body: JSON.stringify({ items: [{ itemId: archived[0].id, qty: 1 }], fulfilment: 'collection' }),
     });
     assert.equal(quoted.status, 422, 'an archive dish cannot be priced');
+  });
+
+  /*
+   * Owner, 16 Nov 2026: starch and vegetable side are multi-select. The browser
+   * is not the enforcement point — a hand-made request is the cheap way to test
+   * that the cap holds, and that the cap is not so tight it undoes the request.
+   */
+  test('a plate takes several starches and sides, up to the catalogue cap', async () => {
+    const quote = (selections) =>
+      fetch(`${base}/api/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{ kind: 'plate', plateId: 'traditional', qty: 1, selections }],
+          fulfilment: 'delivery',
+          customer: { lat: -26.1075, lng: 28.055, suburb: 'Sandton', address: '12 Rivonia Road, Sandton' },
+        }),
+      }).then(json);
+
+    /* Two starches and two vegetables, all included in the plate price. */
+    const ok = await quote({ protein: ['mogodu'], starch: ['pap', 'dumpling'], veg: ['chakalaka', 'morogo'] });
+    assert.equal(ok.errors, undefined, `two of each must be accepted: ${JSON.stringify(ok.errors)}`);
+    assert.equal(ok.lines[0].unitPrice, 100, 'starches are inside the plate price, not added to it');
+    const labels = ok.lines[0].options.map((o) => o.label);
+    for (const wanted of ['Pap', 'Dumpling', 'Chakalaka', 'Morogo']) {
+      assert.ok(labels.includes(wanted), `${wanted} must reach the kitchen line (got ${labels.join(', ')})`);
+    }
+
+    /* Four is one too many, and the refusal says so in words a person wrote. */
+    const tooMany = await quote({ protein: ['mogodu'], starch: ['pap', 'dumpling', 'samp', 'mabele'], veg: ['chakalaka'] });
+    assert.ok(tooMany.errors?.some((e) => /up to 3 starches/i.test(e)), `unexpected refusal: ${JSON.stringify(tooMany.errors)}`);
+
+    /* And a group may not be left empty just because it can hold several. */
+    const empty = await quote({ protein: ['mogodu'], starch: [], veg: ['chakalaka'] });
+    assert.ok(empty.errors?.some((e) => /choose your starch/i.test(e)), 'a required group still needs one answer');
   });
 
   test('search finds plates by local name', async () => {
@@ -520,6 +576,60 @@ describe('the service window gate', () => {
         assert.equal(res.status, 409, 'a window that has gone by must not accept an order');
         assert.equal(body.closed, true);
         assert.match(body.errors[0], /WhatsApp/i, 'the refusal must offer a way through');
+      } finally {
+        delete process.env.HB_CLOCK_LABEL;
+      }
+    } finally {
+      if (previous === undefined) delete process.env.HB_ORDERS_OPEN;
+      else process.env.HB_ORDERS_OPEN = previous;
+    }
+  });
+
+  /*
+   * The owner's complaint, both halves of it (16 Nov 2026): "users are not
+   * limited in waiting for Thursday… they can order in advance for any
+   * Thursday/Friday". A customer who names a later cooking day is not asking for
+   * today, so today's closed window must not refuse them.
+   */
+  test("a future cooking day is accepted even after today\'s window has closed", async () => {
+    const previous = process.env.HB_ORDERS_OPEN;
+    delete process.env.HB_ORDERS_OPEN;
+    try {
+      /* Friday 13 Nov at 15:09 — today is closed. Next Thursday is the 19th. */
+      process.env.HB_CLOCK_LABEL = '2026-11-13T15:09:00+02:00';
+      try {
+        const { res, body } = await placeOrder({ serviceWindow: { date: '2026-11-19' } });
+        assert.equal(res.status, 201, 'a booked future day must be accepted');
+        assert.equal(body.order.serviceWindow.date, '2026-11-19');
+        assert.match(body.order.serviceWindow.plannedFor, /Thursday 19 Nov/);
+        assert.equal(body.order.serviceWindow.booked, true);
+        assert.equal(body.order.serviceWindow.isPreOrder, true);
+      } finally {
+        delete process.env.HB_CLOCK_LABEL;
+      }
+    } finally {
+      if (previous === undefined) delete process.env.HB_ORDERS_OPEN;
+      else process.env.HB_ORDERS_OPEN = previous;
+    }
+  });
+
+  test('a day the kitchen never cooks is refused, whatever the client claims', async () => {
+    const previous = process.env.HB_ORDERS_OPEN;
+    delete process.env.HB_ORDERS_OPEN;
+    try {
+      process.env.HB_CLOCK_LABEL = '2026-11-13T15:09:00+02:00';
+      try {
+        /* A Sunday, and a Thursday nine months out. */
+        for (const date of ['2026-11-22', '2027-08-05']) {
+          const { res, body } = await placeOrder({ serviceWindow: { date } });
+          assert.equal(res.status, 422, `${date} must not be bookable`);
+          assert.equal(body.unavailableDate, date);
+          assert.ok(Array.isArray(body.bookableDates) && body.bookableDates.length > 0, 'the error must offer the real days');
+          for (const d of body.bookableDates) {
+            const weekday = new Date(`${d.date}T00:00:00Z`).getUTCDay();
+            assert.ok(weekday === 4 || weekday === 5, `${d.date} is not a cooking day`);
+          }
+        }
       } finally {
         delete process.env.HB_CLOCK_LABEL;
       }
@@ -950,13 +1060,16 @@ describe('checkout', () => {
     assert.equal(rosebank.body.order.deliveryArea, 'Rosebank');
   });
 
-  test('the delivery boundary is a 50 km radius, not a suburb list', async () => {
+  test('the delivery boundary is a 15 km radius, not a suburb list', async () => {
     /*
-     * Owner, 14 Nov 2026: outside Sandton/Rosebank a fee is added, and past
-     * 50 km the order is refused. Both are decided by distance, so a Pretoria
-     * address is refused for being 45 km away — not for failing to name a suburb
-     * in a list. A Sandton address with no coordinates still goes through: an
-     * unmeasurable address is never treated as too far.
+     * Owner, 15 Nov 2026: the limit is 15 km, down from 50. Outside
+     * Sandton/Rosebank a fee is added; past 15 km the order is refused.
+     *
+     * Both are decided by distance, so a Midrand address at ~16 km is refused
+     * for being 16 km away — not for failing to name a suburb in a list. That
+     * distinction matters more at 15 km than it did at 50: a tenth of a kilometre
+     * is now a real share of the radius, and the address is the only thing that
+     * says which side of it someone is on.
      */
     const far = await placeOrder({
       customer: {
@@ -967,16 +1080,36 @@ describe('checkout', () => {
     });
     assert.equal(far.res.status, 422);
     assert.match(far.body.errors[0], /52\.2 km away/i);
-    assert.match(far.body.errors[0], /within 50 km/);
+    assert.match(far.body.errors[0], /within 15 km/);
     assert.equal(far.body.outOfRange, true);
+
+    /*
+     * And the new edge is tested on its own terms: Midrand is 16.1 km out, which
+     * 50 km allowed and 15 km does not. An address that was deliverable
+     * yesterday must be refused today, or the change did not take.
+     */
+    const midrand = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '1 Church Street, Midrand', suburb: 'Midrand',
+        lat: -25.9992, lng: 28.1263,
+      },
+    });
+    assert.equal(midrand.res.status, 422, '16.1 km is outside a 15 km radius');
+    assert.match(midrand.body.errors[0], /16\.1 km away/i);
+    assert.match(midrand.body.errors[0], /within 15 km/);
   });
 
   test('an address just outside the included ring pays the fee, and is still served', async () => {
     /*
      * Bryanston is about 8 km from the kitchen: outside the included Sandton and
-     * Rosebank ring, comfortably inside the 50 km limit. It must be priced with
+     * Rosebank ring, comfortably inside the 15 km limit. It must be priced with
      * the fee rather than refused — the owner's rule is "another fee will be
      * added", not "no".
+
+     * Bryanston is also the closest thing to the new edge that still works: at
+     * 8.8 km it is over half the radius, so it is the case that proves the fee
+     * ring did not disappear when the boundary moved in.
      */
     const { res, body } = await placeOrder({
       customer: {
@@ -1025,6 +1158,38 @@ describe('checkout', () => {
     });
     assert.equal(res.status, 201, 'an honest "other" is never a contradiction');
     assert.ok(body.order.totals.delivery > 0, 'and it is priced by distance, not by suburb name');
+  });
+
+  test('an unlocated address outside the included suburbs is asked for coordinates instead of being priced as free', async () => {
+    /*
+     * "Is it calculating valid distance, or only showing addresses within 15 km?"
+     * was the owner's question, and the honest answer before this test was
+     * "only the second". A hand-typed Bryanston address with no map coordinates
+     * and the area select still on "another area" used to price as included —
+     * no distance was ever measured, so nothing could refuse it.
+     */
+    const { res, body } = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '1 Bryanston Drive, Bryanston', suburb: 'Another area — within 15 km',
+      },
+    });
+    assert.equal(res.status, 422, 'an unmeasurable address cannot be priced');
+    assert.equal(body.needsLocation, true);
+    assert.match(body.errors[0], /Pick it from the list/i);
+  });
+
+  test('an unlocated address that names an included suburb is still accepted', async () => {
+    /* The customer said Sandton in the address and in the select: inside by
+       their own words, priced at the plate price, no location demand. */
+    const { res, body } = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '12 Rivonia Road, Sandton', suburb: 'Sandton',
+      },
+    });
+    assert.equal(res.status, 201);
+    assert.equal(body.order.totals.delivery, 0);
   });
 
   test('an address that names the area is trusted even when the select was skipped', async () => {
@@ -1426,8 +1591,9 @@ describe('the head served to a crawler', () => {
   test('the home page declares its own title, description and canonical', async () => {
     const { res, body } = await html('/');
     assert.equal(res.status, 200);
-    assert.match(body, /<title>South African Plates in Rosebank &amp; Sandton — Heritage Bites<\/title>/);
-    assert.match(body, /<meta name="description" content="South African plates from R100/);
+    assert.match(body, /<title>South African Food Delivery in Sandton &amp; Rosebank — Heritage Bites<\/title>/);
+    /* The words a customer types come first: traditional food, delivered, Sandton. */
+    assert.match(body, /<meta name="description" content="Traditional South African plates from R100/);
     assert.match(body, /<link rel="canonical" href="https:\/\/heritagebites\.test\/" \/>/);
     assert.match(body, /<meta name="robots" content="index,follow/);
   });
@@ -1437,7 +1603,7 @@ describe('the head served to a crawler', () => {
       '/menu': /<title>The Menu &amp; Prices — Heritage Bites<\/title>/,
       '/specials': /<title>This Week&#39;s Cooking &amp; Delivery — Heritage Bites<\/title>/,
       '/about': /<title>Our Story, Vision &amp; Mission — Heritage Bites<\/title>/,
-      '/contact': /<title>Contact &amp; WhatsApp — Heritage Bites<\/title>/,
+      '/contact': /<title>Contact, WhatsApp &amp; Directions — Heritage Bites<\/title>/,
       '/policies': /<title>Policies &amp; Terms — Heritage Bites<\/title>/,
       '/passport': /<title>Loyalty Card — Heritage Bites<\/title>/,
       '/quest': /<title>Ask Us to Cook It — Heritage Bites<\/title>/,
@@ -1477,7 +1643,8 @@ describe('the head served to a crawler', () => {
     const restaurant = nodes.find((node) => node['@type'] === 'Restaurant');
     assert.ok(restaurant, 'no Restaurant node');
     assert.equal(restaurant.name, 'Heritage Bites');
-    assert.deepEqual(restaurant.areaServed.map((a) => a.name), ['Rosebank', 'Sandton']);
+    /* The suburbs, plus the metro they sit in — and nothing the shop cannot reach. */
+    assert.deepEqual(restaurant.areaServed.map((a) => a.name), ['Rosebank', 'Sandton', 'Johannesburg']);
     assert.equal(restaurant.telephone, '+27670137587');
     assert.equal(restaurant.address, undefined, 'the business has no public street address to claim');
   });
@@ -1515,5 +1682,28 @@ describe('the head served to a crawler', () => {
     } else {
       assert.equal(sitemap.status, 404, 'a missing sitemap must 404, not answer with the shell');
     }
+  });
+});
+
+/*
+ * The bug that made "Use my current location" impossible on the live site.
+ *
+ * A Permissions-Policy of `geolocation=()` is a denial lock on *our own origin*:
+ * the browser refuses every geolocation call, never shows the permission prompt,
+ * and reports PERMISSION_DENIED — so the customer was told they had blocked
+ * something they had not, and no amount of allowing it in site settings helped.
+ * `geolocation=(self)` is what lets the origin that asks, and it is asserted here
+ * rather than trusted to a comment, because the failure is invisible until a real
+ * customer taps the button.
+ */
+describe('geolocation is allowed to ask', () => {
+  test('the API permits geolocation for this origin, and denies the camera and microphone', async () => {
+    const res = await fetch(`${base}/api/catalog`);
+    const policy = res.headers.get('permissions-policy') ?? '';
+    assert.match(policy, /geolocation=\(self\)/, 'geolocation must not be denied to this origin');
+    assert.doesNotMatch(policy, /geolocation=\(\)/, 'an empty allowlist blocks the prompt entirely');
+    /* Nothing on this site uses these, so they stay fully off. */
+    assert.match(policy, /camera=\(\)/);
+    assert.match(policy, /microphone=\(\)/);
   });
 });

@@ -6,7 +6,17 @@
  * worse bug than a slow first paint. The worker exists for push, and nothing else.
  *
  * Served from the site root so its scope covers every route.
+ *
+ * Because it caches nothing, it is also the one place that can *clear* what an
+ * older version of this site left behind. The owner asked for the cache to be
+ * cleared (16 Nov 2026) after a preview kept showing an old build: a customer
+ * whose browser held a previous worker would otherwise keep being served from a
+ * cache no current file refers to, and no amount of redeploying fixes it.
  */
+
+/** A name change forces the browser to install this worker even if the file's
+ *  bytes were never updated, which is how a stuck client gets unstuck. */
+const CACHE_VERSION = 'hb-clear-2';
 
 self.addEventListener('install', () => {
   // Take over as soon as possible: a new version should alert, not wait for tabs.
@@ -14,8 +24,34 @@ self.addEventListener('install', () => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      /*
+       * Delete every cache this origin has — not just ours.
+       *
+       * The site has never intentionally stored one, so anything found here is
+       * the residue of an older build or a browser that cached a prototype. The
+       * risk of deleting is nil (nothing is read back from them); the risk of
+       * leaving them is a customer seeing last week's prices.
+       */
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((key) => caches.delete(key)));
+      } catch {
+        /* Private mode and hardened browsers may refuse; losing push over it
+           would be worse than a stale cache, so this never throws. */
+      }
+      await self.clients.claim();
+    })(),
+  );
 });
+
+/*
+ * `CACHE_VERSION` is read here so the constant is not tree-shaken away by a
+ * minifier — it exists to change the worker's bytes, which is what makes the
+ * browser notice an update at all.
+ */
+self.__hbCacheVersion = CACHE_VERSION;
 
 self.addEventListener('push', (event) => {
   let payload = {};

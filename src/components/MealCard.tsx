@@ -46,9 +46,18 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
       </button>
 
       <div className="flex flex-1 flex-col p-4">
+        {/*
+          No prep figure beside the name.
+          
+          It read "20′" next to "Tlhakwana Plate", which the owner called out as
+          confusing — and it was: a number with no label, sitting where a price
+          or a badge usually goes, saying nothing a customer could act on. The
+          kitchen cooks in batches on two days a week, so a per-plate prep time
+          was never the honest answer to "when will it arrive" anyway. The dish
+          sheet states the serving and the rating, which are real.
+        */}
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
-          <span className="shrink-0 font-mono text-xs text-ink/45">{item.prepMins}′</span>
         </div>
         {item.localName && (
           <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-ochre-deep">
@@ -56,18 +65,9 @@ export function MealCard({ item, onOpen, compact = false }: { item: MenuItem; on
           </p>
         )}
         {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>}
-        {/*
-          The price sits on the photograph above; this line used to repeat it and
-          add "collect price, no extras", which stopped being true twice over —
-          there is no collection any more, and delivery outside Sandton/Rosebank
-          does carry a fee. The card states the one thing that is always true:
-          what is in the plate, and that delivery is included where it is.
-        */}
-        {!compact && (
-          <p className="mt-2 font-mono text-xs uppercase tracking-wider text-ink/40">
-            One complete plate · delivery included in Sandton &amp; Rosebank
-          </p>
-        )}
+        {/* The price is on the photograph and the description says what is in the
+            plate; this line repeated both and named the two included suburbs on
+            every card. Removed at the owner's request (16 Nov 2026). */}
 
         <div className="mt-auto flex items-center gap-2 pt-4">
           <Button size="sm" variant="dark" onClick={quickAdd} disabled={item.available === false} block>
@@ -149,7 +149,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
     onClose();
   };
 
-  const toggle = (optionId: string, choiceId: string, multiple?: boolean, required = true) => {
+  const toggle = (optionId: string, choiceId: string, multiple?: boolean, required = true, max?: number) => {
     setPicked((prev) => {
       if (!multiple) {
         /* Tapping the chosen answer of an optional option clears it — that is
@@ -163,8 +163,18 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
         return { ...prev, [optionId]: choiceId };
       }
       const current = (Array.isArray(prev[optionId]) ? prev[optionId] : []) as string[];
-      const next = current.includes(choiceId) ? current.filter((c) => c !== choiceId) : [...current, choiceId];
-      return { ...prev, [optionId]: next };
+      if (current.includes(choiceId)) {
+        /* A required group keeps at least one answer; unticking the last one
+           would leave the dish incomplete and the error would arrive at the
+           basket instead of here. */
+        if (required && current.length === 1) return prev;
+        return { ...prev, [optionId]: current.filter((c) => c !== choiceId) };
+      }
+      /* The catalogue's own cap, so the button cannot add a fourth starch the
+         server would refuse. */
+      const cap = Math.max(1, Math.min(20, Math.floor(Number(max) || 1)));
+      if (current.length >= cap) return prev;
+      return { ...prev, [optionId]: [...current, choiceId] };
     });
   };
 
@@ -193,10 +203,9 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7">
           <p className="text-[15px] leading-relaxed text-ink/75">{item.description}</p>
 
-          <dl className="mt-5 grid grid-cols-3 gap-2 rounded-2xl border-2 border-ink/10 bg-white p-3 text-center">
+          <dl className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border-2 border-ink/10 bg-white p-3 text-center">
             {[
               ['Serves', String(item.serves)],
-              ['Prep', `${item.prepMins} min`],
               ['Rating', `★ ${item.rating}`],
             ].map(([k, v]) => (
               <div key={k}>
@@ -218,6 +227,15 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
               <legend className="mb-2 flex items-center gap-2 text-sm font-semibold">
                 {o.label}
                 {o.required ? <span className="text-ochre-deep">*</span> : <span className="text-xs font-normal text-ink/40">optional{o.multiple ? ' · choose any' : ''}</span>}
+                {/*
+                  A required group that holds several (starch, vegetable side)
+                  says so, because a row of checkboxes under a bare "Choose your
+                  starch" still reads as a single choice. The cap comes from the
+                  catalogue, so this can never promise a fourth one.
+                */}
+                {o.multiple && o.required && (
+                  <span className="text-xs font-normal text-ink/45">· pick up to {Math.max(1, Math.min(20, Number(o.max) || 1))}</span>
+                )}
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {o.choices.map((c) => {
@@ -258,7 +276,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                         <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
                           <button
                             type="button"
-                            onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required)) : setCount(count - 1))}
+                            onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max) : setCount(count - 1))}
                             className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
                             aria-label={count <= 1 ? `Remove ${c.label}` : `One fewer ${c.label}`}
                           >
@@ -279,16 +297,45 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                     );
                   }
 
+                  /*
+                   * Required groups are a choice — one of these, so they read as
+                   * radio buttons. An optional, priced group is an add-on, and an
+                   * add-on reads as a checkbox: unticked by default, tick to take
+                   * it, tick again to put it back. That is the shape the owner
+                   * asked for ("add extras as checkbox") and the shape Uber Eats
+                   * uses, and the difference is not decoration — a radio group
+                   * cannot express "none of these", which is exactly what an
+                   * optional extra most often means.
+                   */
+                  /*
+                   * A radio only where the group holds ONE answer. A required
+                   * group that takes several (starch, vegetable side) is a row of
+                   * checkboxes — its required star says "pick at least one", not
+                   * "pick exactly one".
+                   */
+                  const isChoice = Boolean(o.required) && !o.multiple;
                   return (
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => toggle(o.id, c.id, o.multiple, Boolean(o.required))}
-                      aria-pressed={isOn}
-                      className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                      role={isChoice ? 'radio' : 'checkbox'}
+                      aria-checked={isOn}
+                      onClick={() => toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max)}
+                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                     >
-                      <span>{c.label}</span>
-                      {c.priceDelta > 0 && <span className="font-mono text-xs text-ink/55">+ {zar(c.priceDelta)}</span>}
+                      <span className="flex min-w-0 items-center gap-2">
+                        {/* The visible control: a box for a checkbox, a dot for a radio. */}
+                        <span
+                          aria-hidden="true"
+                          className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${isOn ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                        >
+                          {isOn && (isChoice
+                            ? <span className="h-1.5 w-1.5 rounded-full bg-ink" />
+                            : <svg viewBox="0 0 12 12" className="h-3 w-3 text-ink" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
+                        </span>
+                        <span className="min-w-0">{c.label}</span>
+                      </span>
+                      {c.priceDelta > 0 && <span className="shrink-0 font-mono text-xs text-ink/55">+ {zar(c.priceDelta)}</span>}
                     </button>
                   );
                 })}

@@ -22,7 +22,10 @@ export interface MenuOption {
   id: string;
   label: string;
   required?: boolean;
+  /** True when the option holds several answers (a starch and a side, both). */
   multiple?: boolean;
+  /** How many answers a `multiple` option may hold. One when absent. */
+  max?: number;
   /**
    * True when this option is an add-on sold *alongside* the dish rather than
    * included in its price — the soft drink. Only a priced option may charge for
@@ -204,6 +207,20 @@ export interface ServiceStatus {
   serviceDays: string[];
 }
 
+/** One cooking day a customer can order for, from `bookableDates()`. */
+export interface BookableDate {
+  /** "YYYY-MM-DD", the value sent with the order. */
+  date: string;
+  /** "Friday 4 Dec" — what the customer reads. */
+  label: string;
+  shortLabel?: string;
+  dayLabel: string;
+  open: string;
+  close: string;
+  isToday?: boolean;
+  special?: boolean;
+}
+
 /**
  * What the server says about taking money.
  *
@@ -244,6 +261,12 @@ export interface Catalog {
   policies: Policy[];
   settings: Settings;
   service: ServiceStatus;
+  /**
+   * The cooking days a customer can book ahead, nearest first. Served by the
+   * API from the same shared rule it validates an order against, so the day the
+   * checkout offers is always a day the kitchen will accept.
+   */
+  bookableDates?: BookableDate[];
   payments: PaymentConfig;
   contact: { inboxConfigured: boolean };
   /**

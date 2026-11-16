@@ -39,38 +39,6 @@ export const DELIVERY_BBOX = {
   maxLat: -26.075,
 };
 
-/**
- * The envelope the geocoder may answer from on the LIVE checkout.
- *
- * This is the 50 km delivery radius, not the two-suburb area list.
- *
- * It used to be `DELIVERY_BBOX` — Rosebank and Sandton only — which quietly made
- * the radius unreachable: a customer in Bryanston, 9 km from the kitchen and
- * squarely inside the paid-delivery ring, typed their address and the suggestion
- * box answered with nothing. The owner's rule is "outside Sandton/Rosebank a fee
- * applies, past 50 km we refuse" — a rule that can only be applied to someone
- * whose address the box will accept.
- *
- * Roughly ±0.5° around the kitchen, which is comfortably wider than 50 km in
- * every direction (0.45° of latitude is 50 km; at this longitude 0.5° is about
- * 50 km east–west). The hard limit is still enforced by distance, not by this
- * box: the box only decides what the geocoder is *asked* about.
- */
-export const DELIVERY_RADIUS_BBOX = {
-  minLon: 27.55,
-  minLat: -26.58,
-  maxLon: 28.55,
-  maxLat: -25.68,
-};
-
-/** `bbox` query value for the radius envelope. */
-export const DELIVERY_RADIUS_BBOX_PARAM = [
-  DELIVERY_RADIUS_BBOX.minLon,
-  DELIVERY_RADIUS_BBOX.minLat,
-  DELIVERY_RADIUS_BBOX.maxLon,
-  DELIVERY_RADIUS_BBOX.maxLat,
-].join(',');
-
 /** `bbox` query value in the order Photon expects. */
 export const DELIVERY_BBOX_PARAM = [DELIVERY_BBOX.minLon, DELIVERY_BBOX.minLat, DELIVERY_BBOX.maxLon, DELIVERY_BBOX.maxLat].join(',');
 
@@ -100,7 +68,7 @@ export const DELIVERY_AREA_POINTS = [
  * Where the kitchen cooks from, and the two rings drawn around it.
  *
  * The owner's rule (14 Nov 2026): the plate price includes delivery inside
- * Sandton and Rosebank; outside that ring a fee is added; past 50 km the order
+ * Sandton and Rosebank; outside that ring a fee is added; past the limit the order
  * is refused outright rather than quoted. Collection no longer exists, so every
  * order is measured from here.
  *
@@ -122,19 +90,67 @@ export const KITCHEN_ORIGIN = { lat: -26.126, lng: 28.049 };
 export const DELIVERY_ZONES = {
   /** Free: delivery is already in the plate price. */
   includedTo: 6,
-  /** Beyond the included ring, up to the hard limit, a fee applies. */
-  maxKm: 50,
+  /**
+   * Beyond the included ring, up to the hard limit, a fee applies.
+   *
+   * Owner, 15 Nov 2026: 15 km, not 50. The kitchen cooks one service and drives
+   * every order itself, so the boundary is how far a plate still arrives hot —
+   * which is a morning's run, not a province.
+   */
+  maxKm: 15,
   /**
    * GUESSED FEE — the owner has not given a number yet.
    *
-   * R30 is the one amount the codebase already carried as a default delivery
-   * flat fee (`deliveryFeeCents` falls back to 35), and it is a plausible
-   * per-run charge for a 6–50 km trip. It is NOT confirmed. Every surface that
-   * prints it reads `settings.outsideFee`, so changing the seed value changes
-   * the whole site at once.
+   * R30 for the 6–15 km trip. It is NOT confirmed. Every surface that prints it
+   * reads `settings.outsideFee`, so changing the seed value changes the whole
+   * site at once.
    */
   fee: 30,
 };
+
+/**
+ * The envelope the geocoder may answer from, derived from the radius itself.
+ *
+ * It is a square around the kitchen, and the sides are `KM_PER_DEGREE` generous
+ * on purpose: a square barely contains its circle, and an address on the edge
+ * must still be findable so the distance check can say yes or no to it. Too
+ * tight and the box silently refuses people the kitchen would have delivered to
+ * — the exact bug that made the radius unreachable when the box was the two
+ * suburb names.
+ *
+ * Derived rather than written down because the two numbers drifted apart once
+ * already: the limit changed, the box did not, and the search answered with
+ * places the checkout then refused. One `maxKm`, one envelope.
+ */
+export function radiusBbox(maxKm = DELIVERY_ZONES.maxKm, origin = KITCHEN_ORIGIN) {
+  /*
+   * 1° of latitude is 111.32 km everywhere; 1° of longitude is that times
+   * cos(latitude), so at Johannesburg's −26.1° a degree of longitude is about
+   * 100 km. A 15 km radius therefore needs ~0.135° of latitude and ~0.15° of
+   * longitude — the margin covers the square-versus-circle corner.
+   */
+  const latDeg = Math.abs(Number(maxKm) || 0) / 111.32;
+  const lngDeg = latDeg / Math.cos((Number(origin?.lat ?? KITCHEN_ORIGIN.lat) * Math.PI) / 180);
+  const pad = 1.1;
+  return {
+    minLon: Number((Number(origin?.lng ?? KITCHEN_ORIGIN.lng) - lngDeg * pad).toFixed(4)),
+    minLat: Number((Number(origin?.lat ?? KITCHEN_ORIGIN.lat) - latDeg * pad).toFixed(4)),
+    maxLon: Number((Number(origin?.lng ?? KITCHEN_ORIGIN.lng) + lngDeg * pad).toFixed(4)),
+    maxLat: Number((Number(origin?.lat ?? KITCHEN_ORIGIN.lat) + latDeg * pad).toFixed(4)),
+  };
+}
+
+/** `bbox` query value for a radius envelope — `minLon,minLat,maxLon,maxLat`. */
+export function radiusBboxParam(maxKm = DELIVERY_ZONES.maxKm, origin = KITCHEN_ORIGIN) {
+  const b = radiusBbox(maxKm, origin);
+  return [b.minLon, b.minLat, b.maxLon, b.maxLat].join(',');
+}
+
+/** The envelope for the default radius, kept as a value for older callers. */
+export const DELIVERY_RADIUS_BBOX = radiusBbox();
+
+/** The matching `bbox` query value. */
+export const DELIVERY_RADIUS_BBOX_PARAM = radiusBboxParam();
 
 /** Great-circle distance in km. Exported so the checkout can measure a point. */
 export function haversineKm(aLat, aLng, bLat, bLng) {
@@ -242,7 +258,7 @@ export function filterSuggestions(suggestions, options) {
    * `radius` switches this from "only the two approved suburbs" to "anywhere we
    * can reach". That is the mode the checkout uses now:
    *
-   *   - The owner's rule is a 50 km radius with a fee outside Sandton/Rosebank,
+   *   - The owner's rule is a fixed radius with a fee outside Sandton/Rosebank,
    *     NOT a two-suburb list. Filtering suggestions down to the two suburbs
    *     meant a Bryanston address produced no suggestion at all, so the radius
    *     could never be applied to the people it exists for.
@@ -354,7 +370,10 @@ export function applyHouseHint(suggestions, query) {
   const house = match[1];
   return (suggestions ?? []).map((suggestion) => {
     if (/^\d/.test(suggestion.line)) return suggestion;
-    return { ...suggestion, house, line: `${house} ${suggestion.line}` };
+    /* The typed house number belongs in the structured part too, not only in
+       the sentence — otherwise picking a street would blank the field the
+       customer had already filled in. */
+    return { ...suggestion, house: suggestion.house || house, line: `${house} ${suggestion.line}` };
   });
 }
 
@@ -520,6 +539,18 @@ export function mapPhotonFeature(feature, settings) {
     line,
     detail,
     area,
+    /*
+     * The address in its three parts, so the checkout can fill the house number,
+     * the street and the suburb into the boxes the owner asked for instead of
+     * making the customer re-split a sentence the map already understands.
+     *
+     * `suburb` is the map's own locality tag (not the delivery area): it is what
+     * goes in a postal address, and it is the field a courier actually reads.
+     */
+    house: str(props.housenumber),
+    street: str(props.street) || (str(props.name) !== str(props.city) ? str(props.name) : ''),
+    suburb: str(props.suburb) || str(props.district) || str(props.locality) || str(props.city) || str(props.town) || str(props.village),
+    city: str(props.city) || str(props.town) || str(props.village),
     lat: Number.isFinite(lat) && lat !== null && Math.abs(lat) <= 90 ? lat : null,
     lng: Number.isFinite(lng) && lng !== null && Math.abs(lng) <= 180 ? lng : null,
   };
@@ -547,3 +578,23 @@ export function mapPhotonResponse(body, settings) {
   }
   return out;
 }
+
+/**
+ * A real Rosebank address, used as the reference point for "far".
+ *
+ * Owner, 15 Nov 2026: "use 33 Baker Street in Rosebank as reference-far". It is
+ * the far end of the included run — the address the delivery rule is checked
+ * against in tests and in the smoke suite, so "inside the area" means a place a
+ * customer actually lives, not a pair of coordinates somebody typed.
+ *
+ * It is a *fixture*, never a delivery origin. The order is still measured from
+ * `KITCHEN_ORIGIN`; this only proves that the edge of Rosebank is comfortably
+ * inside the free ring and well inside the 15 km limit.
+ */
+export const REFERENCE_FAR_ADDRESS = {
+  line: '33 Baker Street, Rosebank, Johannesburg',
+  suburb: 'Rosebank',
+  /* Approximate OpenStreetMap position for Baker Street, Rosebank. */
+  lat: -26.1403,
+  lng: 28.0443,
+};

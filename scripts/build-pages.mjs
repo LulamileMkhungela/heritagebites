@@ -33,7 +33,7 @@
  * rather than deleted so the next person does not repeat it.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +61,17 @@ const dist = join(root, dir);
 const base = process.env.VITE_BASE || './';
 
 /*
+ * Where this folder is published, as the fallback for the canonical URL.
+ *
+ * It is the same constant `scripts/build-seo.mjs` uses, and it includes `/web/`
+ * because that is the folder Pages serves. A build that leaves this empty asks the
+ * browser to work the address out, which is right for a preview host and wrong on
+ * a project site — the bundle's base is relative, so the browser's guess and the
+ * static HTML would disagree, and a page cannot have two canonicals.
+ */
+const PUBLISHED_SITE_URL = 'https://lulamilemkhungela.github.io/heritagebites/web/';
+
+/*
  * Where the folder is expected to live in the browser, used only for the
  * repository-root fallback page. Default matches a project site published from
  * the branch root, which is the case this fallback exists for.
@@ -84,6 +95,20 @@ const run = (command, args, env = {}) => {
 
 /* ----------------------------------------------------------------- build -- */
 
+/*
+ * Keep a copy of the source entry before anything else.
+ *
+ * `vite build --outDir web` writes the built `index.html` *into the same folder
+ * the repository root already uses for its own source entry*, and `vite build`
+ * empties the output directory. Pointing the output at `web/` was fine until the
+ * root `index.html` was given a real crawler-facing head: a build then inherited
+ * that file's output and the next `build:pages` failed with "no seo markers to
+ * replace". Restoring it after the build makes the root entry independent of the
+ * build's output folder, whatever that folder is.
+ */
+const rootIndexPath = join(root, 'index.html');
+const rootIndexBackup = existsSync(rootIndexPath) ? readFileSync(rootIndexPath) : null;
+
 step(`Type-check and build the static preview (base: ${base})`);
 run('npx', ['tsc', '-b']);
 run('npx', ['vite', 'build', '--outDir', dir, '--emptyOutDir'], {
@@ -91,9 +116,33 @@ run('npx', ['vite', 'build', '--outDir', dir, '--emptyOutDir'], {
   VITE_STATIC_PREVIEW: '1',
   // A preview never talks to a live API, even if a stray env var says so.
   VITE_API_BASE: '',
+  /*
+   * The site's own address, compiled into the bundle.
+   *
+   * `usePageSeo` writes a canonical from `VITE_SITE_URL` when it is baked in, and
+   * otherwise guesses from the browser's location. The guess is right on a domain
+   * root and wrong on a project site: `BASE_URL` resolves to `…/heritagebites/web/`
+   * at runtime, but it is a *relative* base, so the path is only known once the
+   * page has loaded. Handing the build the same address `build-seo.mjs` writes into
+   * the static HTML means the document a crawler reads and the document a browser
+   * ends up with declare one canonical, not two.
+   *
+   * Empty here means "not known", and the runtime falls back to its own origin —
+   * which is the correct behaviour for a preview host.
+   */
+  VITE_SITE_URL:
+    process.env.HB_SITE_URL ??
+    process.env.VITE_SITE_URL ??
+    PUBLISHED_SITE_URL,
 });
 
 if (!existsSync(join(dist, 'index.html'))) fail(`vite build produced no ${dir}/index.html`);
+
+/* Put the source entry back if the build wrote over it (see the note above). */
+if (rootIndexBackup && existsSync(rootIndexPath) && readFileSync(rootIndexPath).length < 200) {
+  writeFileSync(rootIndexPath, rootIndexBackup);
+  console.log('  restored the repository-root index.html (the build had replaced it)');
+}
 
 /* -------------------------------------------------- catalogue snapshot --- */
 
@@ -169,10 +218,16 @@ writeFileSync(join(dist, '.nojekyll'), '');
 console.log(`  ${dir}/404.html, ${dir}/.nojekyll`);
 
 /*
- * Repository-root 404.html. A project site published from the branch root
- * answers every unknown path with this file; without it, a refresh on a deep
- * link shows GitHub's generic error page. It sends the visitor to the built
- * home rather than guessing at the route, so it can never loop.
+ * Repository-root 404.html. A project site published from the branch root answers
+ * every unknown path with this file; without it, a refresh on a deep link shows
+ * GitHub's own error page. It sends the visitor to the built home rather than
+ * guessing at the route, so it can never loop.
+ *
+ * Only 404.html is written here. The root `index.html` is Vite's *source entry*
+ * — overwriting it breaks the build, because Vite needs its module script and the
+ * `<!--seo:start-->` markers `build-seo.mjs` rewrites. Its crawler-facing head is
+ * maintained in the file itself for the case where Pages publishes the branch
+ * root.
  */
 writeFileSync(
   join(root, '404.html'),

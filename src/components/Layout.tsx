@@ -274,6 +274,33 @@ function ServiceStrip() {
   );
 }
 
+/**
+ * The shop's social profiles, in one place.
+ *
+ * The same three are drawn in the footer and on the contact page, and the owner
+ * asked for both. Written once so a real handle is changed once: the hrefs are
+ * placeholders (`#`) until the owner supplies the real profiles, which is
+ * deliberate — a link to a profile that does not exist is worse than a link that
+ * goes nowhere visible.
+ */
+const SOCIALS = [
+  {
+    label: 'Instagram',
+    href: '#',
+    path: 'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm5 5.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9ZM17.5 6.5h.01',
+  },
+  {
+    label: 'Facebook',
+    href: '#',
+    path: 'M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z',
+  },
+  {
+    label: 'TikTok',
+    href: '#',
+    path: 'M15 3v10a4.5 4.5 0 1 1-4.5-4.5M15 3c.3 2.7 2 4.4 5 4.8',
+  },
+];
+
 /* -------------------------------- Footer ------------------------------ */
 
 function Footer() {
@@ -311,19 +338,29 @@ function Footer() {
             A brand wordmark, not a section heading — marking it up as one put an
             <h3> on every page ahead of any real h2, so the outline jumped h1 -> h3.
           */}
-          <div className="flex items-center gap-3">
-            <img
-              src={asset('/img/logo-badge.png')}
-              alt=""
-              width={56}
-              height={56}
-              loading="lazy"
-              className="h-14 w-14 shrink-0 object-contain"
-            />
-            <p className="font-display text-3xl font-semibold">Heritage Bites</p>
+          {/*
+            The badge in the footer is the same badge as the one in the header,
+            so it behaves the same way: hovering it turns it. It is a link home
+            — a logo a customer can see is a logo they will try to tap — and the
+            `logo-spin-host` wrapper is what drives the same CSS animation the
+            header uses, so the two can never drift apart or disagree about
+            reduced-motion.
+          */}
+          <div className="logo-spin-host flex items-center gap-3">
+            <Link to="/" className="flex items-center gap-3" aria-label="Heritage Bites home">
+              <img
+                src={asset('/img/logo-badge.png')}
+                alt=""
+                width={56}
+                height={56}
+                loading="lazy"
+                className="logo-spin h-14 w-14 shrink-0 object-contain"
+              />
+              <span className="font-display text-3xl font-semibold">Heritage Bites</span>
+            </Link>
           </div>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-bone/65">
-            South African plates cooked with care, Thursdays and Fridays. Delivered in Sandton and Rosebank, and further afield by arrangement.
+            South African plates cooked with care, Thursdays and Fridays. Delivered in Sandton and Rosebank, and anywhere else within 15km.
           </p>
           {/*
             Two words each, on purpose: "Call us" and "Email us" are the whole
@@ -373,36 +410,7 @@ function Footer() {
             profiles: href="#" on purpose, so nothing sends a customer to a page
             that does not exist yet.
           */}
-          <nav aria-label="Social media" className="mt-4 flex items-center gap-2">
-            {[
-              {
-                label: 'Instagram',
-                href: '#',
-                path: 'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm5 5.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9ZM17.5 6.5h.01',
-              },
-              {
-                label: 'Facebook',
-                href: '#',
-                path: 'M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z',
-              },
-              {
-                label: 'TikTok',
-                href: '#',
-                path: 'M15 3v10a4.5 4.5 0 1 1-4.5-4.5M15 3c.3 2.7 2 4.4 5 4.8',
-              },
-            ].map((social) => (
-              <a
-                key={social.label}
-                href={social.href}
-                aria-label={social.label}
-                className="grid h-11 w-11 place-items-center rounded-full border border-bone/25 text-bone/75 transition-colors hover:border-ochre hover:text-ochre"
-              >
-                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d={social.path} />
-                </svg>
-              </a>
-            ))}
-          </nav>
+
         </div>
 
         <div>
@@ -486,10 +494,33 @@ function Footer() {
         belongs on the bottom line rather than in the Order column. The 44px
         min-height keeps it a thumb-sized target on a phone.
       */}
+      {/*
+        One bottom line, three parts, and the socials in the middle of it.
+        The owner asked for exactly that: the three icons sit on the
+        "© 2026 Heritage Bites…" line, centred. On a phone the line wraps and the
+        icons take their own centred row underneath, which is the same
+        arrangement a reader already expects of a footer.
+      */}
       <div className="border-t border-bone/10 px-4 py-3">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 text-xs text-bone/45">
-          <span>© {new Date().getFullYear()} Heritage Bites. All Rights Reserved. · Est. {s?.established ?? 2025}</span>
-          <Link to="/policies" className="inline-flex min-h-11 items-center hover:text-ochre">
+        <div className="mx-auto grid max-w-7xl items-center gap-2 text-xs text-bone/45 md:grid-cols-[1fr_auto_1fr]">
+          <span className="order-2 text-center md:order-1 md:text-left">
+            © {new Date().getFullYear()} Heritage Bites. All Rights Reserved. · Est. {s?.established ?? 2025}
+          </span>
+          <nav aria-label="Social media" className="order-1 flex items-center justify-center gap-2 md:order-2">
+            {SOCIALS.map((social) => (
+              <a
+                key={social.label}
+                href={social.href}
+                aria-label={social.label}
+                className="grid h-11 w-11 place-items-center rounded-full border border-bone/25 text-bone/75 transition-colors hover:border-ochre hover:text-ochre"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={social.path} />
+                </svg>
+              </a>
+            ))}
+          </nav>
+          <Link to="/policies" className="order-3 inline-flex min-h-11 items-center justify-center hover:text-ochre md:justify-self-end">
             Policies &amp; terms
           </Link>
         </div>

@@ -10,8 +10,8 @@ automatic, what is not — and the two decisions only the owner can make.
 | One descriptive title per page | `shared/seo.js` → `PAGES` | Built |
 | One description per page (~160 chars) | same table | Built |
 | One `<h1>` per page, descriptive | each page | Built |
-| Canonical address per page | derived from the address the page is served from | Built — needs `HB_SITE_URL` |
-| `robots.txt`, `sitemap.xml` | `scripts/build-seo.mjs` | Built — needs `HB_SITE_URL` |
+| Canonical address per page | derived from the address the page is served from | Built — published in the sitemap |
+| `robots.txt`, `sitemap.xml` | `scripts/build-seo.mjs` | Built — 8 pages, absolute addresses |
 | Structured data (Restaurant, WebSite, BreadcrumbList, Menu) | `shared/seo.js` | Built |
 | Open Graph + Twitter cards (link previews) | the same head | Built |
 | The shared card image, the tab icon, the phone icons | `scripts/build-brand-assets.py` | Built |
@@ -34,6 +34,44 @@ shared/seo.js ──┬─→ src/lib/seo.ts            (usePageSeo: title, desc
                 ├─→ scripts/build-seo.mjs     (robots.txt, sitemap.xml, one document per route)
                 └─→ server/lib/seo.test.js    (the rules, enforced)
 ```
+
+## The address that is published, and why it has `/web/` in it
+
+The site is served by GitHub Pages from the repository root, and the root hands
+over to the built folder at `/web/`. So the address every canonical, every
+`og:url` and every `<loc>` names is:
+
+```
+https://lulamilemkhungela.github.io/heritagebites/web/
+```
+
+That segment is not cosmetic. A canonical is a claim that a URL *resolves to this
+page*, and the previous value (`…/heritagebites/`) was a one-line redirect — while
+`…/heritagebites/menu` did not exist at all. The sitemap listed eight addresses
+that answered with a redirect, a 404, or the home page under a menu title.
+
+Three files agree on it, from one decision each:
+
+| Where | What it writes | Set by |
+| --- | --- | --- |
+| `web/**/index.html`, `web/sitemap.xml`, `web/robots.txt` | canonical, `og:url`, `<loc>`, `Sitemap:` | `PUBLISHED_SITE_URL` in `scripts/build-seo.mjs` |
+| the bundle, so the canonical a browser sees matches | `VITE_SITE_URL` at build time | `PUBLISHED_SITE_URL` in `scripts/build-pages.mjs` |
+| the repository root `index.html`, which a crawler finds first | canonical + `Restaurant` JSON-LD | the file itself, inside the `<!--seo:-->` markers |
+
+The root file is Vite's *source entry*, so it cannot be generated: replacing it
+stops the build. Its head is maintained by hand for that reason, and
+`scripts/build-pages.mjs` keeps a copy and restores it if a build ever writes over
+it.
+
+**Pointing Pages at the `web/` folder gives the clean address** — no `/web/`
+segment — and that is the better end state. It is one environment variable, no
+code change:
+
+```
+HB_SITE_URL=https://lulamilemkhungela.github.io/heritagebites/ npm run build:pages
+```
+
+Then set Pages to publish `main` → `/web` and rebuild. Everything above follows.
 
 ## The site address: set `HB_SITE_URL`
 

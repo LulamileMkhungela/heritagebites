@@ -7,6 +7,7 @@ import { zar } from '../lib/format';
 import { Button, HeritageBand, LinkButton, MrDIcon, Reveal, SectionLabel, ShweshwePanel, UberEatsIcon, WhatsAppIcon, WovenRule } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { MenuItem, Settings } from '../lib/types';
+import { DELIVERY_ZONES } from '../../shared/address.js';
 import { usePageSeo } from '../lib/seo';
 import { basketHref, waUrlWithText, CHANNEL_ENQUIRY } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
@@ -132,15 +133,19 @@ function Hero({ onOrder }: { onOrder: () => void }) {
           </div>
 
           {/*
-            Three figures in a row overflows on a 360px phone: "R100,00" at
-            text-3xl is wider than a third of the screen, so it ran into the
-            service window beside it. The figures scale with the viewport and
-            the row is allowed to wrap to two lines rather than collide.
+            Two figures, not three.
+
+            The middle one used to be the service window ("12:00–13:30"), and the
+            owner asked for it gone (16 Nov 2026): the footer's Kitchen hours
+            already prints both days with their exact times, so the same range
+            was stated twice on every screen — once as a headline figure, once as
+            the detail. A range nobody can act on is not a headline; the number of
+            service days is, because it tells a first-time visitor this is a
+            two-day kitchen before they plan around it.
           */}
-          <dl className="mt-10 grid max-w-lg grid-cols-2 gap-x-4 gap-y-5 border-t border-bone/15 pt-6 sm:grid-cols-3">
+          <dl className="mt-10 grid max-w-lg grid-cols-2 gap-x-4 gap-y-5 border-t border-bone/15 pt-6">
             {[
               [zar(traditional?.price ?? 100), 'traditional plate'],
-              [`${s?.serviceWindow.open ?? '12:00'}–${s?.serviceWindow.close ?? '13:30'}`, 'service window'],
               ['2', 'service days a week'],
             ].map(([v, k]) => (
               <div key={k}>
@@ -270,7 +275,7 @@ function ThisWeek() {
   const catalog = useCatalog((s) => s.data);
   const nav = useNavigate();
   if (!catalog) return null;
-  const { settings, plateMenus } = catalog;
+  const { plateMenus } = catalog;
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-16">
@@ -284,8 +289,8 @@ function ThisWeek() {
             weekly schedule, so it states only the schedule.
           */}
           <p className="mt-3 max-w-2xl text-sm text-ink/60">
-            Two cooking days a week, {settings.serviceWindow.open}–{settings.serviceWindow.close}. Plates go up a few
-            days ahead, so there is always something to plan around.
+            Two cooking days a week — Thursday and Friday. Plates go up a few days ahead, so there is always something to
+            plan around, and any of those days can be booked in advance.
           </p>
         </div>
         <LinkButton to="/specials" variant="outline">Delivery &amp; service details</LinkButton>
@@ -328,11 +333,11 @@ function PlateMenuCTA() {
     <section className="border-y-2 border-ink/10 bg-bone-2 py-16">
       <div className="mx-auto max-w-7xl px-4">
         <SectionLabel>Build it yourself</SectionLabel>
-        <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">One protein, one starch, one side</h2>
+        <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">One protein, your starches, your sides</h2>
         <p className="mt-3 max-w-2xl text-ink/65">
           Choose from the traditional kitchen at {zar(traditional?.price ?? 100)} a plate, or the contemporary kitchen at{' '}
-          {zar(contemporary?.price ?? 130)}. Starch and vegetable side are included; delivery is the only extra, and it is
-          priced at checkout.
+          {zar(contemporary?.price ?? 130)}. Starches and vegetable sides are included — take more than one if you eat them
+          together; delivery is the only extra, and it is priced at checkout.
         </p>
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           {catalog.plateMenus.map((plate) => (
@@ -370,11 +375,20 @@ function HowItWorks() {
   const catalog = useCatalog((s) => s.data);
   const perRand = catalog?.settings?.loyaltyRateCents ?? 5000;
   const rate = perRand > 0 ? zar(perRand / 100) : null;
+  /*
+   * The radius is read, never typed.
+   *
+   * Owner, 15 Nov 2026: the limit went from 50 km to 15. A number written into
+   * marketing copy is a number that will be wrong the next time the rule
+   * changes, and it is the customer-facing half of exactly the drift the
+   * single `maxDeliveryKm` setting exists to prevent.
+   */
+  const maxKm = catalog?.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm;
 
   const steps = [
-    { n: '01', t: 'Pick your plate', d: 'Choose a protein, then a starch and a vegetable side. The plate price includes everything.' },
+    { n: '01', t: 'Pick your plate', d: 'Choose a protein, then as many starches and vegetable sides as you like. The plate price includes everything.' },
     { n: '02', t: 'Pay your way', d: 'Pay by card through Yoco before we cook, or in cash to the driver at the door.' },
-    { n: '03', t: 'We bring it to you', d: 'Delivery is included in Sandton and Rosebank. Further out a delivery fee applies, up to 50 km.' },
+    { n: '03', t: 'We bring it to you', d: `Delivery is included in Sandton and Rosebank. Further out a delivery fee applies, up to ${maxKm} km.` },
     {
       n: '04',
       t: 'Use your loyalty card',
@@ -418,18 +432,36 @@ function ServiceRules() {
 
   const rows = [
     ['Service days', settings.hours.filter((h) => !h.closed).map((h) => h.label).join(' and ')],
-    ['Service window', `${settings.serviceWindow.open}–${settings.serviceWindow.close}`],
-    ['Delivery areas', settings.deliveryAreas.join(' and ')],
+    /*
+     * Owner, 15 Nov 2026: "Delivery areas — Rosebank, Sandton and other areas
+     * within 15km radius". The two names alone read as a closed list, which is
+     * the misconception that made a Bryanston customer think they could not
+     * order at all. The radius is part of the answer.
+     */
+    ['Delivery areas', `${settings.deliveryAreas.join(', ')} and other areas within ${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm}km radius`],
     ['Minimum order', `${zar(settings.minDeliveryOrder)} for delivery`],
     [
       'Delivery fee',
       settings.deliveryIncluded
-        ? 'Included in the plate price'
+        ? `Included in ${settings.deliveryAreas.join(' and ')}`
         : settings.freeDeliveryAbove > 0
           ? `${zar(settings.deliveryFlat)}, free over ${zar(settings.freeDeliveryAbove)}`
           : zar(settings.deliveryFlat),
     ],
-    ['Outside Sandton & Rosebank', 'A delivery fee applies, up to 50 km from the kitchen'],
+    ['Furthest we deliver', `${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen`],
+    /*
+     * The "Service window" row is gone (owner, 16 Nov 2026: "remove 12:00–13:30
+     * service window since its there in details below bottom nav"). The times
+     * already print in the footer's Kitchen hours, on every screen, which is
+     * where a customer looks for them — repeating the range in a table in the
+     * middle of the home page said the same thing twice and made the table look
+     * like the schedule rather than the delivery rule.
+     *
+     * The "Outside Sandton & Rosebank — a delivery fee applies" row is gone for
+     * the same round's reason: it restated the two suburbs as a boundary and put
+     * a fee on everything outside them, which is not the rule. There is one
+     * radius, and the two rows above carry that answer on their own.
+     */
   ];
 
   return (
@@ -444,9 +476,9 @@ function ServiceRules() {
             which window, and what happens if you order outside it.
           */}
           <p className="mt-3 text-ink/65">
-            We cook on Thursdays and Fridays, {settings.serviceWindow.open}–{settings.serviceWindow.close}, and we are
-            working towards being open every day. Outside that window you can still send us a basket — the kitchen will
-            confirm whether it can cook it.
+            We cook on Thursdays and Fridays, and we are working towards being open every day. Any cooking day ahead can
+            be booked now — you are not limited to the next one. On a day we are not cooking you can still send us a
+            basket and the kitchen will confirm whether it can cook it.
           </p>
           <p className="mt-3 text-sm text-ink/55">
             Every order is delivered. Inside Sandton and Rosebank the plate price is the whole price.
@@ -510,7 +542,7 @@ function Channels({ settings }: { settings: Settings | undefined }) {
             ? 'Message us and we will take your order in the chat.'
             : url
               ? `Order through the ${r.name} app.`
-              : `We are not on ${r.name} yet — WhatsApp us and we will tell you where to find us.`;
+              : `We are not on ${r.name} yet. It is coming — until then, order here or on WhatsApp.`;
           const content = (
             <>
               <span className={`grid h-12 w-12 place-items-center rounded-xl ${r.brand}`}>
@@ -519,7 +551,7 @@ function Channels({ settings }: { settings: Settings | undefined }) {
               <h3 className="mt-4 font-display text-xl font-semibold">{r.name}</h3>
               <p className="mt-1 text-[13px] text-ink/60">{description}</p>
               <span className="mt-auto pt-4 text-sm font-semibold text-ochre-deep">
-                {url ? (r.key === 'whatsapp' ? 'Start a chat' : 'Order in the app') : 'Order on WhatsApp instead'}
+                {url ? (r.key === 'whatsapp' ? 'Start a chat' : 'Order in the app') : 'Coming soon'}
               </span>
             </>
           );

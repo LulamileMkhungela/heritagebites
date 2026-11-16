@@ -48,6 +48,8 @@ import {
   parseSpecialServiceDays,
   serviceStatus,
   serviceWindowFor,
+  bookableDateFor,
+  bookableDates,
 } from './lib/service.js';
 /*
  * Distance rules live in shared/address.js so the browser and the server make
@@ -66,8 +68,24 @@ import { HEAD_END, HEAD_START, headHtml, normaliseSiteUrl } from '../shared/seo.
  * a Friday?". Production never sets HB_CLOCK_LABEL, so this is simply now; the
  * test suites pin it so they can run the shop both open and shut without
  * depending on when CI happens to start.
+ *
+ * An unreadable value falls back to the real clock instead of producing an
+ * Invalid Date. `Intl.DateTimeFormat.formatToParts(new Date(NaN))` throws a
+ * RangeError, and that throw happened inside a request handler — so a typo in
+ * the variable ("Thu 12:30" instead of a full date-time) took the entire server
+ * down on the first request rather than being ignored. A bad test setting must
+ * not be able to kill the shop.
  */
-const clockNow = () => (process.env.HB_CLOCK_LABEL ? new Date(process.env.HB_CLOCK_LABEL) : new Date());
+function clockNow() {
+  const pinned = process.env.HB_CLOCK_LABEL;
+  if (!pinned) return new Date();
+  const parsed = new Date(pinned);
+  if (Number.isNaN(parsed.getTime())) {
+    console.warn(`[clock] HB_CLOCK_LABEL="${pinned}" is not a date-time — using the real clock.`);
+    return new Date();
+  }
+  return parsed;
+}
 
 const PORT = Number(process.env.PORT || 4000);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -169,16 +187,26 @@ app.use(compression({ threshold: 1024 }));
  * and frame-ancestors/X-Frame-Options (a login-free order page inside someone
  * else's frame is a clickjacking surface).
  *
- * There is no CSP yet. The built index.html carries an inline JSON-LD block and
- * the app uses inline styles, so a real policy needs nonces threaded through the
- * build. Doing that badly is worse than not doing it; it is listed as follow-up.
+ * `geolocation` MUST stay allowed — `geolocation=(self)`, not `geolocation=()`.
+ *
+ * This header used to read `geolocation=()`, which is a Permissions Policy
+ * *denial lock on our own origin*: the browser refuses every
+ * `navigator.geolocation` call this site makes, never shows the permission
+ * prompt, and reports PERMISSION_DENIED. That is precisely the bug the owner
+ * reported ("why Location is blocked for this site… u must ask for location
+ * permission") — the customer had blocked nothing, and the advice to allow it in
+ * site settings led them to a switch that was already on. `self` allows the
+ * origin that is asking, which is the only one that needs it; no third-party
+ * origin is granted anything.
+ *
+ * Camera and microphone remain fully denied: nothing on this site uses them.
  */
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
   /*
    * Only over HTTPS, and only for a year at a time: HSTS on a domain that is
    * later served over plain HTTP locks customers out with no way to click past it.
@@ -293,20 +321,25 @@ function deliveryRules(settings = {}) {
 }
 
 /**
- * Coordinates for a delivery address.
+ * Coordinates for a delivery address — and whether they were actually measured.
  *
- * The checkout sends the map coordinates of the address the customer picked
- * from the suggestion list, which is the only address form the map has already
- * resolved. A hand-typed address has none, so the server falls back to the
- * centre of the area the customer selected — deliberately generous to nobody:
- * an unlocated address in Sandton is treated as Sandton, which is the same
- * answer the old area rule gave. `null` means "cannot measure", never "far".
+ * The checkout sends the map coordinates of the address the customer picked from
+ * the suggestion list, or the device's own fix. That is the only address form
+ * whose distance is *known*. A hand-typed address has none, and the honest answer
+ * then is "cannot measure", never "inside the ring": `null` is what
+ * `deliveryZoneFor` turns into `{ zone: 'unknown' }`.
+ *
+ * This used to fall back to the middle of the suburb the customer selected, which
+ * quietly turned "I typed 40 km away and picked Sandton" into a free delivery.
+ * The order route below now refuses an unmeasured address on a delivery order
+ * unless the address itself names an included area, so the radius is a rule the
+ * site actually applies rather than one it only prints.
  */
 function coordinatesFor(customer = {}) {
   const lat = Number(customer.lat);
   const lng = Number(customer.lng);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
-  return { lat: null, lng: null };
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng, measured: true };
+  return { lat: null, lng: null, measured: false };
 }
 
 /**
@@ -352,7 +385,14 @@ function priceLines(clientLines) {
           continue;
         }
         if (group.max && picked.length > group.max) {
-          errors.push(`${plate.name}: you can choose at most ${group.max} for ${group.label.toLowerCase()}.`);
+          /*
+             * "at most 3 for choose your starch" reads like a machine, and
+             * appending an "s" to the stripped label produced "starchs". The
+             * group id already names the thing in the plural where it has one,
+             * so the copy is chosen rather than derived.
+             */
+          const many = group.id === 'starch' ? 'starches' : group.id === 'veg' ? 'vegetable sides' : group.id;
+          errors.push(`${plate.name}: you can choose up to ${group.max} ${many}.`);
           invalid = true;
           continue;
         }
@@ -788,6 +828,13 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
      * never disagree with the server about whether the shop is open.
      */
     service: serviceStatus(settings, clockNow()),
+    /*
+     * The cooking days a customer can book ahead (owner, 16 Nov 2026: "they can
+     * order in advance for any Thursday/Friday"). Served from the same shared
+     * rule the order route validates against, so the day the checkout offers and
+     * the day the kitchen will accept can never be different lists.
+     */
+    bookableDates: bookableDates(settings, clockNow(), { limit: 16 }),
     payments: paymentConfig(),
     contact: { inboxConfigured: contactEndpoint() !== null },
     /*
@@ -863,7 +910,7 @@ function cardFieldsSent(payment) {
 }
 
 app.post('/api/orders', LIMITS.order, async (req, res) => {
-  const { items, customer = {}, code = '', payment = {}, channel = 'card' } = req.body ?? {};
+  const { items, customer = {}, code = '', payment = {}, channel = 'card', serviceWindow = null } = req.body ?? {};
   /* Delivery only. A client that still sends `collection` is corrected, not
      rejected, so a cached tab does not strand a customer at a dead option. */
   const fulfilment = 'delivery';
@@ -899,11 +946,41 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
    * to do with what it is testing. It is never set by the app itself, and the
    * gate below stays wired so its own test can exercise the closed path.
    */
+  /*
+   * A customer may book any cooking day ahead, not just tomorrow (owner, 16 Nov
+   * 2026: "users are not limited in waiting for Thursday… they can order in
+   * advance for any Thursday/Friday"). `serviceWindow.date` is that choice,
+   * checked against the same list the checkout offers so a hand-made request
+   * cannot book a plate for a day the kitchen never cooks.
+   */
+  const settingsNow = getSettings();
+  const requestedDate = String(serviceWindow?.date ?? '').trim();
+  const booking = requestedDate ? bookableDateFor(settingsNow, requestedDate, clockNow()) : null;
+  if (requestedDate && !booking) {
+    return res.status(422).json({
+      errors: ["We do not cook on that day, or it is too far ahead. Pick one of the cooking days we list and the order will be booked for it."],
+      unavailableDate: requestedDate,
+      bookableDates: bookableDates(settingsNow, clockNow(), { limit: 12 }),
+    });
+  }
+
+  /*
+   * The closed gate is about *today*, not about the site.
+   *
+   * It exists because the site used to take an order at 15:00 on a Friday for a
+   * window that closed at 13:30. A customer who has named a future cooking day
+   * is not asking for today at all, so refusing them would reproduce the very
+   * bug the owner reported from the other side: a Saturday afternoon order for
+   * next Friday must go through. With no date chosen, the rule is unchanged.
+   */
   const ordersForcedOpen = process.env.HB_ORDERS_OPEN === 'true';
-  if (!ordersForcedOpen && serviceStatus(getSettings(), clockNow()).orderingClosed) {
+  if (!ordersForcedOpen && !booking && serviceStatus(settingsNow, clockNow()).orderingClosed) {
     return res.status(409).json({
-      errors: ["Today's window has closed, so we are not taking orders. Message us on WhatsApp and we will tell you if the kitchen can still prepare it."],
+      errors: [
+        "Today's window has closed, so we are not taking orders for today. Pick one of our cooking days and we will book it for that day instead — or message us on WhatsApp and we will tell you if the kitchen can still prepare it for today.",
+      ],
       closed: true,
+      bookableDates: bookableDates(settingsNow, clockNow(), { limit: 12 }),
     });
   }
 
@@ -936,6 +1013,42 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
         distanceKm: zone.distanceKm,
         maxDeliveryKm: rules.maxKm,
       });
+    }
+    /*
+     * An address nobody located cannot be priced, and must not default to
+     * "free".
+     *
+     * The radius is the rule the customer is shown, so an order is only
+     * accepted once the distance is known: pick the address from the list (that
+     * carries the map's coordinates) or share a location. The one exception is
+     * an address that *names* one of the included areas — "12 Rivonia Road,
+     * Sandton" with no map hit is inside the run by the customer's own words,
+     * and refusing that would send a real Sandton customer to WhatsApp for no
+     * reason. Anything else is asked for a located address, in the same words the
+     * checkout uses, rather than being quietly under-charged.
+     */
+    if (!points.measured) {
+      const included = getSettings()?.deliveryAreas ?? [];
+      const isIncluded = (area) => included.some((name) => name.toLowerCase() === String(area).toLowerCase());
+      /*
+       * Two pieces of evidence are accepted, and neither is a guess: the address
+       * line names an included area, or the customer's own area choice is one of
+       * them and the address contradicts nothing. An "Another area" order has
+       * neither — its distance is the only thing that can price it — so it is
+       * asked for a located address instead of being given the included price.
+       */
+      const named = areasNamedIn(customer.address, getSettings());
+      const chosen = String(customer.suburb ?? '').trim();
+      const insideByWord = named.some(isIncluded) || (isIncluded(chosen) && (named.length === 0 || named.some(isIncluded)));
+      if (!insideByWord) {
+        return res.status(422).json({
+          errors: [
+            'We could not work out where that address is, so we cannot check the delivery. Pick it from the list as you type, or share your location, and order again.',
+          ],
+          needsLocation: true,
+          maxDeliveryKm: rules.maxKm,
+        });
+      }
     }
     /*
      * The suburb named in the typed address still has to match the one chosen —
@@ -1062,7 +1175,7 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
      * Thursday or Friday it is for today; outside it is a pre-order and the
      * receipt, email alert and customer all say which window it is cooked in.
      */
-    serviceWindow: serviceWindowFor(getSettings()),
+    serviceWindow: serviceWindowFor(settingsNow, clockNow(), booking),
     loyalty: { pointsEarned: loyaltyPointsFor(totals.total, getSettings().loyaltyRateCents), pointsRedeemed: 0 },
     timeline: [],
   };

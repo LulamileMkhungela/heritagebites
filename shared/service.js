@@ -2,7 +2,7 @@
  * Service-window and delivery-area rules.
  *
  * The business cooks on Thursdays and Fridays only, serving delivery and
- * delivery between 12:00 and 13:30, in Sandton and Rosebank and up to 50 km out.
+ * delivery between 12:00 and 13:30, in Sandton and Rosebank and up to 15 km out.
  * These helpers decide what the storefront may promise, in one place, so the
  * API and the page copy can never drift apart.
  *
@@ -402,7 +402,7 @@ export function deliveryAddressProblem(address, area, settings, hintArea = null)
    * "Other / outside Sandton & Rosebank" is a legitimate answer now.
    *
    * The rules are distance-based (owner, 14 Nov 2026): inside the two suburbs
-   * delivery is included, outside them a fee applies, and past 50 km we refuse.
+   * delivery is included, outside them a fee applies, and past the limit we refuse.
    * So an address in Bryanston is not a contradiction of the area select — it is
    * simply outside the included ring, and the distance check prices it. Checking
    * it against a two-suburb list would refuse exactly the customers the fee
@@ -446,13 +446,27 @@ export function deliveryAddressProblem(address, area, settings, hintArea = null)
  * Bryanston had no honest answer to "which of these two suburbs are you in".
  * Picking a lie is worse than a third option, so the third option is "other" and
  * the distance check does the deciding.
+ *
+ * The wording is "Another area" and not "Other — outside Sandton & Rosebank"
+ * (owner, 16 Nov 2026: "remove Outside Sandton & Rosebank"). That phrase
+ * restated the two-suburb boundary as a wall, one line after the site had
+ * explained there is one 15 km radius — so the customer read a closed list and a
+ * fee they could not see the reason for. The option is simply the third answer to
+ * "where are you": somewhere else, priced by its distance.
  */
-export const OUTSIDE_AREA = 'Other — outside Sandton & Rosebank';
+export const OUTSIDE_AREA = 'Another area — within 15 km';
 
-/** Is this select value the "somewhere else" option? */
+/**
+ * Is this select value the "somewhere else" option?
+ *
+ * Both spellings are accepted on purpose. A browser holding a cached bundle, or a
+ * saved checkout form session, still sends the old long label; refusing it would
+ * turn an existing customer's saved area into an empty choice. The new one is
+ * what every surface shows from now on.
+ */
 export function isOutsideAreaChoice(area) {
   const value = String(area ?? '').trim().toLowerCase();
-  return value.startsWith('other') || value === 'other';
+  return value.startsWith('other') || value.startsWith('another area') || value === 'other';
 }
 
 /**
@@ -472,12 +486,119 @@ export function deliveryAreasLabel(settings) {
   return `${areas.slice(0, -1).join(', ')} and ${areas[areas.length - 1]}`;
 }
 
-/** A pre-order note stored on every order so the kitchen knows which window it belongs to. */
-export function serviceWindowFor(settings, now = new Date()) {
+/**
+ * The cooking days a customer can book *ahead*, not just the next one.
+ *
+ * The owner's complaint (16 Nov 2026) was that the site made people wait for
+ * "the" Thursday: a customer browsing on a Saturday saw one date, and if that
+ * date did not suit them there was nothing else to choose. Every Thursday and
+ * Friday the kitchen cooks, so every Thursday and Friday inside the booking
+ * horizon is a day an order can be placed for.
+ *
+ * The horizon is 8 weeks rather than unlimited on purpose. A plate ordered for
+ * a date three months out is not a booking, it is a note the kitchen will have
+ * lost by then — and the price list, the menu and even the days the kitchen
+ * trades can all change inside that time. Eight weeks is long enough to cover
+ * "the end of the month" and the month after it, which is how people here
+ * actually plan a family lunch.
+ *
+ * Today is included only while it is still orderable: after the window closes
+ * it drops out, because the kitchen is done cooking and asking for it would be
+ * a request it cannot meet. Rest days and special openings are honoured exactly
+ * as the rest of the service rules honour them.
+ *
+ * @param {any} settings
+ * @param {Date} [now]
+ * @param {{ weeks?: number, limit?: number }} [options]
+ * @returns {{ date: string, dayLabel: string, label: string, open: string, close: string, isToday: boolean }[]}
+ */
+export function bookableDates(settings, now = new Date(), options = {}) {
+  const weeks = Math.max(1, Math.min(26, Math.floor(Number(options.weeks) || 8)));
+  const limit = Math.max(1, Math.min(60, Math.floor(Number(options.limit) || 24)));
+  const at = sastNow(now);
+  const [cy, cm, cd] = at.dateKey.split('-').map(Number);
+  const todayEntry = specialServiceDayFor(settings, at.dateKey, at.day) ?? hoursFor(settings, at.day);
+  const todayStillOrderable = Boolean(todayEntry && at.minutes <= todayEntry.closeMinutes);
+
+  const out = [];
+  const days = weeks * 7;
+  for (let offset = 0; offset <= days && out.length < limit; offset += 1) {
+    if (offset === 0 && !todayStillOrderable) continue;
+    const shifted = new Date(Date.UTC(cy, cm - 1, cd + offset));
+    const key = shifted.toISOString().slice(0, 10);
+    const weekday = shifted.getUTCDay();
+    const entry = specialServiceDayFor(settings, key, weekday) ?? hoursFor(settings, weekday);
+    if (!entry) continue;
+    /* A cooking day whose window has already gone is not bookable — today is
+       the only such day that can appear inside a forward-only scan. */
+    if (offset === 0 && at.minutes > entry.closeMinutes) continue;
+    out.push({
+      date: key,
+      dayLabel: entry.special ? entry.label : DAY_LABELS[weekday],
+      label: entry.special ? entry.label : `${DAY_LABELS[weekday]} ${shifted.getUTCDate()} ${MONTH_SHORT[shifted.getUTCMonth()]}`,
+      /* What the customer and the kitchen both read: a day, not a range. The
+         range belongs to the window, and the window is the same one every week. */
+      shortLabel: `${DAY_LABELS[weekday]} ${shifted.getUTCDate()} ${MONTH_SHORT[shifted.getUTCMonth()]}`,
+      open: entry.open,
+      close: entry.close,
+      isToday: offset === 0,
+      special: Boolean(entry.special),
+    });
+  }
+  return out;
+}
+
+/**
+ * Is `date` a day this kitchen will cook for, given `settings`?
+ *
+ * The checkout lets a customer name any cooking day inside the horizon, and the
+ * server must check that name rather than trust it — otherwise a hand-made
+ * request books a plate for a Sunday in 2031. Returns the matched booking (with
+ * its label and window) or null.
+ *
+ * @param {any} settings
+ * @param {string} date  "YYYY-MM-DD"
+ * @param {Date} [now]
+ * @returns {{ date: string, label: string, open: string, close: string, isToday: boolean, special: boolean } | null}
+ */
+export function bookableDateFor(settings, date, now = new Date()) {
+  const wanted = String(date ?? '').trim();
+  if (!DATE_RE.test(wanted)) return null;
+  return bookableDates(settings, now, { limit: 60 }).find((d) => d.date === wanted) ?? null;
+}
+
+/**
+ * A pre-order note stored on every order so the kitchen knows which window it
+ * belongs to.
+ *
+ * `plannedDate` is the customer's own answer when they booked ahead — an order
+ * placed on a Saturday for a specific Friday is a different thing from one
+ * placed on that Friday morning, and the receipt, the kitchen alert and the
+ * WhatsApp message all have to name the right day. When no date was chosen the
+ * note falls back to the next window, which is what an order sent outside the
+ * window has always meant.
+ *
+ * @param {any} settings
+ * @param {Date} [now]
+ * @param {{ date?: string, label?: string } | null} [booking]  validated by `bookableDateFor`
+ */
+export function serviceWindowFor(settings, now = new Date(), booking = null) {
   const status = serviceStatus(settings, now);
+  const booked = booking?.date ? booking : null;
+  if (booked) {
+    return {
+      date: booked.date,
+      plannedFor: booked.label ?? booked.date,
+      isPreOrder: true,
+      booked: true,
+      label: booked.label ?? booked.date,
+    };
+  }
   return {
+    date: status.open ? status.todayLabel : null,
     plannedFor: status.open ? status.todayLabel : status.nextWindowLabel,
     isPreOrder: !status.open,
+    booked: false,
     label: status.open ? `Now — ${status.windowLabel}` : status.nextWindowLabel ?? 'To be confirmed',
   };
 }

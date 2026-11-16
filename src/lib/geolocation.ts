@@ -13,7 +13,7 @@
  *  - `enableHighAccuracy: true` is what asks for GPS/Wi-Fi positioning. Without
  *    it a browser hands back a coarse fix — often the centre of the suburb, or a
  *    cell-tower location several kilometres away. On a 6 km included ring and a
- *    50 km hard limit, a three-kilometre error is the difference between "free"
+ *    delivery limit, a three-kilometre error is the difference between "free"
  *    and "R30", or between "delivered" and "refused". A coarse fix cannot decide
  *    that honestly.
  *  - It can, however, fail or take too long — indoors, in a car park, on a laptop
@@ -30,7 +30,19 @@
 
 export type LocationResult =
   | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
-  | { status: 'denied'; reason: 'blocked' | 'unavailable' | 'timeout' | 'unsupported' };
+  | {
+      status: 'denied';
+      reason:
+        | 'insecure'
+        | 'blocked'
+        /** A Permissions-Policy header denies geolocation to this origin. */
+        | 'policy'
+        /** The browser would not even show the prompt. */
+        | 'prompt'
+        | 'unavailable'
+        | 'timeout'
+        | 'unsupported';
+    };
 
 interface Coords {
   lat: number;
@@ -50,16 +62,85 @@ function askPosition(options: PositionOptions): Promise<Coords> {
 }
 
 /**
- * Ask for the customer's location, precise first.
+ * The Permissions API's view of geolocation for *this* origin, when the browser
+ * offers one.
+ *
+ * Why this exists: on Safari and Firefox, and on Chrome when a Permissions-Policy
+ * header blocks the feature, `getCurrentPosition` fails with a bare
+ * PERMISSION_DENIED — the same code a customer tapping "Block" produces. Those
+ * two situations need opposite advice, so the real state is read first, before
+ * anything is asked for. `unknown` means the browser does not implement it, which
+ * is not an error; the request is still made.
+ */
+async function geoPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> {
+  try {
+    const permissions = (navigator as Navigator & { permissions?: Permissions }).permissions;
+    if (!permissions?.query) return 'unknown';
+    const status = await permissions.query({ name: 'geolocation' as PermissionName });
+    return status.state as 'granted' | 'denied' | 'prompt';
+  } catch {
+    /* A browser that refuses the query refuses nothing else. */
+    return 'unknown';
+  }
+}
+
+/**
+ * Ask for the customer's location, precise first — and ask *for permission*
+ * first, so the prompt actually appears.
  *
  * Resolves — never rejects. Every failure becomes a `denied` result with a reason
- * the caller can word differently: "you blocked it" and "we could not get a fix"
- * need different advice.
+ * the caller can word differently: "you blocked it", "this site is not allowed to
+ * ask" and "we could not get a fix" need three different sentences.
  */
 export async function requestLocation(): Promise<LocationResult> {
   if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
     return { status: 'denied', reason: 'unsupported' };
   }
+
+  /*
+   * Is this page even allowed to ask? The API is checked before the fix is
+   * requested, so a header that denies geolocation is reported as `policy` rather
+   * than as the customer having blocked something. `getCurrentPosition` is still
+   * attempted when the permission state is `prompt`, because that call is what
+   * makes the browser show its prompt.
+   */
+  if (typeof window !== 'undefined' && window.isSecureContext && navigator.geolocation === undefined) {
+    return { status: 'denied', reason: 'policy' };
+  }
+
+  /*
+   * The order matters, and it is the bug the owner hit.
+   *
+   * Browsers only expose geolocation on a secure origin — https, or localhost.
+   * On plain http (an IP address, a LAN host, some preview links) the permission
+   * prompt NEVER APPEARS: `getCurrentPosition` fails immediately with
+   * PERMISSION_DENIED, and this code used to report that as "you blocked it,
+   * allow it in your site settings". The customer had blocked nothing, and the
+   * advice sent them hunting for a switch that would not help.
+   *
+   * Checking `isSecureContext` first means the message can say the true reason.
+   */
+  if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    return { status: 'denied', reason: 'insecure' };
+  }
+
+  /*
+   * The browser's own record of whether this origin may ask.
+   *
+   * One case is decisive and is answered here: `denied` means no prompt will
+   * appear, so calling `getCurrentPosition` would only produce the same
+   * PERMISSION_DENIED with no chance of recovery. It is reported straight away
+   * rather than as a wasted round trip.
+   *
+   * `prompt` and `unknown` are NOT pre-judged. `prompt` is exactly the state in
+   * which the fix request is what raises the browser's prompt — the permission
+   * this site has to ask for — and `unknown` is a browser that does not implement
+   * the query at all. Both fall through to the request below, and the value is
+   * kept only to word a later failure accurately: PERMISSION_DENIED while the
+   * state was `prompt` means something other than the customer said no.
+   */
+  const permission = await geoPermission();
+  if (permission === 'denied') return { status: 'denied', reason: 'blocked' };
 
   /* Precise first. A GPS fix is worth waiting for; it is what the radius needs. */
   try {
@@ -67,9 +148,15 @@ export async function requestLocation(): Promise<LocationResult> {
     return { status: 'ok', lat: precise.lat, lng: precise.lng, accuracyM: precise.accuracy, precise: true };
   } catch (err) {
     const code = (err as GeolocationPositionError | undefined)?.code;
-    /* 1 = PERMISSION_DENIED. Asking again coarsely would only annoy the browser
-       and cannot succeed, so it is reported straight away. */
-    if (code === 1) return { status: 'denied', reason: 'blocked' };
+    /*
+     * 1 = PERMISSION_DENIED. Asking again coarsely would only annoy the browser
+     * and cannot succeed, so it is reported straight away. `prompt` means the
+     * browser never showed the prompt at all — a policy or a sandbox did the
+     * refusing — which the customer cannot fix from a site setting.
+     */
+    if (code === 1) {
+      return { status: 'denied', reason: permission === 'prompt' ? 'policy' : 'blocked' };
+    }
   }
 
   /* Then a normal fix: lower accuracy, much more likely to answer indoors. */
@@ -78,7 +165,7 @@ export async function requestLocation(): Promise<LocationResult> {
     return { status: 'ok', lat: coarse.lat, lng: coarse.lng, accuracyM: coarse.accuracy, precise: false };
   } catch (err) {
     const code = (err as GeolocationPositionError | undefined)?.code;
-    if (code === 1) return { status: 'denied', reason: 'blocked' };
+    if (code === 1) return { status: 'denied', reason: permission === 'prompt' ? 'policy' : 'blocked' };
     if (code === 3) return { status: 'denied', reason: 'timeout' };
     return { status: 'denied', reason: 'unavailable' };
   }
@@ -92,8 +179,34 @@ export async function requestLocation(): Promise<LocationResult> {
  */
 export function deniedMessage(reason: Extract<LocationResult, { status: 'denied' }>['reason']): string {
   switch (reason) {
+    case 'insecure':
+      /*
+       * The honest version of the message that used to say "blocked". This
+       * happens on any http:// address and is not something the customer can fix
+       * from their side, so the advice has to be a working alternative — the
+       * address box — rather than a switch that does not exist for them.
+       */
+      return 'Location needs a secure (https) connection, so this page cannot ask for it. Type your address and pick it from the list — that works just as well.';
     case 'blocked':
-      return 'Location is blocked for this site. Allow it in your browser’s site settings, or type your address and pick it from the list.';
+      /*
+       * The customer answered the browser's prompt with Block on a previous
+       * visit, or the browser is holding a decision the page cannot change.
+       * Only the customer can undo it, so the message names the switch — the
+       * icon beside the address bar, under Location, which is where every
+       * browser puts a site permission — and offers the address box, because
+       * the second route is usually faster.
+       */
+      return 'Location is blocked for this site. Tap the icon beside the address bar (under Location) and allow it, then tap the button again — or type your address and pick it from the list.';
+    case 'policy':
+      /*
+       * Nothing the customer did. The page is not permitted to ask — a
+       * Permissions-Policy header, or an embedded frame, is refusing on the
+       * origin's behalf — so there is no prompt to answer and no site setting
+       * that would help. Pointing at the address box is the only honest advice,
+       * and it is a full substitute: the distance is measured from the picked
+       * address instead of from the device.
+       */
+      return 'This site is not allowed to ask for your location here. Type your address and pick it from the list — the delivery check works exactly the same way.';
     case 'unsupported':
       return 'This browser cannot share a location. Type your address and pick it from the list instead.';
     case 'timeout':

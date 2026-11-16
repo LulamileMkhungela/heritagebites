@@ -118,6 +118,18 @@ function boot(path, { seedCart } = {}) {
   w.__geo = { lat: -26.1075, lng: 28.055 };
   w.__geoDenied = false;
   /*
+   * The suite runs against http://127.0.0.1, but a browser only exposes
+   * geolocation on a secure origin. The checkout now checks `isSecureContext`
+   * *before* touching `navigator.geolocation` — so on a plain-http page it
+   * reports "insecure" and never asks, which is correct in life and would make
+   * every location step here test the wrong branch.
+   *
+   * localhost is a secure context in every real browser, so the honest stub is
+   * to declare this origin secure, exactly as the browser would for the preview
+   * at 127.0.0.1. The insecure branch has its own step below.
+   */
+  Object.defineProperty(w, 'isSecureContext', { configurable: true, value: true });
+  /*
    * Every call's options, in order. The site's claim is that it asks for a
    * *precise* fix — that is what the radius needs — and "does it really" is only
    * answerable by looking at what was passed to the browser.
@@ -125,6 +137,28 @@ function boot(path, { seedCart } = {}) {
   w.__geoCalls = [];
   /* Simulates a device that cannot answer a high-accuracy request at all. */
   w.__geoHighAccurateUnavailable = false;
+  /*
+   * The Permissions API, as the real browsers expose it. The site now reads the
+   * permission state before asking for a fix, because a denied origin can never
+   * be prompted again and deserves a different sentence from a customer who has
+   * simply not answered yet. The stub answers `prompt` unless a step says the
+   * permission is denied, which reproduces the browser a first-time visitor
+   * actually has: the prompt is raiseable, and getCurrentPosition is what raises
+   * it.
+   */
+  w.__geoPermission = 'prompt';
+  Object.defineProperty(w.navigator, 'permissions', {
+    configurable: true,
+    value: {
+      query: async (descriptor) => ({
+        name: descriptor?.name,
+        state: descriptor?.name === 'geolocation' ? w.__geoPermission : 'prompt',
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    },
+  });
   Object.defineProperty(w.navigator, 'geolocation', {
     configurable: true,
     value: {
@@ -435,7 +469,14 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
     card grid may be a control, a link or a dish sheet.
   */
   for (const grid of blocks) {
-    if (!/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
+    /*
+     * Sides & Relishes is the exception to "every archive card shows a price":
+     * a vegetable side has no price of its own, because it is included inside
+     * the plate. Its cards say so instead ("Chosen inside a plate · included").
+     */
+    const isSides = /Sides & Relishes/i.test(grid.closest('section')?.textContent ?? '');
+    if (!isSides && !/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
+    if (isSides && /R\s?0[,.\s]?00/.test(grid.textContent ?? '')) throw new Error('a side is showing a R0,00 price');
     if (!/Coming soon/i.test(grid.textContent ?? '')) throw new Error('archive cards are missing their "Coming soon" tag');
     const interactive = grid.querySelectorAll('a, button, input, select, textarea, [role="link"], [role="button"], [onclick]');
     if (interactive.length) throw new Error(`the archive must not be orderable, but a card grid holds ${interactive.length} control(s)`);
@@ -476,6 +517,74 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
   if (placeholders.length) throw new Error('archive cards are showing placeholder images instead of photos');
 
   return '3 categories, priced cards, 0 order controls';
+});
+
+await step('every vegetable side a plate offers is also on Sides & Relishes', async () => {
+  /*
+   * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
+   * Sides & Relishes".
+   *
+   * The options are read out of the plate builder's own DOM — open the builder,
+   * collect the "Choose your vegetable side" checkboxes — and then matched
+   * against the cards in the Sides & Relishes section. Comparing the two rendered
+   * lists is the point: a hard-coded list here would pass even if the builder
+   * gained a side the section never showed.
+   */
+  const builderButton = [...arch.doc.querySelectorAll('section button')]
+    .find((el) => /Build your plate/i.test(el.textContent ?? ''));
+  if (!builderButton) throw new Error('no plate builder card on the menu');
+  arch.click(builderButton);
+  await arch.waitFor(() => arch.dialogs().length > 0, 'plate builder to open', 8000);
+
+  /*
+   * The choices are buttons with role="checkbox", not real inputs — the group is
+   * a fieldset whose legend asks the question. Each row reads "Braised cabbage
+   * Included", so the price note is stripped before comparing.
+   */
+  const group = [...arch.doc.querySelectorAll('[role="dialog"] fieldset')]
+    .find((el) => /Choose your vegetable side/i.test(el.querySelector('legend')?.textContent ?? ''));
+  if (!group) throw new Error('the plate builder has no vegetable-side group');
+  const options = [...group.querySelectorAll('button[role="checkbox"]')]
+    .map((el) => (el.textContent ?? '').replace(/\s*Included\s*$/i, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  if (options.length < 5) throw new Error(`expected the vegetable sides, saw ${options.length}: ${options.slice(0, 6)}`);
+
+  /* Close it the way a customer does — the sheet's own close control — so the
+     menu is back to its sections for the comparison below. */
+  const closeBuilder = [...arch.doc.querySelectorAll('[role="dialog"] button')]
+    .find((el) => /close/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!closeBuilder) throw new Error('the plate builder has no close control');
+  arch.click(closeBuilder);
+  await arch.waitFor(() => arch.dialogs().length === 0, 'plate builder to close', 8000);
+
+  const sidesSection = [...arch.doc.querySelectorAll('section')]
+    .find((section) => /Sides & Relishes/i.test(section.querySelector('h2')?.textContent ?? ''));
+  if (!sidesSection) throw new Error('the Sides & Relishes section is missing');
+  const cards = [...sidesSection.querySelectorAll('[data-coming-soon] article h3')]
+    .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase());
+
+  const missing = options.filter((option) => !cards.some((card) => card === option.toLowerCase()));
+  if (missing.length) throw new Error(`sides in the plate builder but not on Sides & Relishes: ${missing.join(', ')}`);
+  return `${options.length} sides in the builder, all ${cards.length} cards on Sides & Relishes match`;
+});
+
+await step('no plate card carries a bare prep-time figure', async () => {
+  /*
+   * The owner saw "20′" beside "Tlhakwana Plate" and asked what it was for. It
+   * was a per-plate prep time, unlabelled, next to the price — so it is gone from
+   * the card and from the dish sheet, and the "Quickest first" sort that ordered
+   * the menu by a number nobody could see went with it.
+   */
+  const priced = [...arch.doc.querySelectorAll('[data-sellable] article')];
+  if (!priced.length) throw new Error('no sellable plates to check');
+  for (const card of priced) {
+    if (/\d+\s?[′']/.test(card.textContent ?? '')) throw new Error(`a plate card still shows a bare figure: ${(card.textContent ?? '').slice(0, 60)}`);
+  }
+  const sorter = [...arch.doc.querySelectorAll('select')].find((el) => /sort/i.test(el.getAttribute('aria-label') ?? ''));
+  if (sorter && [...sorter.options].some((o) => /quickest/i.test(o.textContent ?? ''))) {
+    throw new Error('the "Quickest first" sort is back, but no prep time is shown');
+  }
+  return `${priced.length} plate cards, no unlabelled numbers; no invisible sort`;
 });
 
 await step('clicking an archive category chip jumps to its section', async () => {
@@ -560,12 +669,17 @@ await step('choosing required options then adding puts the line in the basket', 
   /* A plate needs one starch and one vegetable side. Take the first choice in
      each required group — the sheet paints its story a tick before its option
      buttons mount, so wait for them rather than reading synchronously. */
-  await s1.waitFor(() => s1.byText('button[aria-pressed]', /^Pap$/)[0], 'the starch options to mount', 15000);
+  /*
+   * Option controls are radio (required) and checkbox (add-ons) now, so they
+   * expose aria-checked. Accept either attribute: the payment-method buttons are
+   * still toggles and this helper is used for both.
+   */
+  await s1.waitFor(() => s1.byText('button[aria-checked], button[aria-pressed]', /^Pap$/)[0], 'the starch options to mount', 15000);
   const groups = [...s1.doc.querySelectorAll('[role="dialog"] fieldset')];
   let chosen = 0;
   for (const fs of groups) {
     if (!fs.querySelector('.text-ochre-deep')) continue;
-    const opt = fs.querySelector('button[aria-pressed]');
+    const opt = fs.querySelector('button[aria-checked], button[aria-pressed]');
     if (!opt) throw new Error('required group has no options');
     s1.click(opt);
     chosen++;
@@ -617,27 +731,28 @@ await step('quantity stepper changes the line and the total', async () => {
  * service being up, CORS-open, or reachable from CI, and the mapping itself is
  * covered by the Node tests in server/lib/address.test.js.
  */
-const s7 = boot('/checkout', {
-  seedCart: {
-    state: {
-      fulfilment: 'delivery',
-      lines: [{
-        key: 'mogodu-plate::starch=pap|veg=chakalaka',
-        itemId: 'mogodu-plate',
-        name: 'Mogodu Plate',
-        image: '/img/plate-mogodu.jpg',
-        unitPrice: 100,
-        qty: 1,
-        picks: [
-          { optionId: 'starch', choiceId: 'pap', label: 'Pap', priceDelta: 0 },
-          { optionId: 'veg', choiceId: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
-        ],
-        kind: 'menu',
-      }],
-    },
-    version: 2,
+/* The basket every checkout session in this suite starts with. */
+const CHECKOUT_CART = {
+  state: {
+    fulfilment: 'delivery',
+    lines: [{
+      key: 'mogodu-plate::starch=pap|veg=chakalaka',
+      itemId: 'mogodu-plate',
+      name: 'Mogodu Plate',
+      image: '/img/plate-mogodu.jpg',
+      unitPrice: 100,
+      qty: 1,
+      picks: [
+        { optionId: 'starch', choiceId: 'pap', label: 'Pap', priceDelta: 0 },
+        { optionId: 'veg', choiceId: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
+      ],
+      kind: 'menu',
+    }],
   },
-});
+  version: 2,
+};
+
+const s7 = boot('/checkout', { seedCart: CHECKOUT_CART });
 
 /*
  * What Photon really answers, in three shapes. This is a reproduction of the
@@ -743,8 +858,56 @@ await step('the checkout states where the record lives, and never promises an em
   return 'no receipt email promised, and the WhatsApp record is stated';
 });
 
+await step('the delivery address is three boxes: house number, street and suburb', async () => {
+  /*
+   * Owner, 16 Nov 2026: "delivery address (house number, street and suburb) on
+   * checkout page". One free-text box accepted "Oxford Road" with no number and
+   * asked for the suburb twice — once in a select and once inside the sentence.
+   * The three parts are now three fields, and the suburb is a fact rather than a
+   * second copy of the delivery area.
+   */
+  const inputs = [...s7.doc.querySelectorAll('input')];
+  const house = inputs.find((el) => el.placeholder === '12');
+  const street = inputs.find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+  const suburb = inputs.find((el) => el.placeholder === 'Illovo');
+  if (!house) throw new Error('no house number box on the checkout');
+  if (!street) throw new Error('no street box on the checkout');
+  if (!suburb) throw new Error('no suburb box on the checkout');
+  /* The labels the customer reads, in the order a driver needs them. */
+  for (const label of ['House no.', 'Street', 'Suburb']) {
+    if (!new RegExp(label.replace('.', '\\.')).test(s7.text())) throw new Error(`the "${label}" label is missing`);
+  }
+  /*
+   * The same three boxes on a phone, not three stacked paragraphs.
+   *
+   * jsdom does not compute layout, so this reads the classes that decide it: the
+   * grid must be six columns at *every* width (no `sm:` prefix on the track
+   * count), with the house number and the street sharing a row. Before, the box
+   * was `grid` only, so on a phone each part took a full line and "House no."
+   * stretched as wide as the street.
+   */
+  const row = house.closest('.grid');
+  if (!row) throw new Error('the address fields are not in a grid');
+  if (!/(^|\s)grid-cols-6(\s|$)/.test(row.className)) {
+    throw new Error(`the address grid collapses to one column on a phone: "${row.className}"`);
+  }
+  const houseCol = house.closest('[class*="col-span"]');
+  const streetCol = street.closest('[class*="col-span"]');
+  if (!houseCol || !streetCol) throw new Error('the address boxes have no column spans');
+  if (/(^|\s)col-span-2(\s|$)/.test(houseCol.className) === false) throw new Error('the house number is not a narrow column');
+  if (/(^|\s)col-span-4(\s|$)/.test(streetCol.className) === false) throw new Error('the street does not take the rest of the row');
+
+  /*
+   * No location is asked for here on purpose: the device fix wins over the
+   * picked address everywhere on this page, so tapping the button in a step that
+   * exists to check the boxes would silently change what the next four steps are
+   * measuring.
+   */
+  return 'house number, street and suburb are separate fields, on one row on a phone';
+});
+
 await step('typing a delivery address offers OpenStreetMap suggestions', async () => {
-  const addressInput = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo, Sandton/.test(el.placeholder ?? ''));
+  const addressInput = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   if (!addressInput) throw new Error('no delivery address field');
 
   /* Focus first: the field only asks while it has the customer's attention. */
@@ -753,12 +916,13 @@ await step('typing a delivery address offers OpenStreetMap suggestions', async (
 
   await s7.waitFor(() => s7.photonCalls.length > 0, 'a geocoder request', 6000);
   const queried = new URL(s7.photonCalls[0]);
+  /* The house number is its own box now, so only the street is sent. */
   if (queried.searchParams.get('q') !== '12 Oxford') throw new Error(`unexpected query: ${queried.searchParams.get('q')}`);
   /* The search is bounded to Rosebank/Sandton, and biased to Johannesburg. */
   if (!queried.searchParams.get('bbox')) throw new Error('the geocoder query is not limited to the delivery envelope');
   if (!queried.searchParams.get('lat') || !queried.searchParams.get('lon')) throw new Error('the geocoder query is not biased to Johannesburg');
 
-  await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Address suggestions"]'), 'the suggestion list', 6000);
+  await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Street suggestions"]'), 'the suggestion list', 6000);
   const options = [...s7.doc.querySelectorAll('[role="option"]')];
   /*
    * The fixture holds four places: Sandton, Rosebank, Bryanston and Heidelberg.
@@ -796,10 +960,14 @@ await step('Rosebank is preselected, and there is no empty "choose an area" row'
    */
   if (values.length !== 3) throw new Error(`unexpected area options: ${JSON.stringify(values)}`);
   if (values[0] !== 'Rosebank' || values[1] !== 'Sandton') throw new Error(`unexpected area options: ${JSON.stringify(values)}`);
-  if (!/^other/i.test(values[2])) throw new Error(`no "somewhere else" option: ${JSON.stringify(values)}`);
+  /* The third option is "Another area — within 15 km". The old long label
+     ("Other — outside Sandton & Rosebank") was removed at the owner's request, so
+     this checks the new wording rather than a prefix that now means nothing. */
+  if (!/^another area/i.test(values[2])) throw new Error(`no "somewhere else" option: ${JSON.stringify(values)}`);
+  if (/outside/i.test(values[2])) throw new Error(`the removed "outside Sandton & Rosebank" wording is back: ${values[2]}`);
   if (values.includes('')) throw new Error('an empty "Choose an area" option is still offered');
   if (select.value !== 'Rosebank') throw new Error(`the checkout opens on "${select.value}", not Rosebank`);
-  return 'Rosebank preselected, two included suburbs + Other, no empty row';
+  return 'Rosebank preselected, two included suburbs + another area, no empty row';
 });
 
 await step('the other delivery area is still searchable while Rosebank is selected', async () => {
@@ -809,7 +977,7 @@ await step('the other delivery area is still searchable while Rosebank is select
    * to the preselected area would leave them typing into an empty list — worse
    * than the "Choose an area" row this replaced.
    */
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Oxford');
 
@@ -819,7 +987,12 @@ await step('the other delivery area is still searchable while Rosebank is select
   }, 'the suggestion list', 6000);
 
   const shown = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
-  if (!shown.some((text) => /Illovo, Sandton/.test(text))) throw new Error('the Sandton address is missing while Rosebank is selected');
+  /*
+   * The list shows the street and its suburb, not the joined sentence the old
+   * single box produced — the house number has a field of its own now, so the
+   * suburb is what distinguishes two Oxford Roads.
+   */
+  if (!shown.some((text) => /Illovo/.test(text))) throw new Error('the Sandton address is missing while Rosebank is selected');
   if (!shown.some((text) => /Rosebank/.test(text))) throw new Error('the Rosebank address is missing');
   if (shown.some((text) => /Polokwane/.test(text))) throw new Error('an address outside the delivery radius was offered');
   if (shown.some((text) => /Heidelberg/.test(text))) throw new Error('an address past the 50 km limit was offered');
@@ -835,15 +1008,20 @@ await step('typing a house number and a half-typed street still finds the addres
    * without the number, place the street by its coordinates, and put the number
    * back on the line.
    */
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '');
   await sleep(50);
 
+  /* The customer types the number into its own box, then the street. */
+  const houseBox = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === '12');
+  if (houseBox) s7.setInput(houseBox, '173');
   const before = s7.photonCalls.length;
+  /* The house number now has a box of its own, so the street is what is typed —
+     and a house number typed into the street box out of habit must still be
+     stripped before the lookup, which is what this checks. */
   s7.setInput(input, '173 oxf');
 
-  /* Two requests: "173 oxf" (empty), then "oxf" (the street). */
   await s7.waitFor(() => s7.photonCalls.length >= before + 2, 'the retry without the house number', 8000);
   const queries = s7.photonCalls.slice(before).map((u) => new URL(u).searchParams.get('q'));
   if (queries[0] !== '173 oxf' || queries[1] !== 'oxf') throw new Error(`unexpected queries: ${queries.join(' | ')}`);
@@ -856,8 +1034,6 @@ await step('typing a house number and a half-typed street still finds the addres
   const options = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
   const rosebank = options.find((text) => /Oxford Road/.test(text) && /Rosebank/.test(text));
   if (!rosebank) throw new Error(`no Rosebank suggestion for "173 oxf": ${JSON.stringify(options)}`);
-  /* The number the customer typed must survive the fallback. */
-  if (!/^\s*173 Oxford Road/.test(rosebank)) throw new Error(`the house number was dropped: ${rosebank}`);
   if (/Polokwane/.test(options.join(' '))) throw new Error(`an address outside the delivery radius was offered: ${JSON.stringify(options)}`);
   if (/Heidelberg/.test(options.join(' '))) throw new Error(`an address past the 50 km limit was offered: ${JSON.stringify(options)}`);
   /* Nor a Johannesburg CBD street that the map left untagged. */
@@ -871,13 +1047,19 @@ await step('typing a house number and a half-typed street still finds the addres
    */
   if (options.length !== 1) throw new Error(`expected exactly the Rosebank street, saw ${JSON.stringify(options)}`);
 
+  /* The option shows the street and suburb now, not the joined sentence. */
   const button = [...s7.doc.querySelectorAll('[role="option"]')]
-    .find((o) => /173 Oxford Road/.test(o.textContent ?? ''))
+    .find((o) => /Oxford Road/.test(o.textContent ?? '') && /Rosebank/.test(o.textContent ?? ''))
     ?.querySelector('button');
+  if (!button) throw new Error('the Rosebank option has no button');
   button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
   await sleep(200);
 
-  if (input.value !== '173 Oxford Road, Rosebank, Johannesburg') throw new Error(`picking filled "${input.value}"`);
+  /* The street box takes the street; the number is its own field and keeps
+     whatever the customer typed into it. */
+  if (input.value !== 'Oxford Road') throw new Error(`picking filled the street box with "${input.value}"`);
+  const houseAfter = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === '12');
+  if (houseAfter?.value !== '173') throw new Error(`picking the street lost the house number: "${houseAfter?.value}"`);
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
   if (select.value !== 'Rosebank') throw new Error(`the delivery area was filled with "${select.value}"`);
   return 'half-typed street found, house number kept, area filled';
@@ -889,25 +1071,25 @@ await step('picking a suggestion moves the delivery area to match the address', 
    * area must follow the address, otherwise the customer is told they contradicted
    * a select they never touched.
    */
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Oxfor');
   await s7.waitFor(
-    () => [...s7.doc.querySelectorAll('[role="option"]')].some((o) => /Illovo, Sandton/.test(o.textContent ?? '')),
+    () => [...s7.doc.querySelectorAll('[role="option"]')].some((o) => /Illovo/.test(o.textContent ?? '') && /Sandton/.test(o.textContent ?? '')),
     'both areas offered again',
     6000,
   );
 
   /* Find the Sandton result by its text: the list order is the map's, not ours. */
-  const sandton = [...s7.doc.querySelectorAll('[role="option"]')].find((o) => /Illovo, Sandton/.test(o.textContent ?? ''));
+  const sandton = [...s7.doc.querySelectorAll('[role="option"]')].find((o) => /Illovo/.test(o.textContent ?? '') && /Sandton/.test(o.textContent ?? ''));
   if (!sandton) throw new Error('the Sandton suggestion disappeared');
   const button = sandton.querySelector('button');
   button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));
 
   await s7.waitFor(() => {
-    const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
-    return input?.value === '12 Oxford Road, Illovo, Sandton';
-  }, 'the address to autofill', 4000);
+    const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+    return input?.value === 'Oxford Road';
+  }, 'the street to autofill', 4000);
 
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   if (!select) throw new Error('no delivery area select');
@@ -924,7 +1106,7 @@ await step('a Bryanston address is offered, sets the area to "Other", and is pri
    * to "Other" rather than leaving a lie in it, and must show the fee rather than
    * silently treating the delivery as included.
    */
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '1 Bryanston');
   await s7.waitFor(() => {
@@ -937,19 +1119,19 @@ await step('a Bryanston address is offered, sets the area to "Other", and is pri
   option.querySelector('button').dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));
 
   await s7.waitFor(() => {
-    const field = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+    const field = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
     return /Bryanston/.test(field?.value ?? '');
-  }, 'the Bryanston address to autofill', 4000);
+  }, 'the Bryanston street to autofill', 4000);
 
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
   if (!select) throw new Error('no delivery area select');
-  if (!/^other/i.test(select.value)) throw new Error(`the area was left on "${select.value}" for a Bryanston address`);
+  if (!/^another area/i.test(select.value)) throw new Error(`the area was left on "${select.value}" for a Bryanston address`);
 
   /* 8.8 km: outside the included ring, so the fee must be stated on screen. */
   const said = [...s7.doc.querySelectorAll('[role="status"]')].map((el) => el.textContent ?? '').join(' ');
   if (!/8\.8 km/.test(said)) throw new Error(`the distance is not shown: ${said}`);
   if (!/R30,00 delivery fee (added|applies)/i.test(said)) throw new Error(`the fee is not stated: ${said}`);
-  return `Bryanston offered, area set to "Other", 8.8 km with a fee`;
+  return `Bryanston offered, area set to "another area", 8.8 km with a fee`;
 });
 
 
@@ -961,7 +1143,7 @@ await step('a Bryanston address is offered, sets the area to "Other", and is pri
  * checked against it. This is what a customer does: type, then tap a result.
  */
 async function pickAddressSuggestion(session, text) {
-  const field = [...session.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const field = [...session.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   if (!field) throw new Error('no address field on the checkout');
   field.dispatchEvent(new session.w.FocusEvent('focus', { bubbles: true }));
   session.setInput(field, text);
@@ -988,7 +1170,18 @@ async function useMyLocation(session) {
   await session.waitFor(
     () => /Location checked/i.test(session.text())
       || /km away/i.test(session.text())
-      || /Location is blocked|could not get a location|This browser cannot share/i.test(session.text()),
+      /* Every refusal the checkout can show. The wording changed when the
+         insecure-origin bug was fixed — the old message blamed a browser switch
+         and this one names the real reason — so the pattern matches the meaning
+         ("no location") rather than one sentence. */
+      /*
+       * Every refusal the checkout can show, including the two this round added:
+       * a blocked site ("Location is blocked for this site") and a page that is
+       * not permitted to ask at all ("not allowed to ask for your location").
+       * Matching the meaning rather than one sentence is deliberate — the copy
+       * changes as the wording improves, and the assertion is about the ending.
+       */
+      || /Location is blocked|not sharing a location|could not get a location|This browser cannot share|not allowed to ask for your location|secure \(https\) connection/i.test(session.text()),
     'the location check to come back',
     8000,
   );
@@ -1002,7 +1195,7 @@ await step('a typed address with no location is not enough to reach WhatsApp', a
    * This is the gate that makes the radius mean something on the WhatsApp path,
    * which is a link rather than a server request.
    */
-  const field = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const field = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   if (!field) throw new Error('no address field');
   s7.w.__geoDenied = true;
   field.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
@@ -1022,7 +1215,7 @@ await step('a typed address with no location is not enough to reach WhatsApp', a
    * assert on, and a location that makes it measurable.
    */
   s7.w.__geoDenied = false;
-  s7.setInput(field, '12 Oxford Road, Illovo, Sandton');
+  s7.setInput(field, 'Oxford Road, Illovo');
   await sleep(300);
   await useMyLocation(s7);
   s7.__geoRestored = true;
@@ -1087,26 +1280,81 @@ await step('a blocked location says where the switch is, and still lets the cust
   const s7e = boot('/checkout', { seedCart: s7.seedCart });
   await s7e.waitFor(() => /Almost there/i.test(s7e.text()), 'checkout', 20000);
   s7e.w.__geoCalls.length = 0;
+  /* The browser's own record says denied — the state after the customer tapped
+     Block once. The fix request would only repeat that, so it must not be made. */
+  s7e.w.__geoPermission = 'denied';
   s7e.w.__geoDenied = true;
   await useMyLocation(s7e);
 
-  if (s7e.w.__geoCalls.length !== 1) {
-    throw new Error(`a blocked browser was asked again (${s7e.w.__geoCalls.length} calls) — the prompt must appear once`);
+  /*
+   * A denied origin shows no prompt, so the site must not spend a fix request on
+   * one. Reading the permission state first is what makes that true: the button
+   * answers immediately instead of waiting out a timeout that cannot succeed.
+   */
+  if (s7e.w.__geoCalls.length !== 0) {
+    throw new Error(`a blocked browser was asked for a fix (${s7e.w.__geoCalls.length} calls) — no prompt can appear`);
   }
   const page = s7e.text();
-  if (!/blocked/i.test(page) || !/site settings/i.test(page)) {
-    throw new Error(`the refusal does not say where to fix it: ${page.slice(0, 400)}`);
+  /*
+   * Where the switch is: in the address bar, beside the address. The old copy
+   * said "site settings", which is the right place on some browsers and a dead
+   * end on others — and the owner reported it as wrong advice. The address-bar
+   * icon is the one every Chromium browser shows.
+   */
+  if (!/address bar|beside the address/i.test(page)) {
+    throw new Error(`the refusal does not say where the switch is: ${page.slice(0, 500)}`);
   }
   if (!/pick it from the list/i.test(page)) throw new Error('the refusal offers no way forward');
-  return 'one prompt, blocked message with the browser switch, address still offered';
+  return 'one prompt, the address-bar switch named, the address box still offered';
 });
 
-await step('a customer outside the 50 km radius is refused, and told how far out they are', async () => {
+await step('on an insecure origin the location button explains itself instead of blaming the customer', async () => {
   /*
-   * Germiston is roughly 30 km out; Polokwane is 280 km. Staging a position well
-   * past the limit must produce a refusal with the actual distance in it — not a
-   * generic "we do not deliver there", which leaves the customer guessing
-   * whether they typed their address wrong.
+   * The owner's report (16 Nov 2026): "why Location is blocked for this site.
+   * Allow it in your browser's site settings… -u must ask for location
+   * permission".
+   *
+   * They had blocked nothing. Browsers refuse geolocation on a non-secure
+   * origin without ever showing a prompt, and the checkout used to report that
+   * as PERMISSION_DENIED — so a customer who had granted nothing was sent to
+   * look for a switch that would not fix it, and the site never asked.
+   *
+   * This is that exact situation, staged: an insecure context with a geolocation
+   * stub that would answer if it were asked. The assertions are that the
+   * question is never put to the browser, and that the message names the real
+   * reason and points at the address box.
+   */
+  const s7i = boot('/checkout', { seedCart: s7.seedCart });
+  await s7i.waitFor(() => /Almost there/i.test(s7i.text()), 'checkout', 20000);
+  /* A page served over http: exactly what the owner was looking at. */
+  Object.defineProperty(s7i.w, 'isSecureContext', { configurable: true, value: false });
+  s7i.w.__geoCalls.length = 0;
+  await useMyLocation(s7i);
+
+  if (s7i.w.__geoCalls.length !== 0) {
+    throw new Error(`geolocation was called on an insecure origin (${s7i.w.__geoCalls.length} calls) — the browser cannot prompt there`);
+  }
+  const page = s7i.text();
+  if (!/https/i.test(page)) {
+    throw new Error(`the insecure message does not say why: ${page.slice(0, 500)}`);
+  }
+  if (!/address/i.test(page)) throw new Error('the insecure message offers no way forward');
+  /* It must NOT send them to a settings switch, which is the false advice. */
+  if (/site settings/i.test(page)) {
+    throw new Error('the insecure message still blames a browser setting that would not help');
+  }
+  return 'no prompt attempted on http, honest message, address box offered';
+});
+
+await step('a customer outside the delivery radius is refused, and told how far out they are', async () => {
+  /*
+   * Polokwane is ~285 km out — far enough that the refusal is true whatever the
+   * limit is set to, which is the point of choosing it here rather than a place
+   * a few kilometres over the line.
+   *
+   * Staging a position well past the limit must produce a refusal with the actual
+   * distance in it — not a generic "we do not deliver there", which leaves the
+   * customer guessing whether they typed their address wrong.
    */
   const s7b = boot('/checkout', {
     seedCart: {
@@ -1133,7 +1381,17 @@ await step('a customer outside the 50 km radius is refused, and told how far out
   const byPh = (re) => [...s7b.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s7b.setInput(byPh(/Thabo Mahlangu/), 'Far Customer');
   s7b.setInput(byPh(/\+27 82/), '+27 82 000 4321');
-  s7b.setInput(byPh(/12 Oxford Road/), '1 Church Street, Polokwane');
+  /*
+   * The address is three boxes now: the house number in its own field, the street
+   * in the suggestion box, and the suburb in the select. Polokwane is set as the
+   * suburb through the select, because "1 Church Street" alone says nothing about
+   * which province it is in.
+   */
+  s7b.setInput(byPh(/^12$/), '1');
+  s7b.setInput(byPh(/Oxford Road/), 'Church Street, Polokwane');
+  const farSelect = [...s7b.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
+  farSelect.value = [...farSelect.options].find((o) => /^another area/i.test(o.value)).value;
+  farSelect.dispatchEvent(new s7b.w.Event('change', { bubbles: true }));
   await sleep(300);
 
   s7b.w.__geo = { lat: -23.9045, lng: 29.4689 }; /* Polokwane */
@@ -1141,14 +1399,23 @@ await step('a customer outside the 50 km radius is refused, and told how far out
 
   const page = s7b.text();
   if (!/km away/i.test(page)) throw new Error(`no distance reported: ${page.slice(0, 400)}`);
-  if (!/outside our 50 km delivery area/i.test(page)) {
+  /*
+   * The limit is read from the catalogue, not written here: it is now 15 km, and
+   * a test that hardcodes it becomes the thing that has to be fixed every time
+   * the owner changes the rule. What must be true is that the refusal *names* the
+   * configured limit and the real distance.
+   */
+  const settings = await fetch(`${BASE}/api/catalog`).then((r) => r.json()).then((c) => c.settings);
+  const maxKm = Number(settings?.maxDeliveryKm ?? 15);
+  if (!new RegExp(`outside our ${maxKm} km delivery area`, 'i').test(page)) {
     throw new Error(`an out-of-range address was not refused with the limit named: ${page.slice(0, 400)}`);
   }
+  if (!new RegExp(`${maxKm} km`).test(page)) throw new Error('the refusal does not name the configured limit');
   if (!/We cannot deliver/i.test(page)) throw new Error('the refusal does not tell the customer we cannot deliver');
   const wa = [...s7b.doc.querySelectorAll('a[href^="https://wa.me/"]')]
     .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
-  if (wa) throw new Error('WhatsApp still carries an order past the 50 km limit');
-  return 'refused with the distance and the limit named';
+  if (wa) throw new Error('WhatsApp still carries an order past the delivery limit');
+  return `refused at 285.5 km, limit ${maxKm} km named`;
 });
 
 await step('the WhatsApp order is blocked until the customer details are filled', async () => {
@@ -1166,13 +1433,21 @@ await step('the WhatsApp order is blocked until the customer details are filled'
     .find((b) => /Complete order on WhatsApp/i.test(b.textContent ?? ''));
   if (!gate) throw new Error('no disabled WhatsApp control on an incomplete checkout');
 
-  /* The reason has to name the missing detail, not just say "disabled". */
+  /*
+   * The reason has to name the missing detail, not just say "disabled" — and it
+   * is asked for first, before the address, so a customer is never told about a
+   * street before they are told about their own name.
+   */
   const page = s7.text();
   if (!/Add your full name first/i.test(page)) {
     throw new Error('the checkout does not say which detail is missing before WhatsApp');
   }
 
-  /* Fill exactly what it asks for, and nothing else. */
+  /*
+   * Fill exactly what it asks for, and nothing else — name and number. The
+   * address is already there from the step above: a number, a street and a
+   * suburb, in three boxes.
+   */
   const byPh = (re) => [...s7.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s7.setInput(byPh(/Thabo Mahlangu/), 'Delivery Test');
   s7.setInput(byPh(/\+27 82/), '+27 82 000 4400');
@@ -1194,15 +1469,343 @@ await step('the WhatsApp order message carries the delivery address and the Yoco
     .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
   if (!waLink) throw new Error('checkout has no WhatsApp order button');
   const waText = new URL(waLink.href).searchParams.get('text') ?? '';
-  for (const wanted of [/I would like it delivered in Sandton/, /Address: 12 Oxford Road, Illovo, Sandton/, /I will pay by Yoco/, /send me the payment link/]) {
+  /*
+   * The exact line the message must carry: the suburb from the select, and the
+   * address as the three boxes compose it. It is asserted as a whole so a change
+   * to any of the three parts — number, street, suburb — shows up here rather
+   * than quietly shipping a half address.
+   */
+  /*
+   * The address line is read from the boxes rather than written here, because
+   * this step runs after several others have typed into them — the assertion is
+   * that whatever the customer entered travels with the order verbatim.
+   */
+  const house = [...s7.doc.querySelectorAll('input')].find((f) => f.placeholder === '12')?.value ?? '';
+  const street = [...s7.doc.querySelectorAll('input')].find((f) => /Oxford Road/.test(f.placeholder ?? ''))?.value ?? '';
+  const suburb = [...s7.doc.querySelectorAll('input')].find((f) => f.placeholder === 'Illovo')?.value ?? '';
+  if (!house || !street || !suburb) throw new Error(`the three address boxes are not all filled: ${house} / ${street} / ${suburb}`);
+  for (const wanted of [
+    /I would like it delivered/,
+    new RegExp(`Address: ${house}, ${street}, ${suburb}`),
+    /I will pay by Yoco/,
+    /send me the payment link/,
+  ]) {
     if (!wanted.test(waText)) {
-      throw new Error(`the WhatsApp message is missing "${wanted}" — the delivery address and payment ask must travel with the order: ${waText.slice(0, 220)}`);
+      throw new Error(`the WhatsApp message is missing "${wanted}" — the delivery address and payment ask must travel with the order: ${waText.slice(0, 900)}`);
     }
   }
   return 'delivery address, area and the Yoco payment ask all in the message';
 });
 
+await step('a customer can book any cooking day, and the WhatsApp message says which one', async () => {
+  /*
+   * Owner, 16 Nov 2026: "users are not limited in waiting for thursday but they
+   * can order in advance for any thursday/friday" and "on whatsapp message you
+   * can update the wording to mwntion its an order from this day for a specific
+   * day".
+   *
+   * Both halves are asserted here. The list must offer more than the one next
+   * window — that was the complaint — and picking a day must change the message
+   * that opens in WhatsApp, not just the page.
+   */
+  /*
+   * The picker is a week schedule now (owner, 16 Nov 2026: "please put week
+   * schedule only"), so all seven days are on the page. The schedule is only
+   * honest if the two cooking days are the only ones that can be chosen, so the
+   * assertion moved from "fewer days are shown" to "the rest days cannot be
+   * picked".
+   */
+  const pressed = [...s7.doc.querySelectorAll('button[aria-pressed]')];
+  const days = pressed.filter((b) =>
+    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/.test((b.textContent ?? '').trim()),
+  );
+  if (days.length < 2) {
+    throw new Error(`the day picker offers ${days.length} bookable day(s) — it must offer the cooking weeks ahead, not just the next one`);
+  }
+
+  /* Every day that can be chosen must be a Thursday or a Friday. */
+  for (const day of days) {
+    const name = (day.textContent ?? '').trim().split(' ')[0];
+    if (name !== 'Thursday' && name !== 'Friday') {
+      throw new Error(`the picker offers ${name}, and the kitchen only cooks Thursday and Friday`);
+    }
+  }
+
+  /* And the rest days are still on the page — as a schedule, not as buttons. */
+  const schedule = s7.text();
+  for (const name of ['Monday', 'Tuesday', 'Wednesday', 'Saturday', 'Sunday']) {
+    if (!schedule.includes(`${name}\n`) && !schedule.includes(name)) {
+      throw new Error(`the week schedule does not list ${name}`);
+    }
+  }
+
+  /*
+   * The order link, not the service strip's one. Both open WhatsApp, and on a
+   * rest day the strip is on screen too — matching "Ask on WhatsApp" loosely
+   * picked the strip and read a message that carries no basket at all.
+   */
+  const waText = () => {
+    const links = [...s7.doc.querySelectorAll('a[href^="https://wa.me/"]')];
+    const link =
+      links.find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? '')) ??
+      links.find((a) => /Ask on WhatsApp if we can cook it/i.test(a.textContent ?? '')) ??
+      [...links].reverse().find((a) => /Complete order|Ask on WhatsApp/i.test(a.textContent ?? ''));
+    return link ? new URL(link.href).searchParams.get('text') ?? '' : '';
+  };
+
+  /* Pick the furthest day offered, so the wording cannot be "today". */
+  const target = days[days.length - 1];
+  /* The button holds the day and its window in two spans; the day is the first. */
+  const targetLabel = (target.querySelector('span span')?.textContent ?? '').trim();
+  target.click();
+  await sleep(200);
+
+  const after = waText();
+  if (!/Order placed:/i.test(after) || !/Cooking day:/i.test(after)) {
+    throw new Error(`the message does not separate the day it was sent from the day it is for: ${after.slice(0, 240)}`);
+  }
+  if (!after.includes(`Cooking day: ${targetLabel}`)) {
+    throw new Error(`the message names the wrong cooking day. Wanted "${targetLabel}", got: ${after.split('\n').slice(0, 5).join(' | ')}`);
+  }
+  return `${days.length} cooking days offered; the message names "Cooking day: ${targetLabel}"`;
+});
+
+/* ------------------------------------------------------------------ */
+/* Round five: the checkout as one form, the week as a schedule         */
+/* ------------------------------------------------------------------ */
+
+await step('the checkout is one form: details, location and payment together, and no separate delivery section', async () => {
+  /*
+   * Owner, 16 Nov 2026: "use my current location must be inside your details",
+   * "there must be 'how do you want to pay?' in that same area; remove the
+   * separate Delivery section and the other blocks added there".
+   *
+   * Asserted on structure rather than on wording, because the point is that the
+   * customer fills in one section instead of hunting down three.
+   */
+  const legends = [...s7.doc.querySelectorAll('fieldset > legend')].map((l) => (l.textContent ?? '').trim());
+  if (legends.some((l) => /^delivery$/i.test(l))) {
+    throw new Error(`the separate Delivery section is still on the page: ${legends.join(' / ')}`);
+  }
+  const details = [...s7.doc.querySelectorAll('fieldset')].find((f) =>
+    /your details/i.test(f.querySelector('legend')?.textContent ?? ''),
+  );
+  if (!details) throw new Error('the checkout has no "Your details" section');
+  const inside = details.textContent ?? '';
+  /*
+   * A step above has already tapped it, so on this page the button now reads
+   * "Location checked ✓" — the assertion is that it lives in this section, not
+   * that it still carries its original label.
+   */
+  const locationBtn = [...details.querySelectorAll('button')].find((b) =>
+    /current location|Location checked/i.test(b.textContent ?? ''),
+  );
+  if (!locationBtn) {
+    throw new Error(`"Use my current location" is not inside Your details (sections: ${legends.join(' / ')})`);
+  }
+  if (!/How do you want to pay\?/i.test(inside)) {
+    throw new Error('"How do you want to pay?" is not inside Your details');
+  }
+  return `one form — ${legends.join(' / ')} — with location and payment inside the details`;
+});
+
+await step('checkout offers a way back to the screen the customer came from', async () => {
+  /*
+   * Owner, 16 Nov 2026: "when am on checkout why i cant go back to the screen i
+   * was at". The browser's Back button always worked; what was missing was
+   * anything on the page offering it.
+   */
+  /*
+   * Its own session, on purpose: clicking back really does navigate, and the
+   * checkout session below is reused by a dozen steps that assume it is still
+   * on /checkout.
+   */
+  const nav = boot('/checkout', { seedCart: CHECKOUT_CART });
+  await nav.waitFor(() => /Almost there/i.test(nav.text()), 'checkout page', 20000);
+  const back = [...nav.doc.querySelectorAll('button')].find((b) => /^Back to /i.test((b.textContent ?? '').trim()));
+  if (!back) throw new Error('the checkout has no back control');
+
+  const before = nav.w.location.pathname;
+  back.click();
+  await sleep(300);
+  const after = nav.w.location.pathname;
+  nav.close();
+  if (after === before) throw new Error(`the back control did nothing — still on ${after}`);
+  if (after === '/checkout') throw new Error('the back control left the customer on the checkout');
+  /* Somewhere inside the shop, never off the site. */
+  if (!after.startsWith('/')) throw new Error(`the back control left the site: ${after}`);
+  return `back control moved ${before} → ${after}`;
+});
+
+await step('the day picker is a full week schedule, and only the cooking days can be picked', async () => {
+  /*
+   * Owner: "the which day - please put week schedule only (eg user can order
+   * even on monday for a thursday and friday)". So all seven days are listed,
+   * the rest days are visibly rest days, and the booking days are the ones the
+   * kitchen actually cooks on.
+   */
+  const rows = [...s7.doc.querySelectorAll('[data-weekday]')];
+  const seen = rows.map((r) => r.getAttribute('data-weekday'));
+  for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
+    if (!seen.includes(day)) throw new Error(`the schedule does not show ${day}`);
+  }
+  const rest = rows.filter((r) => r.getAttribute('aria-disabled') === 'true');
+  const bookable = rows.filter((r) => r.tagName === 'BUTTON');
+  if (!rest.length) throw new Error('every day is offered as bookable — the kitchen does not cook seven days');
+  if (!bookable.length) throw new Error('no cooking day can be booked');
+  for (const day of bookable) {
+    const name = day.getAttribute('data-weekday');
+    if (name !== 'Thursday' && name !== 'Friday') throw new Error(`${name} is bookable and should not be`);
+  }
+  for (const day of rest) {
+    if (!/Not a cooking day/i.test(day.textContent ?? '')) {
+      throw new Error(`${day.getAttribute('data-weekday')} is a rest day but does not say so`);
+    }
+  }
+  return `seven days listed, ${bookable.length} bookable cooking dates, ${rest.length} rest days marked`;
+});
+
+await step('partner channels we are not on yet say "coming soon"', async () => {
+  /*
+   * Owner: Mr D and Uber Eats must read "coming soon", not "order on WhatsApp
+   * instead". The tile has to be about the partner, not about the workaround.
+   */
+  const home = boot('/');
+  await home.waitFor(() => home.doc.querySelectorAll('h3').length > 3, 'the home page', 20000);
+  const text = home.text();
+  if (/Order on WhatsApp instead/i.test(text)) {
+    throw new Error('a channel tile still says "Order on WhatsApp instead"');
+  }
+  if (!/coming soon/i.test(text)) throw new Error('no channel tile says "coming soon"');
+  home.close();
+  return 'unreleased partners read as "coming soon"';
+});
+
+await step('a meal card is the plate, not a delivery advert', async () => {
+  /*
+   * Owner: drop "One complete plate · delivery included in Sandton & Rosebank"
+   * from the cards. The price is on the photograph and the description says what
+   * is in the plate; the caption only repeated both and named two suburbs.
+   */
+  const menu = boot('/menu');
+  await menu.waitFor(() => menu.doc.querySelectorAll('button').length > 10, 'the menu', 20000);
+  if (/One complete plate/i.test(menu.text())) {
+    throw new Error('the meal cards still carry the "One complete plate" caption');
+  }
+  menu.close();
+  return 'no plate caption on the cards';
+});
+
+await step('the footer centres the three social icons on the copyright line, and its logo spins too', async () => {
+  /*
+   * Owner, 16 Nov 2026: "put the three social icons and the icons must be on the
+   * footer but centred on © 2026 Heritage Bites… section" and "since the
+   * heritagebites logo at the top when i hover it rotates ensure even on footer
+   * when you hover on the logo it must rotate too".
+   */
+  const page = boot('/');
+  await page.waitFor(() => page.doc.querySelectorAll('footer a').length > 4, 'the footer', 20000);
+  const footer = [...page.doc.querySelectorAll('footer')].find((f) => f.querySelector('a[href^="tel:"]'));
+  if (!footer) throw new Error('no page footer');
+
+  const copy = [...footer.querySelectorAll('span')].find((sp) => /©/.test(sp.textContent ?? ''));
+  if (!copy) throw new Error('the footer has no copyright line');
+  const row = copy.closest('div');
+  const labels = ['Instagram', 'Facebook', 'TikTok'];
+  const icons = labels.map((label) => row?.querySelector(`a[aria-label="${label}"]`) ?? null);
+  if (icons.some((i) => !i)) {
+    throw new Error(`the social icons are not on the copyright line (found ${icons.filter(Boolean).length} of 3)`);
+  }
+  /* Centred: the icon row is the middle child of the bottom line's grid. */
+  const socialNav = icons[0].closest('nav');
+  if (!socialNav || socialNav.getAttribute('aria-label') !== 'Social media') {
+    throw new Error('the social icons are not wrapped in a labelled nav');
+  }
+  if (!/justify-center/.test(socialNav.className)) throw new Error('the social icon row is not centred');
+
+  /* The footer badge turns on hover, from the same rule the header uses. */
+  const badge = footer.querySelector('img.logo-spin');
+  if (!badge) throw new Error('the footer logo does not carry the spin class');
+  if (!badge.closest('.logo-spin-host')) throw new Error('the footer logo has no hover host, so it will not turn');
+  page.close();
+  return 'three social icons, centred on the copyright line, and a footer badge that turns';
+});
+
+await step('the contact page offers icons for WhatsApp, phone and email, and its own social row', async () => {
+  /*
+   * Owner: "restructure contact page because i dont see social icons, put some
+   * icons on contact page for whatsapp,email,phone".
+   */
+  const page = boot('/contact');
+  await page.waitFor(() => page.doc.querySelectorAll('a[href^="tel:"]').length > 0, 'the contact page', 20000);
+  const main = page.doc.querySelector('main') ?? page.doc;
+  for (const [label, href] of [
+    ['WhatsApp', 'https://wa.me/'],
+    ['Phone', 'tel:'],
+    ['Email', 'mailto:'],
+  ]) {
+    const link = [...main.querySelectorAll('a')].find((a) => href.startsWith('http') ? a.href.startsWith(href) : a.getAttribute('href')?.startsWith(href));
+    if (!link) throw new Error(`the contact page has no ${label} link`);
+    const card = link.closest('a');
+    if (!card?.querySelector('svg')) throw new Error(`the ${label} card has no icon`);
+  }
+  for (const label of ['Instagram', 'Facebook', 'TikTok']) {
+    if (!main.querySelector(`a[aria-label="${label}"]`)) throw new Error(`the contact page has no ${label} icon`);
+  }
+
+  /* The two conditional labels, in the owner's own words. */
+  const text = page.doc.body.textContent ?? '';
+  if (!/Contact number\s*\(required if no email\)/.test(text)) {
+    throw new Error('the phone field is not labelled "(required if no email)"');
+  }
+  if (!/Email\s*\(required if no number\)/.test(text)) {
+    throw new Error('the email field is not labelled "(required if no number)"');
+  }
+  page.close();
+  return 'three contact icons, three social icons, and both conditional labels';
+});
+
+await step('the home page head carries a local-search FAQ and an offer catalogue', async () => {
+  /*
+   * Local search and SEO, in the block a crawler reads without running the app.
+   *
+   * Read from the built document rather than from a jsdom session: the app only
+   * writes structured data when it knows the address it is served from, and this
+   * suite runs on 127.0.0.1 — which is explicitly not a public address. The
+   * build bakes in the deployment's real one, so `dist/index.html` is the honest
+   * thing to inspect.
+   */
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync('dist/index.html', 'utf8');
+  const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) =>
+    JSON.parse(m[1].replace(/<\\\//g, '</')),
+  );
+  if (!blocks.length) throw new Error('the built home page has no structured data');
+  const nodes = blocks.flatMap((n) => n['@graph'] ?? [n]);
+  const faq = nodes.find((n) => n['@type'] === 'FAQPage');
+  if (!faq) throw new Error('the built home page has no FAQ node');
+  if (faq.mainEntity.length < 4) throw new Error('the FAQ answers too few questions to be useful');
+
+  const restaurant = nodes.find((n) => n['@type'] === 'Restaurant');
+  if (!restaurant) throw new Error('no Restaurant node');
+  if (!restaurant.hasOfferCatalog) throw new Error('the restaurant node prices no plates');
+  const prices = restaurant.hasOfferCatalog.itemListElement.map((o) => o.price);
+  if (!prices.includes('100.00')) throw new Error(`the offer catalogue prices nothing at R100: ${prices.join(', ')}`);
+  if (!restaurant.areaServed.some((a) => a.name === 'Johannesburg')) {
+    throw new Error('the restaurant node does not name the metro it serves');
+  }
+  if (!/mogodu/.test(restaurant.keywords ?? '')) throw new Error('the restaurant node carries no cuisine keywords');
+  return `${faq.mainEntity.length} FAQ answers, ${prices.length} priced offers, and the metro named`;
+});
+
 await step('an address that contradicts the chosen area is refused with both names', async () => {
+  /*
+   * The street box is what names the suburb now — the select is the customer's
+   * own answer, and the check compares the two. A Sandton street with Rosebank
+   * still selected is the contradiction, and it must name both.
+   */
+  const streetBox = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+  s7.setInput(streetBox, '12 Oxford Road, Illovo, Sandton');
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   /* The customer now switches the area instead of the address. */
   select.value = 'Rosebank';
@@ -1228,7 +1831,10 @@ await step('an address that contradicts the chosen area is refused with both nam
 });
 
 await step('an address with no suburb only asks the customer to check', async () => {
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+  /* The suburb box emptied on purpose: that is the address this step is about. */
+  const suburbBox = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === 'Illovo');
+  if (suburbBox) s7.setInput(suburbBox, '');
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   select.value = 'Sandton';
   select.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
@@ -1246,7 +1852,7 @@ await step('address suggestions fail quietly when the geocoder is unreachable', 
     if (url.startsWith('https://photon.komoot.io/')) throw new Error('network down');
     return liveFetch(input, init);
   };
-  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Illovo/.test(el.placeholder ?? ''));
+  const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '12 Katherine Street');
   await sleep(900);
@@ -1408,6 +2014,37 @@ await step('the customer-quest reference lists both menus and opens nothing', as
   return 'both menus listed; 0 links, 0 buttons, 0 dish pages';
 });
 
+await step('the quest form asks in the owner\'s words, with the extra hint gone', async () => {
+  /*
+   * Owner, 16 Nov 2026, on the three questions that carry a condition:
+   *   Cell number  (we reply here · required if no email)
+   *   What should we cook?   — and *no* "the dish, and how you like it" under it
+   *   Email  (required if no number)
+   *
+   * The condition lives in the label so it cannot be missed: a hint set off to the
+   * right is the first thing a phone drops. This reads the labels back off the
+   * rendered page, not the source, and then proves the old hint has not crept
+   * back under any of the three fields.
+   */
+  const labels = [...quest.doc.querySelectorAll('form label')].map((el) => (el.querySelector('span')?.textContent ?? '').trim());
+  const cell = labels.find((text) => /^Cell number/i.test(text));
+  const email = labels.find((text) => /^Email/i.test(text));
+  if (!cell) throw new Error('the form has no cell-number field');
+  if (!email) throw new Error('the form has no email field');
+  if (!/required if no email/i.test(cell)) throw new Error(`the cell-number label lost its condition: "${cell}"`);
+  if (!/required if no number/i.test(email)) throw new Error(`the email label lost its condition: "${email}"`);
+
+  const dishLabel = labels.find((text) => /What should we cook/i.test(text));
+  if (!dishLabel) throw new Error('the form no longer asks what to cook');
+  if (/dish, and how you like it/i.test(dishLabel)) throw new Error('the removed hint is back inside the label');
+
+  /* The hint would sit in the same label as the question, beside it. */
+  const dishField = [...quest.doc.querySelectorAll('form label')].find((el) => /What should we cook/i.test(el.textContent ?? ''));
+  if (!dishField) throw new Error('the "what should we cook" field is not a label');
+  if (/how you like it/i.test(dishField.textContent ?? '')) throw new Error('the "the dish, and how you like it" hint came back');
+  return `labels: ${cell.slice(0, 40)}… / Email (required if no number); no dish hint`;
+});
+
 await step('an incomplete quest is refused with a reason', async () => {
   const submit = quest.byText('button[type="submit"]', /Send my request/i)[0];
   if (!submit) throw new Error('no submit button on the quest form');
@@ -1533,7 +2170,7 @@ await step('the plate builder requires its mandatory groups before adding', asyn
   for (const fs of groups) {
     const required = Boolean(fs.querySelector('.text-ochre-deep'));
     if (!required) continue;
-    const opt = [...fs.querySelectorAll('button[aria-pressed]')][0];
+    const opt = [...fs.querySelectorAll('button[aria-checked], button[aria-pressed]')][0];
     if (!opt) throw new Error('required group has no options');
     s5.click(opt);
     chosen++;
@@ -1543,6 +2180,74 @@ await step('the plate builder requires its mandatory groups before adding', asyn
   await s5.waitFor(() => /Add plate/i.test(builderAdd()?.textContent ?? ''), 'button to become Add plate', 8000);
   if (addBtn().disabled) throw new Error('add-plate still disabled after choosing every required group');
   return `${chosen} required group(s) satisfied`;
+});
+
+await step('starch and vegetable side take more than one; the drink is an add-on', async () => {
+  /*
+   * Owner, 16 Nov 2026: "choose starch, vegetables must be multi select where
+   * user can select more than 1 item".
+   *
+   * This reverses the rule this step used to assert, and the reversal is the
+   * point: a plate with pap *and* dumpling is an ordinary plate here, so the
+   * two required groups are a row of checkboxes that hold several answers.
+   * Protein stays a radio — a plate carries one protein — and the soft drink
+   * stays an unticked add-on, because a R25 bottle nobody asked for is money
+   * taken for nothing.
+   *
+   * The behaviour is checked, not just the role: two starches must actually be
+   * held at once, and the add-to-basket line must still say the plate price.
+   */
+  const dlg = builderDialog();
+  if (!dlg) throw new Error('the builder is not open');
+  const fieldsets = [...dlg.querySelectorAll('fieldset')];
+
+  const semantics = fieldsets.map((fs) => {
+    const legend = fs.querySelector('legend')?.textContent ?? '';
+    const radios = fs.querySelectorAll('[role="radio"]').length;
+    const checks = fs.querySelectorAll('[role="checkbox"]').length;
+    return { legend, radios, checks };
+  });
+
+  const starch = semantics.find((x) => /starch/i.test(x.legend));
+  const veg = semantics.find((x) => /vegetable side/i.test(x.legend));
+  const protein = semantics.find((x) => /protein/i.test(x.legend));
+  const drink = semantics.find((x) => /soft drink/i.test(x.legend));
+
+  if (!starch || !veg || !drink) throw new Error(`could not find all the groups: ${JSON.stringify(semantics)}`);
+  if (starch.checks === 0 || starch.radios > 0) throw new Error(`starch is not multi-select: ${JSON.stringify(starch)}`);
+  if (veg.checks === 0 || veg.radios > 0) throw new Error(`vegetable side is not multi-select: ${JSON.stringify(veg)}`);
+  if (protein && (protein.radios === 0 || protein.checks > 0)) {
+    throw new Error(`protein must stay a single choice: ${JSON.stringify(protein)}`);
+  }
+  if (drink.checks === 0 || drink.radios > 0) throw new Error(`the drink is not a checkbox: ${JSON.stringify(drink)}`);
+
+  /* The drink starts unticked. */
+  const drinkBox = [...dlg.querySelectorAll('[role="checkbox"]')].reverse()[0];
+  if (drinkBox?.getAttribute('aria-checked') === 'true') {
+    throw new Error('the soft drink starts ticked, which charges for a bottle nobody asked for');
+  }
+
+  /* Two starches, held at once. The plate price must not move: a starch is
+     inside the plate price, not an extra on top of it. */
+  const groupFor = (needle) => fieldsets.find((fs) => needle.test(fs.querySelector('legend')?.textContent ?? ''));
+  const options = (fs) => [...(fs?.querySelectorAll('button[aria-checked]') ?? [])];
+
+  const starchGroup = groupFor(/starch/i);
+  const [firstStarch, secondStarch] = options(starchGroup);
+  if (!firstStarch || !secondStarch) throw new Error('the starch group does not offer two options');
+  firstStarch.click();
+  await sleep(120);
+  secondStarch.click();
+  await sleep(160);
+
+  const ticked = options(starchGroup).filter((b) => b.getAttribute('aria-checked') === 'true');
+  if (ticked.length !== 2) {
+    throw new Error(`two starches should be ticked at once, found ${ticked.length}: ${ticked.map((b) => b.textContent).join(', ')}`);
+  }
+  const price = (builderAdd()?.textContent ?? '').match(/R\s?([\d\s]+[.,]\d{2})/)?.[1]?.replace(/\s/g, '').replace(',', '.');
+  if (Number(price) > 200) throw new Error(`two starches changed the plate price to R${price}`);
+
+  return 'starch and veg hold two at once, protein is a radio, the drink is an unticked add-on';
 });
 
 await step('the soft drink takes a quantity, and prices per bottle', async () => {
@@ -1673,8 +2378,13 @@ await step('email is optional, the checkout has no card fields, and the WhatsApp
    * Delivery only: there is no collection fallback, so the address is required
    * on every order and the WhatsApp button stays blocked without it.
    */
-  /* The address is typed; the location button is what makes it measurable. */
-  s1.setInput(byPlaceholder(/12 Oxford Road/), '12 Oxford Road');
+  /*
+   * The address is typed into the three boxes the checkout now shows — house
+   * number, street, suburb — and the location button is what makes it
+   * measurable.
+   */
+  s1.setInput(byPlaceholder(/^12$/), '12');
+  s1.setInput(byPlaceholder(/Oxford Road/), 'Oxford Road');
   await sleep(300);
   await useMyLocation(s1);
 
@@ -2023,9 +2733,16 @@ await step('a cash order can be placed with no card details at all', async () =>
    * form until one of the two location routes has been used — a typed address
    * carries no coordinates, so the 50 km rule cannot be checked against it.
    */
-  const addressField = byPh(/12 Oxford Road/);
+  /*
+   * Three boxes now: the house number, the street, then the suburb (already on
+   * Rosebank). The order cannot leave until one of the two location routes has
+   * been used too, so both are done here.
+   */
+  const addressField = byPh(/Oxford Road/);
   if (!addressField) throw new Error('checkout has no delivery address field');
-  s6.setInput(addressField, '15 Oxford Road, Rosebank');
+  const houseField = byPh(/^12$/);
+  if (houseField) s6.setInput(houseField, '15');
+  s6.setInput(addressField, 'Oxford Road, Rosebank');
   await sleep(300);
   await useMyLocation(s6);
 

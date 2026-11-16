@@ -274,12 +274,12 @@ const ROUTES = [
    * titles are what a search result shows, the descriptions are what it prints
    * underneath, and the robots instruction keeps private screens out.
    */
-  { path: '/', expect: [/A taste of South African heritage/i, /Cooked Thursdays/i], title: /^South African Plates in Rosebank & Sandton — Heritage Bites$/, description: /^South African plates from R100/ },
-  { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/], title: /^The Menu & Prices — Heritage Bites$/, description: /^Every plate on the Heritage Bites menu/ },
+  { path: '/', expect: [/A taste of South African heritage/i, /Cooked Thursdays/i], title: /^South African Food Delivery in Sandton & Rosebank — Heritage Bites$/, description: /^Traditional South African plates from R100/ },
+  { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/], title: /^The Menu & Prices — Heritage Bites$/, description: /^The full Heritage Bites menu and prices/ },
   { path: '/specials', expect: [/Thursdays & Fridays/i, /R100|R130/], title: /^This Week's Cooking & Delivery — Heritage Bites$/, description: /^What is cooking this week/ },
   { path: '/policies', expect: [/Privacy Policy/i, /Refund Policy/i, /Order Cancellation Policy/i], title: /^Policies & Terms — Heritage Bites$/, description: /^Delivery, refunds/ },
   { path: '/about', expect: [/Every bite tells a story/i, /Vision/i, /Mission/i, /How we started/i], title: /^Our Story, Vision & Mission — Heritage Bites$/, description: /^Heritage Bites began in a family kitchen/ },
-  { path: '/contact', expect: [/Talk to a human/i], title: /^Contact & WhatsApp — Heritage Bites$/, description: /^Call or WhatsApp \+27 67 013 7587/ },
+  { path: '/contact', expect: [/Talk to a human/i], title: /^Contact, WhatsApp & Directions — Heritage Bites$/, description: /^Call or WhatsApp \+27 67 013 7587/ },
   { path: '/checkout', expect: [/basket is empty/i], title: /^Checkout — Heritage Bites$/, noindex: true },
   { path: '/passport', expect: [/Your loyalty card/i], title: /^Loyalty Card — Heritage Bites$/, description: /^Look up your Heritage Bites loyalty card/ },
   { path: '/quest', expect: [/Ask us to cook it/i, /What the kitchen cooks/i, /Send your request/i], title: /^Ask Us to Cook It — Heritage Bites$/, description: /^Ask the Heritage Bites kitchen/ },

@@ -7,6 +7,7 @@ import { Button, Field, HeritageBand, Reveal, SectionLabel, inputCls } from '../
 import { usePageSeo } from '../lib/seo';
 import { waHref, GENERAL_ENQUIRY } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
+import { DELIVERY_ZONES } from '../../shared/address.js';
 
 const SUBJECTS = ['General enquiry', 'Catering quote', 'Feedback', 'Something went wrong with my order', 'Work with us'];
 
@@ -107,28 +108,97 @@ export default function Contact() {
         <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr]">
           {/* Business info */}
           <div className="space-y-4">
+            {/*
+              One card per way to reach the kitchen, each with the mark a
+              customer already associates with it. The owner's report was
+              literally "i dont see social icons" — the page listed three ways
+              to get in touch as plain bordered rectangles, which read as a
+              price list rather than as three buttons.
+            */}
             {[
-              { t: 'Phone', v: s?.phoneDisplay ?? '+27 67 013 7587', href: `tel:${s?.phone ?? '+27670137587'}`, cta: 'Call now' },
-              { t: 'WhatsApp', v: 'Fastest way to order or ask a question', href: waLink, cta: 'Open chat' },
-              { t: 'Email', v: s?.email ?? 'heritagebitesfood@gmail.com', href: `mailto:${s?.email ?? 'heritagebitesfood@gmail.com'}`, cta: 'Write to us' },
+              {
+                t: 'WhatsApp',
+                v: 'Fastest way to order or ask a question',
+                href: waLink,
+                cta: 'Open chat',
+                external: true,
+                path: 'M12 2a9.6 9.6 0 0 0-8.2 14.6L2 22l5.5-1.7A9.6 9.6 0 1 0 12 2Zm0 1.9a7.7 7.7 0 1 1-3.9 14.4l-.5-.3-3 .9.9-2.9-.3-.5A7.7 7.7 0 0 1 12 3.9Z',
+              },
+              {
+                t: 'Phone',
+                v: s?.phoneDisplay ?? '+27 67 013 7587',
+                href: `tel:${s?.phone ?? '+27670137587'}`,
+                cta: 'Call now',
+                external: false,
+                path: 'M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z',
+              },
+              {
+                t: 'Email',
+                v: s?.email ?? 'heritagebitesfood@gmail.com',
+                href: `mailto:${s?.email ?? 'heritagebitesfood@gmail.com'}`,
+                cta: 'Write to us',
+                external: false,
+                path: 'M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm.6 2 7.4 5.4L19.4 7',
+              },
             ].map((row) => (
               <a
                 key={row.t}
                 href={row.href}
-                target={row.href.startsWith('http') ? '_blank' : undefined}
-                rel="noreferrer"
-                className="group flex items-start justify-between gap-4 rounded-3xl border-2 border-ink/10 bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-ink/30"
+                target={row.external ? '_blank' : undefined}
+                rel={row.external ? 'noreferrer' : undefined}
+                className="group flex items-start gap-4 rounded-3xl border-2 border-ink/10 bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-ink/30"
               >
-                <span>
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ochre/20 text-ochre-deep">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d={row.path} />
+                  </svg>
+                </span>
+                <span className="min-w-0 flex-1">
                   <span className="block font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">{row.t}</span>
-                  <span className="mt-1 block text-[15px] font-semibold">{row.v}</span>
+                  <span className="mt-1 block break-words text-[15px] font-semibold">{row.v}</span>
                   <span className="mt-1 block text-[12px] text-ink/50">{row.cta}</span>
                 </span>
-                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-ink/25 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-1 h-5 w-5 shrink-0 text-ink/25 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
               </a>
             ))}
+
+            {/* The same three profiles the footer carries, on the page a
+                customer opens when they want to find us somewhere. */}
+            <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Follow us</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  {
+                    label: 'Instagram',
+                    path: 'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm5 5.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9ZM17.5 6.5h.01',
+                  },
+                  {
+                    label: 'Facebook',
+                    path: 'M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z',
+                  },
+                  {
+                    label: 'TikTok',
+                    path: 'M15 3v10a4.5 4.5 0 1 1-4.5-4.5M15 3c.3 2.7 2 4.4 5 4.8',
+                  },
+                ].map((social) => (
+                  <a
+                    key={social.label}
+                    href="#"
+                    aria-label={social.label}
+                    className="grid h-11 w-11 place-items-center rounded-full border-2 border-ink/15 text-ink/60 transition-colors hover:border-ochre hover:text-ochre-deep"
+                  >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d={social.path} />
+                    </svg>
+                  </a>
+                ))}
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-ink/45">
+                Profiles are being set up — the accounts above open as soon as they are live.
+              </p>
+            </div>
 
             <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
               <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Opening hours</p>
@@ -157,9 +227,9 @@ export default function Contact() {
             <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
               <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</p>
               <p className="mt-2 text-sm text-ink/70">
-                Thursdays and Fridays between {s?.serviceWindow.open} and {s?.serviceWindow.close}. Delivery is included in{' '}
-                {s?.deliveryAreas?.join(' & ') ?? 'Sandton & Rosebank'}; outside them a fee applies, and we deliver up to{' '}
-                {s?.maxDeliveryKm ?? 50} km from the kitchen. The minimum order is R{Number(s?.minDeliveryOrder ?? 100)}.
+                Thursdays and Fridays, and you can book any cooking day ahead. Delivery is included in{' '}
+                {s?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}; elsewhere a fee applies, and we deliver up to{' '}
+                {s?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen. The minimum order is R{Number(s?.minDeliveryOrder ?? 100)}.
               </p>
               <Link to="/policies" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-ochre-deep underline">
                 Delivery, refund and cancellation policies
@@ -227,7 +297,7 @@ export default function Contact() {
                         aria-invalid={Boolean(errors.name)}
                       />
                     </Field>
-                    <Field label="Contact number" hint="required if no email" error={errors.phone}>
+                    <Field label="Contact number (required if no email)" error={errors.phone}>
                       <input
                         className={inputCls}
                         value={form.phone}
@@ -240,7 +310,7 @@ export default function Contact() {
                     </Field>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Email" hint="required if no number" error={errors.email}>
+                    <Field label="Email (required if no number)" error={errors.email}>
                       <input
                         className={inputCls}
                         value={form.email}

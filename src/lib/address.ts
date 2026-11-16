@@ -5,10 +5,10 @@
  * could select "Sandton" and type a Rosebank street, and the order went through
  * labelled with whichever area matched first. Suggestions fix the root cause:
  * pick the address, and the map's own coordinates come with it, which is what
- * the 50 km check needs.
+ * the distance check needs.
  *
  * Scope is the delivery radius, not a suburb list. Delivery is included in
- * Sandton and Rosebank, costs a fee further out, and stops at 50 km — so the
+ * Sandton and Rosebank, costs a fee further out, and stops at a fixed radius — so the
  * search reaches the whole radius and the distance decides, not the name of
  * the suburb the customer happened to type.
  *
@@ -29,7 +29,6 @@
  * checkout still works; suggestions are an assist, never a requirement.
  */
 import {
-  DELIVERY_RADIUS_BBOX_PARAM,
   DELIVERY_ZONES,
   KITCHEN_ORIGIN,
   MIN_QUERY_LENGTH,
@@ -38,6 +37,7 @@ import {
   expandStreetAbbreviations,
   filterSuggestions,
   mapPhotonResponse,
+  radiusBboxParam,
   stripHouseNumber,
 } from '../../shared/address.js';
 
@@ -74,6 +74,14 @@ export interface AddressSuggestion {
   lng?: number | null;
   /** House number taken from the query when only the street matched. */
   house?: string;
+  /*
+   * The address in parts, filled by `mapPhotonFeature` so the three boxes on the
+   * checkout can be populated from one tap. `suburb` is the map's locality tag —
+   * a postal fact — not the delivery area the order is priced against.
+   */
+  street?: string;
+  suburb?: string;
+  city?: string;
 }
 
 /**
@@ -144,10 +152,26 @@ export async function suggestAddresses(
      * The kitchen serves anywhere it can reach, with a fee outside Sandton and
      * Rosebank — so answering only inside those two suburbs made the radius
      * unreachable: a Bryanston customer typed a real address and the box offered
-     * nothing. The hard 50 km limit is enforced afterwards, by distance, from the
+     * nothing. The hard limit is enforced afterwards, by distance, from the
      * coordinates this returns.
      */
-    url.searchParams.set('bbox', DELIVERY_RADIUS_BBOX_PARAM);
+    /*
+     * The envelope is built from the SAME radius the order is priced against,
+     * read from the catalogue — never the built-in default.
+     *
+     * This is the bug the 15 km change would otherwise reintroduce: a hardcoded
+     * box is a second copy of the delivery rule, and the moment the two disagree
+     * the box offers addresses the checkout then refuses. Deriving it here means
+     * changing `maxDeliveryKm` in the settings moves the search, the pricing and
+     * the refusal together or not at all.
+     */
+    url.searchParams.set(
+      'bbox',
+      radiusBboxParam(
+        Number(options.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm),
+        options.settings?.deliveryOrigin ?? KITCHEN_ORIGIN,
+      ),
+    );
     /* The point bias still helps rank two in-area results sensibly. */
     url.searchParams.set('lat', String(BIAS.lat));
     url.searchParams.set('lon', String(BIAS.lng));

@@ -74,8 +74,8 @@ export default function About() {
                 Our long-term vision is to share regional dishes from across South Africa and keep the food stories behind them alive for the next generation.
               </p>
               <p className="mt-4 text-[15px] leading-relaxed text-bone/70">
-                Today we operate as a shadow kitchen, cooking on Thursdays and Fridays between 12:00 and 13:30, with delivery
-                in Rosebank and Sandton.
+                Today we operate as a shadow kitchen, cooking on Thursdays and Fridays, with delivery in Rosebank and
+                Sandton and up to 15 km from the kitchen. Any cooking day ahead can be booked in advance.
               </p>
             </div>
           </Reveal>

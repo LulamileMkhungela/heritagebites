@@ -5,8 +5,9 @@ import { useCart } from '../store/cart';
 import { zar } from '../lib/format';
 import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
-import type { ComingSoonItem, MenuItem, PlateMenu } from '../lib/types';
+import type { ComingSoonItem, MenuItem, PlateGroup, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
+import { DELIVERY_ZONES } from '../../shared/address.js';
 import { extraCost, maxPerExtra } from '../../shared/service.js';
 import { currentSiteUrl, usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
@@ -24,7 +25,14 @@ const SORTS = [
   { id: 'recommended', label: 'Recommended' },
   { id: 'price-asc', label: 'Price: low to high' },
   { id: 'price-desc', label: 'Price: high to low' },
-  { id: 'quickest', label: 'Quickest first' },
+  /*
+   * "Quickest first" sorted on a per-plate prep time the page no longer shows —
+   * the number behind it read "20′" on a card, which the owner called out as
+   * confusing, and the kitchen cooks in batches on two days a week, so a
+   * per-plate minute count was never a real answer about when food arrives.
+   * A sort option with no visible number behind it would be a control that
+   * silently reorders the menu for no reason the customer can see.
+   */
 ] as const;
 
 type SortId = (typeof SORTS)[number]['id'];
@@ -36,8 +44,6 @@ function sortItems(items: MenuItem[], sort: SortId): MenuItem[] {
       return copy.sort((a, b) => a.price - b.price || a.name.localeCompare(b.name));
     case 'price-desc':
       return copy.sort((a, b) => b.price - a.price || a.name.localeCompare(b.name));
-    case 'quickest':
-      return copy.sort((a, b) => a.prepMins - b.prepMins || a.price - b.price);
     default:
       /* The kitchen's own order: the plates it sells most sit first. */
       return copy.sort((a, b) => (b.orders ?? 0) - (a.orders ?? 0));
@@ -239,8 +245,8 @@ export default function MenuPage() {
             which stops being true as soon as one plate is priced differently.
           */}
           <p className="mt-4 max-w-2xl text-bone/70">
-            Two plate menus, each at a fixed price. Choose a protein, a starch and a vegetable side, and delivery is
-            included.
+            Two plate menus, each at a fixed price. Choose a protein, then as many starches and vegetable sides as you
+            like, and delivery is included.
             {catalog.plateMenus.length > 0 && (
               <>
                 {' '}
@@ -456,10 +462,9 @@ export default function MenuPage() {
         <section className="mx-auto mt-14 max-w-7xl px-4 pb-4">
           <div className="rounded-3xl border-2 border-ink/10 bg-white p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
             <p className="max-w-2xl text-sm leading-relaxed text-ink/70">
-              Every plate is cooked on a Thursday or a Friday between{' '}
-              {catalog?.settings?.serviceWindow.open ?? '12:00'} and{' '}
-              {catalog?.settings?.serviceWindow.close ?? '13:30'}. Collect and you pay the plate price; we deliver in{' '}
-              {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} for a flat fee.{' '}
+              Every plate is cooked on a Thursday or a Friday, and any cooking day ahead can be booked. Delivery is
+              included in {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} and up to{' '}
+              {catalog?.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen.{' '}
               <Link to="/specials" className="font-semibold text-ochre-deep underline">
                 How delivery and collection work
               </Link>
@@ -528,12 +533,22 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
         <span className="absolute left-3 top-3 rounded-full bg-ink/85 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-bone">
           Coming soon
         </span>
-        <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">{zar(item.price)}</span>
+        {/*
+          Only when there is a price. A vegetable side has none of its own — it
+          is included *inside* the plate — and "R0,00" would be a price, wrongly
+          stated. The line under the description says where it comes from
+          instead, as a short uppercase label so it reads at a glance.
+        */}
+        {item.price > 0 && (
+          <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">{zar(item.price)}</span>
+        )}
       </div>
       <div className="flex flex-1 flex-col p-4">
         <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
         <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>
-        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-ink/40">Not on sale yet</p>
+        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-ink/40">
+          {item.price > 0 ? 'Not on sale yet' : 'Included in a plate'}
+        </p>
       </div>
     </article>
   );
@@ -548,7 +563,15 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
  */
 function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => void }) {
   const addPlate = useCart((s) => s.addPlate);
-  const [picked, setPicked] = useState<Record<string, string>>({});
+  /*
+   * `picked` holds a *list* per group, not one id.
+   *
+   * Owner, 15 Nov 2026: "choose starch, vegetables must be multi select where
+   * user can select more than 1 item". A plate with pap and dumpling is an
+   * ordinary plate here, so a group has to be able to hold two answers — and the
+   * single-value map could not, whatever the visible control looked like.
+   */
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
   /*
    * How many of a priced extra, keyed by "groupId:itemId".
    *
@@ -560,12 +583,40 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [qty, setQty] = useState(1);
 
-  /* Tapping the chosen answer clears it, which is how an optional group (the
-     drink) is declined. Required groups are guarded by `missing` below. */
-  const toggle = (groupId: string, itemId: string) =>
-    setPicked((prev) => ({ ...prev, [groupId]: prev[groupId] === itemId ? '' : itemId }));
+  /**
+   * Tap an item: add it if it is not there, remove it if it is.
+   *
+   * The difference between a group that holds several and one that holds a
+   * single answer is the group's own `max`:
+   *
+   *   - `max > 1` (starch, vegetable side) — ticking a second adds it. Tapping a
+   *     ticked one removes it, unless it is the last one in a required group,
+   *     where removing it would leave the plate incomplete.
+   *   - `max === 1` (protein, the drink) — a new choice REPLACES the old one,
+   *     and tapping the chosen one clears it, which is how an optional single is
+   *     declined.
+   */
+  const toggle = (group: PlateGroup, itemId: string) =>
+    setPicked((prev) => {
+      const current = prev[group.id] ?? [];
+      const on = current.includes(itemId);
+      const several = Number(group.max) > 1;
 
-  const missing = plate.groups.filter((g) => g.required && !picked[g.id]);
+      if (!several) {
+        if (on) return { ...prev, [group.id]: group.required ? current : [] };
+        return { ...prev, [group.id]: [itemId] };
+      }
+
+      if (on) {
+        /* Never leave a required group empty by unticking its last item. */
+        if (group.required && current.length === 1) return prev;
+        return { ...prev, [group.id]: current.filter((id) => id !== itemId) };
+      }
+      if (current.length >= Number(group.max)) return prev;
+      return { ...prev, [group.id]: [...current, itemId] };
+    });
+
+  const missing = plate.groups.filter((g) => g.required && (picked[g.id]?.length ?? 0) === 0);
   const missingLabel = missing[0]?.label.replace(/^choose your\s+/i, '') ?? '';
 
   /*
@@ -576,7 +627,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
    */
   const extras = plate.groups.reduce((sum, g) => {
     if (!g.priced) return sum;
-    const it = g.items.find((i) => i.id === picked[g.id]);
+    const it = g.items.find((i) => i.id === (picked[g.id] ?? [])[0]);
     if (!it) return sum;
     /* Price × how many. The clamp is the catalogue's, so the button cannot add a
        fifth bottle the server would refuse. */
@@ -588,20 +639,25 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   const submit = () => {
     if (missing.length) return;
     const picks = plate.groups.flatMap((g) => {
-      const id = picked[g.id];
-      if (!id) return [];
-      const it = g.items.find((i) => i.id === id);
-      if (!it) return [];
-      /* A priced group carries its amount, so the basket line explains the
-         difference between the plate price and what is being charged. */
-      const count = g.priced ? Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1)) : 1;
-      return [{
-        optionId: g.id,
-        choiceId: `${g.id}:${id}`,
-        label: it.label,
-        priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : 0,
-        ...(count > 1 ? { qty: count } : {}),
-      }];
+      /*
+       * Every ticked item in the group. A multi-select group contributes two or
+       * three picks and the kitchen is told all of them — "Pap · Dumpling ·
+       * Chakalaka" — rather than one being silently dropped by the basket.
+       */
+      return (picked[g.id] ?? []).flatMap((id) => {
+        const it = g.items.find((i) => i.id === id);
+        if (!it) return [];
+        /* A priced group carries its amount, so the basket line explains the
+           difference between the plate price and what is being charged. */
+        const count = g.priced ? Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1)) : 1;
+        return [{
+          optionId: g.id,
+          choiceId: `${g.id}:${id}`,
+          label: it.label,
+          priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : 0,
+          ...(count > 1 ? { qty: count } : {}),
+        }];
+      });
     });
     addPlate({
       /* The count is part of the identity: one plate with one beer and one plate
@@ -640,16 +696,29 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
               <fieldset key={g.id}>
                 <legend className="mb-2 text-sm font-semibold">
                   {g.label} {g.required ? <span className="text-ochre-deep">*</span> : null}
+                  {/*
+                    Say that more than one is allowed. The rule has always been
+                    there — `max` is 3 for starch and vegetable side — but a group
+                    of rows that look like radio buttons is read as "pick one"
+                    whatever the code does, so the owner reasonably reported that
+                    multi-select could not be seen. This is the label that makes
+                    the rule visible before anything is tapped.
+                  */}
+                  {!g.priced && Number(g.max) > 1 && (
+                    <span className="ml-2 text-xs font-normal text-ink/45">
+                      pick up to {Number(g.max)}
+                    </span>
+                  )}
                 </legend>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {g.items.map((it) => {
-                    const on = picked[g.id] === it.id;
+                    const on = (picked[g.id] ?? []).includes(it.id);
                     /*
                      * A priced extra gets a stepper once added — the same control
                      * the dish card uses, so the drink behaves identically
                      * whichever way a customer reaches it. Everything else stays a
-                     * plain toggle: a starch is one, and picking another replaces
-                     * it rather than adding a second.
+                     * plain toggle. Starch and vegetable side now hold several, so a
+                     * second tick adds rather than replaces.
                      */
                     const cap = maxPerExtra(g, it);
                     const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
@@ -672,7 +741,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                           <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
                             <button
                               type="button"
-                              onClick={() => (count <= 1 ? toggle(g.id, it.id) : setCount(count - 1))}
+                              onClick={() => (count <= 1 ? toggle(g, it.id) : setCount(count - 1))}
                               className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
                               aria-label={count <= 1 ? `Remove ${it.label}` : `One fewer ${it.label}`}
                             >
@@ -693,16 +762,37 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                       );
                     }
 
+                    /*
+                     * Starch and vegetable side take more than one (owner, 15 Nov
+                     * 2026), so they are a group of checkboxes, not a radio pair:
+                     * "Pap · Dumpling" and "Chakalaka · Atchaar" are both ordinary
+                     * requests. Only a group that holds a single answer stays a
+                     * radio — the protein, where picking another replaces the
+                     * first. The soft drink is a checkbox too: unticked by
+                     * default, tick to take it, tick again to put it back.
+                     */
+                    const isChoice = !g.priced && Number(g.max) <= 1;
                     return (
                       <button
                         key={it.id}
                         type="button"
-                        onClick={() => toggle(g.id, it.id)}
-                        aria-pressed={on}
-                        className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                        role={isChoice ? 'radio' : 'checkbox'}
+                        aria-checked={on}
+                        onClick={() => toggle(g, it.id)}
+                        className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
                       >
-                        <span>{it.label}</span>
-                        <span className={`font-mono text-xs ${g.priced ? 'font-semibold text-ink/70' : 'text-ink/40'}`}>
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            aria-hidden="true"
+                            className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                          >
+                            {on && (isChoice
+                              ? <span className="h-1.5 w-1.5 rounded-full bg-ink" />
+                              : <svg viewBox="0 0 12 12" className="h-3 w-3 text-ink" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
+                          </span>
+                          <span className="min-w-0">{it.label}</span>
+                        </span>
+                        <span className={`shrink-0 font-mono text-xs ${g.priced ? 'font-semibold text-ink/70' : 'text-ink/40'}`}>
                           {g.priced ? `+ ${zar(Number(it.price) || 0)}` : 'Included'}
                         </span>
                       </button>

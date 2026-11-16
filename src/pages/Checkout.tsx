@@ -9,9 +9,10 @@ import { asset } from '../lib/assets';
 import { usePageSeo } from '../lib/seo';
 import { basketHref } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
-import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaOptions } from '../../shared/service.js';
+import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
 import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, type AddressSuggestion } from '../lib/address';
-import { deniedMessage, requestLocation } from '../lib/geolocation';
+import { deniedMessage, requestLocation, type LocationResult } from '../lib/geolocation';
+import type { BookableDate, Settings } from '../lib/types';
 
 /*
  * `cash` is the stored value, and it means cash to the driver.
@@ -22,6 +23,15 @@ import { deniedMessage, requestLocation } from '../lib/geolocation';
  * customer with an old bundle is not refused over a string.
  */
 type PayMethod = 'card' | 'cash';
+
+/**
+ * Why a location request failed, as the shared helper reports it.
+ *
+ * Derived from `LocationResult` rather than written out again, so a new failure
+ * reason (a policy denial, a browser that will not prompt) reaches this page
+ * without a second list to keep in step.
+ */
+type LocationFailureReason = Extract<LocationResult, { status: 'denied' }>['reason'];
 
 type CheckoutCustomer = { name: string; phone: string; email: string; address: string; suburb: string; notes: string };
 
@@ -36,6 +46,26 @@ type CheckoutCustomer = { name: string; phone: string; email: string; address: s
  * Kept outside the component because it is pure: same input, same answer, which
  * is what makes it testable and what stops the two buttons drifting apart.
  */
+/**
+ * One address, written the way a driver reads it.
+ *
+ * The checkout asks for the house number, the street and the suburb separately —
+ * "delivery address (house number, street and suburb)", as the owner put it — but
+ * everything downstream (the server's stored order, the WhatsApp message, the
+ * tracking page, the area check) wants a single line. This is the only place the
+ * two shapes meet, so the sentence and the boxes can never disagree.
+ *
+ * Empty parts are dropped rather than leaving "12 , Sandton": a customer who has
+ * typed a house number but not yet a street should see a shorter sentence, not a
+ * broken one.
+ */
+export function composeAddress(house: string, street: string, suburb: string): string {
+  return [house, street, suburb]
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
 export function waValidationProblem(
   customer: CheckoutCustomer,
   fulfilment: 'collection' | 'delivery',
@@ -54,8 +84,8 @@ export function waValidationProblem(
     /*
      * A picked suggestion may fill the address without a suburb name the map
      * recognises — Bryanston is a real place with no entry in `deliveryAreas`.
-     * That is fine: the area select already says "outside Sandton & Rosebank",
-     * and `deliveryAddressProblem` returns null for it.
+     * That is fine: the area select's third option is "another area", and
+     * `deliveryAddressProblem` returns null for it.
      */
     /*
      * The address has to belong to the area the customer picked, and the order
@@ -99,7 +129,7 @@ export function deliveryGateProblem(
     return `Delivery orders start at ${zar(min)} — add a little more, or message us on WhatsApp about a smaller order.`;
   }
   if (zone.zone === 'refused') {
-    return `That address is ${zone.distanceKm} km away — we deliver within ${settings?.maxDeliveryKm ?? 50} km.`;
+    return `That address is ${zone.distanceKm} km away — we deliver within ${settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km.`;
   }
   if (zone.zone === 'unknown') {
     return 'Pick your address from the list as you type, or tap "Use my current location" — we need one of them to check we can deliver to you.';
@@ -147,7 +177,27 @@ function LiveCheckout() {
    */
   const online = Boolean(payments?.online);
   const [method, setMethodRaw] = useState<PayMethod>('card');
+  /*
+   * Which cooking day this order is for.
+   *
+   * Empty means "the next one", which is what an order sent on the day has
+   * always meant. A date means the customer booked ahead — the owner's request
+   * of 16 Nov 2026 was precisely that nobody should have to wait for the *next*
+   * Thursday when a later one suits them better. The list itself comes from the
+   * server, so it is the same list the kitchen validates the order against.
+   */
+  const bookable = catalog?.bookableDates ?? [];
+  const [plannedDate, setPlannedDate] = useState('');
+  const planned = bookable.find((d) => d.date === plannedDate) ?? null;
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
+  /*
+   * The address in the three boxes the owner asked for. `customer.address` stays
+   * the one-line version — it is what the server stores, what the WhatsApp
+   * message carries and what the tracking page shows — and this is the form the
+   * customer edits. They are written together, so the sentence and the parts can
+   * never say different things.
+   */
+  const [address, setAddress] = useState({ house: '', street: '', suburb: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   /*
    * Rosebank is where most orders go, so it is the area the checkout opens on.
@@ -181,7 +231,7 @@ function LiveCheckout() {
     | { status: 'idle' }
     | { status: 'asking' }
     | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
-    | { status: 'denied'; reason: 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
+    | { status: 'denied'; reason: LocationFailureReason }
   >({ status: 'idle' });
   const [quote, setQuote] = useState<{ subtotal: number; delivery: number; total: number } | null>(null);
   const [state, setState] = useState<'idle' | 'quoting' | 'paying'>('idle');
@@ -234,7 +284,15 @@ function LiveCheckout() {
    * and on a rest day the site takes pre-orders for the next window on purpose
    * — the copy above promises exactly that — so those are not `closed`.
    */
-  const closed = Boolean(service?.orderingClosed);
+  /*
+   * Closed *for today* only. A customer who has booked a later cooking day is
+   * not asking for today, so the gate must not stop them — the server makes the
+   * same distinction, and a page that refuses an order the API would accept is
+   * the worst kind of bug: it loses the sale and reports nothing.
+   */
+  const closedToday = Boolean(service?.orderingClosed);
+  /** Closed for *today* and no later day booked — the only state that gates. */
+  const closed = closedToday && !planned;
 
 
   /*
@@ -250,7 +308,8 @@ function LiveCheckout() {
     fulfilment,
     customer,
     payment: waPayment,
-    ...(closed ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
+    ...(planned ? { booking: { label: planned.label, isToday: planned.isToday } } : {}),
+    ...(closed && !planned ? { intro: 'Hi Heritage Bites! The ordering window has closed — could you still prepare this for me?' } : {}),
   });
 
   /*
@@ -302,8 +361,9 @@ function LiveCheckout() {
     else if (normalisePhone(customer.phone).length < 11) e.phone = 'Please enter a valid South African cell number.';
     if (customer.email.trim() && !/^\S+@\S+\.\S+$/.test(customer.email.trim())) e.email = 'That email does not look right.';
     if (fulfilment === 'delivery') {
-      if (!customer.suburb.trim()) e.suburb = 'Which delivery area are you in?';
-      if (!customer.address.trim()) e.address = 'Where should we deliver?';
+      if (!address.house.trim()) e.house = 'Which house number?';
+      if (!address.street.trim()) e.address = 'Which street?';
+      if (!address.suburb.trim()) e.suburb = 'Which suburb are you in?';
     }
     return e;
   })();
@@ -393,8 +453,17 @@ function LiveCheckout() {
     const emailGiven = customer.email.trim();
     if (emailGiven && !/^\S+@\S+\.\S+$/.test(emailGiven)) e.email = 'That email does not look right.';
     if (fulfilment === 'delivery') {
-      if (!customer.suburb.trim()) e.suburb = 'Which delivery area are you in?';
-      if (!customer.address.trim()) e.address = 'Where should we deliver?';
+      /*
+       * The three boxes, answered one at a time, in the customer's words.
+       *
+       * "Where should we deliver?" over an empty address box was one question
+       * asking for three facts. Asking for the house number and the street
+       * separately is also the only way a driver can be given a complete
+       * address: an order with "Oxford Road" and no number is not deliverable.
+       */
+      if (!address.house.trim()) e.house = 'Which house number?';
+      if (!address.street.trim()) e.address = 'Which street?';
+      if (!address.suburb.trim()) e.suburb = 'Which suburb are you in?';
       /*
        * The address has to belong to the area the customer chose. A hard
        * mismatch is refused here as well as on the server, so the customer is
@@ -410,7 +479,7 @@ function LiveCheckout() {
        * The server cannot measure an address it has no coordinates for, and it
        * must not invent a distance — so if nobody located the customer, the
        * order would go through with the radius unchecked. Refusing here is the
-       * only way the 50 km rule means anything: pick the address from the list,
+       * only way the distance rule means anything: pick the address from the list,
        * or share your location, and the rule can be applied.
        */
       if (zone.zone === 'refused') {
@@ -443,6 +512,9 @@ function LiveCheckout() {
         customer: { ...customer, lat: measured?.lat ?? null, lng: measured?.lng ?? null },
         items: toApiItems(lines),
         payment: { method: method2 },
+        /* The day the customer picked. Absent means "the next window", which is
+           what the server has always assumed. */
+        ...(planned ? { serviceWindow: { date: planned.date } } : {}),
       });
 
       /* The basket is only emptied once the order exists on the server. */
@@ -536,6 +608,7 @@ function LiveCheckout() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12">
+      <BackToWhereIWas />
       <div className="flex items-center justify-between gap-4">
         <SectionLabel>Checkout</SectionLabel>
         <HeritageMark className="h-7 w-7 text-ink/70" />
@@ -556,9 +629,15 @@ function LiveCheckout() {
         <div className="mt-4 rounded-2xl border-2 border-ochre bg-ochre/10 p-4">
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">{service.headline}</p>
           <p className="mt-1 text-[13px] font-medium text-ink">{service.message}</p>
+          {/*
+            The panel only appears when nothing later is booked, so it never has
+            to explain a booking — the day picker below is the way out, and it
+            is the honest one: the kitchen cannot cook today, but it can cook
+            next Thursday and will say so.
+          */}
           <p className="mt-2 text-[13px] leading-relaxed text-ink/70">
-            We have stopped taking orders for today. If you need food sooner, message us — the kitchen will tell you whether
-            it can prepare your order anyway.
+            We have stopped taking orders for today, but you can book any cooking day below and check out normally. If
+            you need food sooner, message us — the kitchen will tell you whether it can prepare it anyway.
           </p>
           <a
             href={waOrderHref}
@@ -573,23 +652,161 @@ function LiveCheckout() {
 
       <form onSubmit={submit} className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_1fr]" noValidate>
         <div className="space-y-8">
-          {/* Fulfilment */}
+          {/*
+            Which cooking day.
+
+            The owner's request (16 Nov 2026): "users are not limited in waiting
+            for Thursday… they can order in advance for any Thursday/Friday".
+            Before this the site only ever named *the next* window, so a
+            customer planning a family lunch two weeks out had no way to say so.
+
+            A day, not a date picker: the kitchen cooks two days a week, and a
+            free calendar would offer a hundred days it cannot cook on. The
+            first choice is "the next cooking day", which is what an order
+            placed today means when the customer does not think about it.
+          */}
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</legend>
-            {/*
-              There is no collection any more (owner, 14 Nov 2026 — "there is no
-              collection, it is delivery based"). It was a pair of radio cards
-              with Collect first; with only one option left a card would be a
-              button that cannot change anything, so the section states the
-              arrangement and lets the customer check their distance instead.
-            */}
-            <div className="mt-3 rounded-2xl border-2 border-ochre bg-ochre/10 p-4">
-              <p className="text-sm font-semibold">Every order is delivered.</p>
-              <p className="mt-1 text-xs leading-snug text-ink/60">
-                Delivery is included in the plate price in{' '}
-                {settings?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}. Elsewhere a{' '}
-                {zar(rules.fee)} delivery fee applies, and we deliver up to {rules.maxKm} km from the kitchen.
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
+            <p className="mt-1 text-xs leading-snug text-ink/55">
+              This is the cooking week. Order today and choose any Thursday or Friday ahead — including several weeks
+              from now — so nothing has to wait for the next one.
+            </p>
+            {bookable.length === 0 ? (
+              <p className="mt-3 text-sm text-ink/60">
+                The kitchen has not opened its diary yet. Add the basket and send it on WhatsApp — we will confirm a day
+                with you.
               </p>
+            ) : (
+              <WeekSchedule settings={settings} bookable={bookable} chosen={plannedDate} onChoose={setPlannedDate} />
+            )}
+            <p className="mt-3 text-[12px] leading-relaxed text-ink/50">
+              {planned
+                ? `Booked for ${planned.label}. The order leaves today and the kitchen cooks it on that day — the WhatsApp message says so in as many words.`
+                : 'Leave this alone and the kitchen cooks it on the next cooking day, the same way an order placed on the day always has.'}
+            </p>
+          </fieldset>
+
+          {/* Details */}
+          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Your details</legend>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <Field label="Full name" error={errors.name}>
+                <input className={inputCls} value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} autoComplete="name" placeholder="Thabo Mahlangu" />
+              </Field>
+              <Field label="Cell number" hint="so we can contact you" error={errors.phone}>
+                <input className={inputCls} value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="tel" placeholder="+27 82 000 0000" />
+              </Field>
+              <Field label="Email" hint="optional — for a written reply" error={errors.email}>
+                <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
+              </Field>
+              {/*
+                One address, in three boxes, in the order a driver reads it:
+                house number, street, suburb. The suburb select used to be a
+                separate "Delivery area" field above the address, which asked the
+                customer for the same decision twice; it is the third box now.
+
+                Suggestions come from OpenStreetMap (free, keyless) and fill the
+                street line; picking one also knows its suburb, which is what
+                makes the area check trustworthy rather than a guess at the
+                spelling of a street name.
+              */}
+              {fulfilment === 'delivery' && (
+                <AddressField
+                  house={address.house}
+                  street={address.street}
+                  suburb={address.suburb}
+                  area={customer.suburb}
+                  settings={settings}
+                  hintArea={addressArea}
+                  errors={{ house: errors.house, street: errors.address, suburb: errors.suburb, area: errors.suburb }}
+                  onHouseChange={(value) => {
+                    setAddress({ ...address, house: value });
+                    /* The one-line address is what the order carries, so it is
+                       rewritten on every keystroke — the parts and the sentence
+                       are never allowed to disagree. */
+                    setCustomer({ ...customer, address: composeAddress(value, address.street, address.suburb) });
+                    setAddressArea(null);
+                    setPoint(null);
+                    setErrors((e) => ({ ...e, house: '' }));
+                  }}
+                  onStreetChange={(value) => {
+                    /*
+                     * The area follows the street when the street names one.
+                     *
+                     * With Rosebank preselected, a Sandton customer who types
+                     * "Oxford Road, Sandton" would otherwise be told they picked
+                     * the wrong area — a decision they never made. Moving the
+                     * select to the area the address actually names is the honest
+                     * reading of it: the address decides where the food goes, and
+                     * the suburb box is there to break a tie.
+                     *
+                     * Only one unambiguous name moves it. "Corner Rosebank Road
+                     * and Sandton Drive" leaves the choice alone, and the
+                     * contradiction check still catches a customer who
+                     * deliberately switches the area afterwards.
+                     */
+                    const named = areasNamedIn(value, settings);
+                    const followed = named.length === 1 ? named[0] : customer.suburb;
+                    setAddress({ ...address, street: value, suburb: named.length === 1 ? named[0] : address.suburb });
+                    setCustomer({ ...customer, suburb: followed, address: composeAddress(address.house, value, named.length === 1 ? named[0] : address.suburb) });
+                    /* Typing over a picked street drops its map evidence. */
+                    setAddressArea(null);
+                    setPoint(null);
+                    setErrors((e) => ({ ...e, address: '', suburb: '' }));
+                  }}
+                  onSuburbChange={(value) => {
+                    setAddress({ ...address, suburb: value });
+                    setCustomer({ ...customer, address: composeAddress(address.house, address.street, value) });
+                    setAddressArea(null);
+                    setPoint(null);
+                    setErrors((e) => ({ ...e, suburb: '' }));
+                  }}
+                  onAreaChange={(value) => {
+                    setCustomer({ ...customer, suburb: value });
+                    setErrors((e) => ({ ...e, suburb: '', address: '' }));
+                  }}
+                  onPick={(suggestion: AddressSuggestion) => {
+                    const picked = {
+                      house: address.house || suggestion.house || '',
+                      street: suggestion.street || suggestion.line.replace(/^\d+[A-Za-z]?\s+/, ''),
+                      /* The map's own suburb, so the box matches the address the
+                         customer just chose rather than their earlier typing. */
+                      suburb: suggestion.suburb || address.suburb,
+                    };
+                    setAddress(picked);
+                    setCustomer({
+                      ...customer,
+                      address: composeAddress(picked.house, picked.street, picked.suburb),
+                      /*
+                       * Autofill the area the kitchen actually delivers to — or
+                       * "Other" when the picked address is outside the two
+                       * included suburbs. Leaving the old value would keep the
+                       * select on Sandton for a Bryanston house and bring back
+                       * the contradiction this whole change removes.
+                       */
+                      suburb: suggestion.area ?? OUTSIDE_AREA,
+                    });
+                    setAddressArea(suggestion.area);
+                    /*
+                     * Keep the map's own coordinates. They are the evidence the
+                     * distance gate runs on, and the server prices from the same
+                     * pair — which is what stops the basket saying "included" for
+                     * an address the server charges a fee for.
+                     */
+                    setPoint(
+                      Number.isFinite(suggestion.lat) && Number.isFinite(suggestion.lng)
+                        ? { lat: Number(suggestion.lat), lng: Number(suggestion.lng) }
+                        : null,
+                    );
+                    setErrors((e) => ({ ...e, address: '', suburb: '' }));
+                  }}
+                />
+              )}
+              <div className="sm:col-span-2">
+                <Field label="Notes for the kitchen" hint="optional">
+                  <input className={inputCls} value={customer.notes} onChange={(e) => setCustomer({ ...customer, notes: e.target.value })} placeholder="Extra hot, no salsa, ring on arrival…" />
+                </Field>
+              </div>
             </div>
             {/*
               The customer's own location, offered rather than demanded.
@@ -607,7 +824,7 @@ function LiveCheckout() {
                   if (geo.status === 'asking') return;
                   setGeo({ status: 'asking' });
                   /* Precise first, then a fallback — see lib/geolocation.ts for
-                     why a coarse fix cannot decide a 50 km boundary honestly. */
+                     why a coarse fix cannot decide a distance boundary honestly. */
                   requestLocation().then((r) => setGeo(r));
                 }}
                 disabled={geo.status === 'asking'}
@@ -634,7 +851,7 @@ function LiveCheckout() {
               )}
               {geo.status === 'ok' && !geo.precise && (
                 <span className="text-xs text-ink/45">
-                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address below for an exact check.
+                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
                 </span>
               )}
             </div>
@@ -650,6 +867,7 @@ function LiveCheckout() {
               so a button that opens a second conversation only loses the one
               message the kitchen needs.
             */}
+
             {/*
               Payment belongs to the same question — how the food arrives and how
               it is paid for is one decision, made together at the top of the
@@ -726,136 +944,19 @@ function LiveCheckout() {
                 checkout is off and the customer must be told a link is coming.
               */}
             </div>
-
             {/*
-              The rules follow the fulfilment. The minimum order is a DELIVERY
-              rule (server/index.js only applies it when fee < 0 for delivery),
-              so quoting a minimum to someone collecting invents a restriction
-              the kitchen does not actually impose.
+              The delivery facts survive the section they used to live in. The
+              "Delivery" fieldset is gone (owner, 16 Nov 2026 — the details are
+              all one form now), but the minimum order and the fee are money, so
+              they stay as one plain line rather than a heading of their own.
             */}
-            <p className="mt-4 text-xs leading-relaxed text-ink/50">
-              {fulfilment === 'delivery' ? (
-                <>
-                  Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery included in
-                  {' '}{settings?.deliveryAreas?.join(' & ') ?? 'Sandton & Rosebank'}
-                  {surcharge > 0 ? ` — ${zar(surcharge)} added for your address` : ''}.
-                </>
-              ) : (
-                <>No minimum order and no delivery fee — you pay the plate price only.</>
-              )}{' '}
-              Thursdays and Fridays, {settings?.serviceWindow.open}–{settings?.serviceWindow.close}.
+            <p className="mt-3 text-xs leading-relaxed text-ink/50">
+              Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery included in{' '}
+              {settings?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}
+              {surcharge > 0 ? ` — ${zar(surcharge)} added for your address` : ''}; we deliver up to {rules.maxKm} km
+              from the kitchen.
             </p>
-          </fieldset>
 
-          {/* Details */}
-          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Your details</legend>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2">
-              <Field label="Full name" error={errors.name}>
-                <input className={inputCls} value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} autoComplete="name" placeholder="Thabo Mahlangu" />
-              </Field>
-              <Field label="Cell number" hint="so we can contact you" error={errors.phone}>
-                <input className={inputCls} value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="tel" placeholder="+27 82 000 0000" />
-              </Field>
-              <Field label="Email" hint="optional — for a written reply" error={errors.email}>
-                <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
-              </Field>
-              {fulfilment === 'delivery' && (
-                <Field label="Delivery area" hint={defaultArea ? `${defaultArea} preselected` : undefined} error={errors.suburb}>
-                  {/*
-                    The two included suburbs, and "Other — outside Sandton &
-                    Rosebank".
-                    
-                    The third option is not a nicety: the rules are distance-based
-                    (inside the two suburbs delivery is included, outside them a
-                    fee applies, past 50 km we refuse). A customer in Bryanston
-                    had no honest answer here — only two suburbs that were both
-                    wrong — which is how a radius became a two-suburb list.
-                    
-                    No empty "Choose an area" row: that turned this into a
-                    required decision before anyone could order.
-                  */}
-                  <select className={inputCls} value={customer.suburb} onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}>
-                    {deliveryAreaOptions(settings).map((area) => (
-                      <option key={area} value={area}>{area}</option>
-                    ))}
-                  </select>
-                </Field>
-              )}
-              {fulfilment === 'delivery' && (
-                <div className="sm:col-span-2">
-                  {/*
-                    Suggestions come from OpenStreetMap (free, keyless) and fill
-                    the street line; picking one also knows its suburb, which is
-                    what makes the area check trustworthy rather than a guess at
-                    the spelling of a street name.
-                  */}
-                  <AddressField
-                    address={customer.address}
-                    area={customer.suburb}
-                    settings={settings}
-                    hintArea={addressArea}
-                    error={errors.address}
-                    onChange={(value) => {
-                      /*
-                       * The area follows the address when the address names one.
-                       *
-                       * With Rosebank preselected, a Sandton customer who types
-                       * "12 Oxford Road, Sandton" would otherwise be told they
-                       * picked the wrong area — a decision they never made. Moving
-                       * the select to the area the address actually names is the
-                       * honest reading of it: the address decides where the food
-                       * goes, and the select is there to break a tie.
-                       *
-                       * Only one unambiguous name moves it. "Corner Rosebank Road
-                       * and Sandton Drive" leaves the choice alone, and the
-                       * contradiction check below still catches a customer who
-                       * deliberately switches the area afterwards.
-                       */
-                      const named = areasNamedIn(value, settings);
-                      const followed = named.length === 1 ? named[0] : customer.suburb;
-                      setCustomer({ ...customer, address: value, suburb: followed });
-                      /* Typing over a picked address drops its map evidence. */
-                      setAddressArea(null);
-                      setPoint(null);
-                      setErrors((e) => ({ ...e, address: '', suburb: '' }));
-                    }}
-                    onPick={(suggestion: AddressSuggestion) => {
-                      setCustomer({
-                        ...customer,
-                        address: suggestion.line,
-                        /*
-                         * Autofill the area the kitchen actually delivers to —
-                         * or "Other" when the picked address is outside the two
-                         * included suburbs. Leaving the old value would keep the
-                         * select on Sandton for a Bryanston house and bring back
-                         * the contradiction this whole change removes.
-                         */
-                        suburb: suggestion.area ?? OUTSIDE_AREA,
-                      });
-                      setAddressArea(suggestion.area);
-                      /*
-                       * Keep the map's own coordinates. They are the evidence
-                       * the distance gate runs on, and the server prices from
-                       * the same pair — which is what stops the basket saying
-                       * "included" for an address the server charges a fee for.
-                       */
-                      setPoint(
-                        Number.isFinite(suggestion.lat) && Number.isFinite(suggestion.lng)
-                          ? { lat: Number(suggestion.lat), lng: Number(suggestion.lng) }
-                          : null,
-                      );
-                      setErrors((e) => ({ ...e, address: '', suburb: '' }));
-                    }}
-                  />
-                </div>
-              )}
-              <div className="sm:col-span-2">
-                <Field label="Notes for the kitchen" hint="optional">
-                  <input className={inputCls} value={customer.notes} onChange={(e) => setCustomer({ ...customer, notes: e.target.value })} placeholder="Extra hot, no salsa, ring on arrival…" />
-                </Field>
-              </div>
-            </div>
             {/*
               One line. Email receipts needed SMTP configured on the host before
               a single message could go out, and telling a customer about that
@@ -1006,6 +1107,208 @@ function LiveCheckout() {
 }
 
 
+/* --------------------------- Back to where I was ------------------------ */
+
+/**
+ * A visible way back to the screen the customer came from.
+ *
+ * The owner's report (16 Nov 2026): "when am on checkout why i cant go back to
+ * the screen i was at". The browser's own Back button does work — this is a
+ * single-page app with real history entries — but on a phone the checkout is the
+ * end of a flow the customer arrived at from a plate they were reading, and there
+ * was nothing on the page itself that said "leave without losing your basket".
+ * A checkout that only offers forward is a checkout people abandon.
+ *
+ * Where it goes, in order of preference:
+ *
+ *   1. The page they came from, if it was another page on this site. The basket
+ *      and every form field are kept in the store and in sessionStorage, so going
+ *      back does not cost the customer their work.
+ *   2. The menu, when the checkout was opened directly (a bookmark, a link in a
+ *      chat) and there is no history to return to. `history.length` is the only
+ *      signal a browser gives, and on a fresh tab it is 1.
+ */
+function BackToWhereIWas({ to = '/menu', label = 'Back to the menu' }: { to?: string; label?: string }) {
+  const nav = useNavigate();
+  const goBack = () => {
+    /*
+     * `history.state.idx` is what React Router installs on every entry: 0 means
+     * this is the first page of the session, so `navigate(-1)` would leave the
+     * site entirely. Checking it — rather than trusting `history.length`, which
+     * counts other sites too — is what keeps the button inside the shop.
+     */
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) nav(-1);
+    else nav(to);
+  };
+  return (
+    <button
+      type="button"
+      onClick={goBack}
+      className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-ink/60 transition-colors hover:text-ink"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m15 18-6-6 6-6" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+/* ------------------------- The week, as a schedule ---------------------- */
+
+/** Monday-first order, with the name a customer reads. */
+const WEEK = [
+  { day: 1, label: 'Monday', short: 'Mon' },
+  { day: 2, label: 'Tuesday', short: 'Tue' },
+  { day: 3, label: 'Wednesday', short: 'Wed' },
+  { day: 4, label: 'Thursday', short: 'Thu' },
+  { day: 5, label: 'Friday', short: 'Fri' },
+  { day: 6, label: 'Saturday', short: 'Sat' },
+  { day: 0, label: 'Sunday', short: 'Sun' },
+];
+
+/**
+ * The cooking week, always all seven days, plus the next dates that can be booked.
+ *
+ * The owner asked for "the which day — please put week schedule only (eg user can
+ * order even on monday for a thursday and friday)". That is two things at once,
+ * and both are here:
+ *
+ *   - **the week itself**, Monday to Sunday, so the rhythm is visible on any day
+ *     of the week. It used to show nothing but a list of upcoming dates, which
+ *     meant a customer reading the checkout on a Monday saw two buttons and no
+ *     explanation of why those days and not others.
+ *   - **a date to book**, because "Thursday" alone is ambiguous two weeks out. The
+ *     day of the week is the schedule; the date is the booking, and both travel
+ *     with the order.
+ *
+ * Booking is never gated on *today*: a Monday order for a Thursday is the normal
+ * case, and a Saturday order for a Friday three weeks away is just as valid. Every
+ * date offered comes from `bookableDates` on the server, which is the same list the
+ * order route validates against — so the checkout can only offer days the kitchen
+ * will accept.
+ */
+function WeekSchedule({
+  settings,
+  bookable,
+  chosen,
+  onChoose,
+}: {
+  settings?: Settings | null;
+  bookable: BookableDate[];
+  chosen: string;
+  onChoose: (date: string) => void;
+}) {
+  const hours = settings?.hours ?? [];
+  const nextByDay = new Map<number, BookableDate>();
+  for (const entry of bookable ?? []) {
+    /* The first upcoming date for each weekday — the list is in date order. */
+    const day = new Date(`${entry.date}T00:00:00Z`).getUTCDay();
+    if (!nextByDay.has(day)) nextByDay.set(day, entry);
+  }
+
+  return (
+    <div className="mt-4">
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {WEEK.map(({ day, label }) => {
+          const open = hours.some((h) => h.day === day && !h.closed);
+          const next = nextByDay.get(day) ?? null;
+          const on = Boolean(next && next.date === chosen);
+          /*
+           * A cooking day is a button; a rest day is not.
+           *
+           * A rest day that could be tapped would need a refusal, and the schedule
+           * already says everything: "we do not cook on Monday". Making it
+           * interactive would suggest otherwise.
+           */
+          const inner = (
+            <span className="flex w-full items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className={`block text-sm ${open ? 'font-semibold' : 'text-ink/45'}`}>{label}</span>
+                <span className="block font-mono text-[11px] text-ink/45">
+                  {open && next ? `Next: ${next.label.replace(`${label} `, '')}` : open ? 'Open — dates coming' : 'Not a cooking day'}
+                </span>
+              </span>
+              <span
+                aria-hidden="true"
+                className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${
+                  !open ? 'border-ink/15' : on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'
+                }`}
+              >
+                {on && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+              </span>
+            </span>
+          );
+
+          if (!open || !next) {
+            return (
+              <li
+                key={label}
+                data-weekday={label}
+                aria-disabled="true"
+                className="flex items-center rounded-xl border-2 border-dashed border-ink/10 bg-bone-2/40 px-3 py-2.5"
+              >
+                {inner}
+              </li>
+            );
+          }
+          return (
+            <li key={label}>
+              <button
+                type="button"
+                data-weekday={label}
+                data-bookable-date={next.date}
+                onClick={() => onChoose(on ? '' : next.date)}
+                aria-pressed={on}
+                className={`flex w-full items-center rounded-xl border-2 px-3 py-2.5 text-left transition-all ${
+                  on ? 'border-ochre bg-ochre/15' : 'border-ink/12 hover:border-ink/30'
+                }`}
+              >
+                {inner}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* The other dates inside the booking horizon, so a specific week is pickable. */}
+      {bookable.length > 2 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm font-semibold text-ochre-deep">
+            Or pick a specific date
+          </summary>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {bookable.map((d) => {
+              const on = d.date === chosen;
+              return (
+                <button
+                  key={d.date}
+                  type="button"
+                  onClick={() => onChoose(on ? '' : d.date)}
+                  aria-pressed={on}
+                  className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2 text-left text-sm transition-all ${
+                    on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block">{d.label}</span>
+                    <span className="font-mono text-[11px] text-ink/50">
+                      {d.open}–{d.close}
+                      {d.isToday && <span className="text-ochre-deep"> · today</span>}
+                    </span>
+                  </span>
+                  {on && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink" />}
+                </button>
+              );
+            })}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 /* --------------------------- Static preview ---------------------------- */
 
 /**
@@ -1039,11 +1342,21 @@ function PreviewCheckout() {
   const settings = catalog?.settings;
 
   const [customer, setCustomer] = useState({ name: '', phone: '', address: '', suburb: '', notes: '' });
+  /* The same three-part address as the live checkout: house, street, suburb. */
+  const [address, setAddress] = useState({ house: '', street: '', suburb: '' });
   const [method, setMethod] = useState<'link' | 'cash'>('link');
+  /*
+   * The same day choice the live checkout offers. On the static build the
+   * kitchen reads it in the WhatsApp message, which is the only record there is
+   * — so it matters more here, not less.
+   */
+  const bookable = catalog?.bookableDates ?? [];
+  const [plannedDate, setPlannedDate] = useState('');
+  const planned = bookable.find((d) => d.date === plannedDate) ?? null;
   /*
    * The coordinates of the address the customer *picked*, as opposed to the ones
    * their device reported. The published site needs both: the address box is the
-   * route for anyone who will not share a location, and the 50 km rule is the
+   * route for anyone who will not share a location, and the distance rule is the
    * whole point of asking.
    */
   const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
@@ -1053,7 +1366,7 @@ function PreviewCheckout() {
     | { status: 'idle' }
     | { status: 'asking' }
     | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
-    | { status: 'denied'; reason: 'blocked' | 'unavailable' | 'timeout' | 'unsupported' }
+    | { status: 'denied'; reason: LocationFailureReason }
   >({ status: 'idle' });
 
   const rules = {
@@ -1071,7 +1384,7 @@ function PreviewCheckout() {
 
   /*
    * The same rule the live checkout applies, and the same reason for it: the
-   * 50 km radius cannot be checked without coordinates, so the order may not
+   * radius cannot be checked without coordinates, so the order may not
    * leave until the customer has given them.
    */
   const problem =
@@ -1097,10 +1410,12 @@ function PreviewCheckout() {
     fulfilment,
     payment: method === 'cash' ? 'cash' : 'yoco',
     customer,
+    ...(planned ? { booking: { label: planned.label, isToday: planned.isToday } } : {}),
   });
 
   return (
     <section className="mx-auto max-w-5xl px-4 py-14">
+      <BackToWhereIWas />
       <SectionLabel>Checkout</SectionLabel>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Finish your order</h1>
       <p className="mt-3 max-w-2xl text-ink/65">
@@ -1110,41 +1425,27 @@ function PreviewCheckout() {
 
       <form onSubmit={(e) => e.preventDefault()} className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <div className="space-y-6">
-          {/* Payment */}
+          {/* Which cooking day — the same choices the live checkout offers. */}
           <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</legend>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {([
-                { id: 'link' as const, label: 'Payment link', blurb: 'We send a Yoco link in the chat' },
-                { id: 'cash' as const, label: 'Cash', blurb: 'Pay the driver on delivery' },
-              ]).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMethod(m.id)}
-                  aria-pressed={method === m.id}
-                  className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
-                >
-                  <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
-                    {method === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-semibold">{m.label}</span>
-                    <span className="block text-xs text-ink/55">{m.blurb}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-            {/*
-              The honest answer to "can I pay online": not on this page. Card
-              payment needs the live site, because Yoco needs a server to start
-              the payment and a webhook to confirm it. Saying so beats a greyed
-              out button nobody explains.
-            */}
-            <p className="mt-3 text-xs leading-relaxed text-ink/50">
-              No card is taken on this page. Online card payment switches on with the live site; until then we send you a
-              secure Yoco link in the chat, and you pay there.
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
+            <p className="mt-1 text-xs leading-snug text-ink/55">
+              This is the cooking week. Order today and choose any Thursday or Friday ahead — including several weeks
+              from now — so nothing has to wait for the next one.
             </p>
+            {bookable.length === 0 ? (
+              <p className="mt-3 text-sm text-ink/60">
+                The diary is not open for booking on this build. Add the basket and send it on WhatsApp — we will confirm
+                a day with you.
+              </p>
+            ) : (
+              <WeekSchedule settings={settings} bookable={bookable} chosen={plannedDate} onChoose={setPlannedDate} />
+            )}
+            {planned && (
+              <p className="mt-3 text-[12px] leading-relaxed text-ink/50">
+                Your WhatsApp message will open with “order placed today, for {planned.label}”, so the kitchen knows
+                which day to cook it for.
+              </p>
+            )}
           </fieldset>
 
           {/* Details */}
@@ -1157,46 +1458,57 @@ function PreviewCheckout() {
               <Field label="Cell number" hint="so we can contact you">
                 <input className={inputCls} value={customer.phone} autoComplete="tel" placeholder="+27 82 000 0000" onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} />
               </Field>
-              <Field label="Delivery area">
-                <select className={inputCls} value={customer.suburb} onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}>
-                  <option value="">Choose an area</option>
-                  {deliveryAreaOptions(settings).map((area) => (
-                    <option key={area} value={area}>{area}</option>
-                  ))}
-                </select>
-              </Field>
-              <div className="sm:col-span-2">
-                {/*
-                  The same address box as the live checkout, on purpose.
-                  The owner's complaint — "house number, street and suburb it must
-                  be pulled from when u capture address" — was about this page too:
-                  the published site had a plain text input, so no address carried
-                  coordinates and the radius could not be checked at all. Picking a
-                  suggestion here fetches the map's coordinates, which is what makes
-                  the delivery check below mean something.
-                */}
-                <AddressField
-                  address={customer.address}
-                  area={customer.suburb}
-                  settings={settings}
-                  hintArea={addressArea}
-                  onChange={(value) => {
-                    setCustomer({ ...customer, address: value });
-                    /* Typing over a picked address drops its map evidence. */
-                    setAddressArea(null);
-                    setPoint(null);
-                  }}
-                  onPick={(suggestion: AddressSuggestion) => {
-                    setCustomer({ ...customer, address: suggestion.line, suburb: suggestion.area ?? OUTSIDE_AREA });
-                    setAddressArea(suggestion.area);
-                    setPoint(
-                      Number.isFinite(suggestion.lat) && Number.isFinite(suggestion.lng)
-                        ? { lat: Number(suggestion.lat), lng: Number(suggestion.lng) }
-                        : null,
-                    );
-                  }}
-                />
-              </div>
+              {/*
+                The same three boxes as the live checkout, on purpose — house
+                number, street, suburb. The published site used to take the
+                address as one plain line, so no address carried coordinates and
+                the radius could not be checked at all; picking a street here
+                fetches the map's own coordinates, which is what makes the
+                delivery check below mean something.
+              */}
+              <AddressField
+                house={address.house}
+                street={address.street}
+                suburb={address.suburb}
+                area={customer.suburb}
+                settings={settings}
+                hintArea={addressArea}
+                onHouseChange={(value) => {
+                  setAddress({ ...address, house: value });
+                  setAddressArea(null);
+                  setPoint(null);
+                }}
+                onStreetChange={(value) => {
+                  setAddress({ ...address, street: value });
+                  setCustomer({ ...customer, address: composeAddress(address.house, value, address.suburb) });
+                  setAddressArea(null);
+                  setPoint(null);
+                }}
+                onSuburbChange={(value) => {
+                  setAddress({ ...address, suburb: value });
+                  setCustomer({ ...customer, address: composeAddress(address.house, address.street, value) });
+                  setAddressArea(null);
+                  setPoint(null);
+                }}
+                onAreaChange={(value) => {
+                  setCustomer({ ...customer, suburb: value });
+                }}
+                onPick={(suggestion: AddressSuggestion) => {
+                  const picked = {
+                    house: address.house || suggestion.house || '',
+                    street: suggestion.street || suggestion.line.replace(/^\d+[A-Za-z]?\s+/, ''),
+                    suburb: suggestion.suburb || address.suburb,
+                  };
+                  setAddress(picked);
+                  setCustomer({ ...customer, address: composeAddress(picked.house, picked.street, picked.suburb), suburb: suggestion.area ?? OUTSIDE_AREA });
+                  setAddressArea(suggestion.area);
+                  setPoint(
+                    Number.isFinite(suggestion.lat) && Number.isFinite(suggestion.lng)
+                      ? { lat: Number(suggestion.lat), lng: Number(suggestion.lng) }
+                      : null,
+                  );
+                }}
+              />
               <div className="sm:col-span-2">
                 <Field label="Notes for the kitchen" hint="optional">
                   <input className={inputCls} value={customer.notes} placeholder="Extra hot, no salsa, ring on arrival…" onChange={(e) => setCustomer({ ...customer, notes: e.target.value })} />
@@ -1234,7 +1546,7 @@ function PreviewCheckout() {
               )}
               {geo.status === 'ok' && !geo.precise && (
                 <span className="text-xs text-ink/45">
-                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address below for an exact check.
+                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
                 </span>
               )}
             </div>
@@ -1244,6 +1556,43 @@ function PreviewCheckout() {
                 bring you.
               </p>
             )}
+            {/* Payment sits in the same section as the details, not in a fieldset
+                of its own — one form, one place to fill it in. */}
+            <div className="mt-6 border-t-2 border-ink/10 pt-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {([
+                  { id: 'link' as const, label: 'Payment link', blurb: 'We send a Yoco link in the chat' },
+                  { id: 'cash' as const, label: 'Cash', blurb: 'Pay the driver on delivery' },
+                ]).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMethod(m.id)}
+                    aria-pressed={method === m.id}
+                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
+                  >
+                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
+                      {method === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold">{m.label}</span>
+                      <span className="block text-xs text-ink/55">{m.blurb}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {/*
+                The honest answer to "can I pay online": not on this page. Card
+                payment needs the live site, because Yoco needs a server to start
+                the payment and a webhook to confirm it. Saying so beats a greyed
+                out button nobody explains.
+              */}
+              <p className="mt-3 text-xs leading-relaxed text-ink/50">
+                No card is taken on this page. Online card payment switches on with the live site; until then we send you a
+                secure Yoco link in the chat, and you pay there.
+              </p>
+              </div>
           </fieldset>
         </div>
 
@@ -1277,8 +1626,8 @@ function PreviewCheckout() {
             )}
 
             <p className="mt-3 text-xs leading-relaxed text-ink/45">
-              Delivery is included in Sandton and Rosebank; outside them a fee applies, and we deliver up to 50 km. The
-              kitchen confirms the total with you before anything is charged.
+              Delivery is included in Sandton and Rosebank; outside them a fee applies, and we deliver up to{' '}
+              {rules.maxKm} km. The kitchen confirms the total with you before anything is charged.
             </p>
 
             <div className="mt-5 flex flex-col gap-3">
