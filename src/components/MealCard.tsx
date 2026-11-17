@@ -60,7 +60,10 @@ export function MealCard({
   const actions = (
     <div className={`flex items-center gap-2 ${isList ? 'w-full sm:w-auto' : 'w-full'}`}>
       <Button size="sm" variant="dark" onClick={quickAdd} disabled={item.available === false} block>
-        {needsChoice ? 'Choose' : 'Add to cart'}
+        {/* "basket", everywhere: the sheet footer, the bar and the drawer all
+            call it the basket, and one card calling it a cart is a second word
+            for the same thing. */}
+        {needsChoice ? 'Choose' : 'Add to basket'}
       </Button>
       <Button size="sm" variant="outline" onClick={onOpen} aria-label={`Details for ${item.name}`}>
         ⓘ
@@ -417,8 +420,25 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
 
         <footer className="flex shrink-0 items-center gap-3 border-t-2 border-ink/10 bg-bone px-5 py-4">
           <Qty value={qty} onChange={setQty} />
-          <Button onClick={submit} disabled={item.available === false} className="flex-1" size="lg">
-            {item.available === false ? 'Sold out' : `Add to basket · ${zar(unitPrice * qty)}`}
+          {/*
+            A dish with a required choice cannot be added until the choice is
+            made — and the button is now actually disabled rather than letting
+            the tap through to a toast. Owner, 17 Nov 2026: "disable that if
+            there is no food selected". The plate builder has behaved this way
+            for a while; the dish sheet was the one place that refused after the
+            tap instead of before it, which reads as the button being broken.
+          */}
+          <Button
+            onClick={submit}
+            disabled={item.available === false || missing.length > 0}
+            className="flex-1"
+            size="lg"
+          >
+            {item.available === false
+              ? 'Sold out'
+              : missing.length
+                ? `Pick a ${missing[0].label.toLowerCase().replace(/^choose your\s+/, '')}`
+                : `Add to basket · ${zar(unitPrice * qty)}`}
           </Button>
         </footer>
 

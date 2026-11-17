@@ -63,8 +63,23 @@ export function BasketBar() {
   if (hidden) return null;
 
   const settings = catalog?.settings;
-  /* Every order is a delivery now, so the minimum always applies. */
-  const belowMinimum = subtotal < (settings?.minDeliveryOrder ?? 100);
+  /*
+   * Every order is a delivery now, so the minimum always applies — and it is the
+   * gate on the one action here.
+   *
+   * Owner, 17 Nov 2026: "disable the complete order if the items are less than
+   * 100". It was a sentence and nothing more: the Checkout pill stayed lit, so a
+   * lone R30 bowl walked the customer through a whole checkout form only to be
+   * told at the end that the button would not work. The amount is still shown,
+   * because "add R70" is the useful half of that sentence — but the way forward
+   * is switched off until there is enough in the basket.
+   *
+   * A basket cannot be empty here (the bar hides when the count is zero), so
+   * there is no "no food selected" state to disable: with nothing picked the
+   * bar itself is not on screen.
+   */
+  const minimum = Number(settings?.minDeliveryOrder ?? 100);
+  const belowMinimum = subtotal < minimum;
 
   return (
     <>
@@ -102,9 +117,9 @@ export function BasketBar() {
                 Sandton/Rosebank run, and the fee for anywhere further is worked
                 out at checkout where the address is known.
               */}
-              <span className="text-xs text-ink/55">
+              <span className="text-xs text-ink/55" id={belowMinimum ? 'hb-basket-minimum' : undefined}>
                 {belowMinimum
-                  ? `Add ${zar((settings?.minDeliveryOrder ?? 100) - subtotal)} to reach the R${settings?.minDeliveryOrder ?? 100} minimum`
+                  ? `Add ${zar(minimum - subtotal)} to reach the R${minimum} minimum`
                   : 'Delivery included in Sandton & Rosebank'}
               </span>
             </span>
@@ -150,15 +165,35 @@ export function BasketBar() {
               <span className="sm:hidden">Ask</span>
             </a>
           ) : (
-            <Link
-              to="/checkout"
-              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-ochre px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
-            >
-              Checkout
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m9 6 6 6-6 6" />
-              </svg>
-            </Link>
+            belowMinimum ? (
+              /*
+               * A link to a checkout that will refuse the basket is a dead end
+               * dressed as a way forward. Rendered as a genuinely disabled
+               * button — not an anchor with a look — so a keyboard or a screen
+               * reader is told the same thing the colour says.
+               */
+              <button
+                type="button"
+                disabled
+                aria-describedby="hb-basket-minimum"
+                className="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center gap-1.5 rounded-full border-2 border-ink/20 bg-ink/5 px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink/40"
+              >
+                Checkout
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m9 6 6 6-6 6" />
+                </svg>
+              </button>
+            ) : (
+              <Link
+                to="/checkout"
+                className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-ochre px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
+              >
+                Checkout
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m9 6 6 6-6 6" />
+                </svg>
+              </Link>
+            )
           )}
         </div>
       </div>

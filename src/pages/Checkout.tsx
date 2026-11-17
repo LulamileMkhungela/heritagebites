@@ -376,13 +376,30 @@ function LiveCheckout() {
   const zone = deliveryZoneFor(measured?.lat, measured?.lng, rules);
   const tooFar = zone.zone === 'refused';
 
+  /*
+   * The basket, before the form.
+   *
+   * Owner, 17 Nov 2026: "disable the complete order if the items are less than
+   * 100". Both order buttons used to be gated on the minimum only through the
+   * WhatsApp wording, and the paid button not at all — the server refused the
+   * order after the customer had filled in their name, number and address. The
+   * rule is now one flag both paths read, so neither can be pressed while the
+   * basket is short, and neither explains it differently.
+   *
+   * An empty basket never gets this far (the page shows "Your basket is empty"),
+   * so this really is only about a basket that holds too little.
+   */
+  const belowMinimum = localSubtotal < Number(settings?.minDeliveryOrder ?? 100);
+  const minimumProblem = belowMinimum
+    ? `Delivery orders start at ${zar(Number(settings?.minDeliveryOrder ?? 100))} — add a little more, or message us on WhatsApp about a smaller order.`
+    : null;
   const waBlockedBase = waValidationProblem(customer, fulfilment, settings, addressArea);
   /*
    * The order gate sits after the field checks, so the customer is told about the
    * empty box first and the delivery rule second — a radius complaint about a
    * form with no address in it is noise.
    */
-  const gate = waBlockedBase ? null : deliveryGateProblem(localSubtotal, settings, zone);
+  const gate = waBlockedBase ? null : minimumProblem ?? deliveryGateProblem(localSubtotal, settings, zone);
   const waBlocked = waBlockedBase ?? gate;
   const waReady = waBlocked === null;
   /* Point at the fields themselves, not only the message under the button. */
@@ -629,7 +646,7 @@ function LiveCheckout() {
           className="mx-auto h-24 w-24 object-contain opacity-85"
         />
         <h1 className="mt-4 font-display text-4xl font-semibold">Your basket is empty</h1>
-        <p className="mt-3 text-ink/60">Add a plate or two from the menu and come back here to check out.</p>
+        <p className="mt-3 text-ink/60">Add a plate or a side from the menu and come back here to check out.</p>
         <Link to="/menu" className="mt-6 inline-block rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone">
           Browse the menu
         </Link>
@@ -1051,6 +1068,17 @@ function LiveCheckout() {
                 </div>
               </div>
 
+                {/*
+                  The minimum, said next to the button it is holding shut rather
+                  than in a paragraph at the top of the page that nobody connects
+                  to anything. Owner, 17 Nov 2026: the order must not complete
+                  below R100 — this is the sentence that explains the grey button.
+                */}
+                {belowMinimum && (
+                  <p id="hb-checkout-minimum" className="mt-3 rounded-xl border-2 border-ochre bg-ochre/10 p-3 text-[12px] font-medium text-ink/75">
+                    {minimumProblem}
+                  </p>
+                )}
                 {fatal && (
                   <p className="mt-3 rounded-xl border-2 border-chili bg-chili/10 p-3 text-[12px] font-medium text-chili" role="alert">
                     <ContactText>{fatal}</ContactText>
@@ -1075,15 +1103,18 @@ function LiveCheckout() {
                 size="lg"
                 block
                 className="mt-4"
-                disabled={state === 'paying' || (method2 === 'card' && !online) || closed}
+                disabled={state === 'paying' || (method2 === 'card' && !online) || closed || belowMinimum}
+                aria-describedby={belowMinimum ? 'hb-checkout-minimum' : undefined}
               >
                 {closed
                   ? 'Ordering closed for today'
-                  : state === 'paying'
-                    ? 'Saving your order…'
-                    : method2 === 'card' && !online
-                      ? 'Online payment coming soon'
-                      : `Place order · ${zar(shown.total)}`}
+                  : belowMinimum
+                    ? `Add ${zar(Number(settings?.minDeliveryOrder ?? 100) - localSubtotal)} more to order`
+                    : state === 'paying'
+                      ? 'Saving your order…'
+                      : method2 === 'card' && !online
+                        ? 'Online payment coming soon'
+                        : `Place order · ${zar(shown.total)}`}
               </Button>
 
               {waReady ? (

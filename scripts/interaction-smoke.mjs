@@ -367,8 +367,110 @@ await step('a lone bowl of chakalaka is blocked at checkout by the R100 minimum'
   }
   const wa = [...bowl.doc.querySelectorAll('a[href^="https://wa.me/"]')].find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
   if (wa) throw new Error('a R30 bowl can reach checkout without meeting the minimum');
+
+  /*
+   * And neither order button can be pressed — not the WhatsApp one, and not the
+   * paid one. Owner, 17 Nov 2026: "disable the complete order if the items are
+   * less than 100". The paid button used to be live here and only the server
+   * refused it, after the customer had filled the whole form in.
+   */
+  const paid = [...bowl.doc.querySelectorAll('button[type="submit"]')][0];
+  if (!paid) throw new Error('no primary order button on the checkout');
+  if (!paid.disabled) throw new Error('the paid order button is still live below the minimum');
+  if (!/Add R\d/.test(paid.textContent ?? '')) throw new Error(`the disabled order button does not say how much more is needed: ${paid.textContent}`);
+
   bowl.close();
   return 'the R100 minimum is what stops a lone bowl, not a rule against sides';
+});
+
+await step('the checkout door is shut while the basket is under R100, and open once it is not', async () => {
+  /*
+   * Owner, 17 Nov 2026: "disable the complete order if the items are less than
+   * 100". Until now the bottom bar offered a live Checkout pill to a R30 basket:
+   * it led to a page that then refused the order, which is a button that lies.
+   *
+   * Two baskets, the same page, only the amount different — the bar and the
+   * drawer are two doors to one checkout, so both are checked.
+   */
+  const line = (unitPrice, n) => ({
+    key: `t::${unitPrice}`,
+    itemId: 'side-chakalaka',
+    name: n,
+    image: '/img/chakalaka.jpg',
+    unitPrice,
+    qty: 1,
+    picks: [],
+    kind: 'menu',
+  });
+
+  const short = boot('/menu', { seedCart: { state: { fulfilment: 'delivery', lines: [line(30, 'Chakalaka')] }, version: 2 } });
+  await short.waitFor(() => /1 item · delivery/.test(short.text()), 'the basket bar with a short basket', 20000);
+
+  const door = () => [...short.doc.querySelectorAll('button, a')].find((el) => /^Checkout$/i.test((el.textContent ?? '').trim()));
+  const shut = door();
+  if (!shut) throw new Error('the basket bar has no checkout door');
+  if (shut.tagName === 'A' && (shut.getAttribute('href') ?? '').includes('/checkout')) {
+    throw new Error('a R30 basket is still offered a live checkout link');
+  }
+  if (shut.tagName === 'BUTTON' && !shut.disabled) throw new Error('the checkout door is a button but not disabled');
+  /* The amount still needed, said out loud beside it. */
+  if (!/Add R\d/.test(short.text()) || !/R100 minimum/.test(short.text())) {
+    throw new Error(`the bar does not say how far short the basket is: ${short.text().slice(0, 200)}`);
+  }
+
+  /* The drawer is the same door, so it is shut the same way. */
+  short.click([...short.doc.querySelectorAll('button')].find((b) => /basket/i.test(b.getAttribute('aria-label') ?? '')));
+  await short.waitFor(() => short.doc.querySelector('[role="dialog"][aria-label="Your basket"]'), 'the basket drawer', 6000);
+  const drawerShut = [...short.doc.querySelectorAll('[role="dialog"] button')].find((b) => /^Checkout$/i.test((b.textContent ?? '').trim()));
+  if (!drawerShut) throw new Error('the drawer lost its checkout button');
+  if (!drawerShut.disabled) throw new Error('the drawer lets a R30 basket through while the bar does not');
+  short.close();
+
+  /* The same basket at R100 is a different story. */
+  const enough = boot('/menu', { seedCart: { state: { fulfilment: 'delivery', lines: [line(100, 'Traditional Plate')] }, version: 2 } });
+  await enough.waitFor(() => /1 item · delivery/.test(enough.text()), 'the basket bar with a full basket', 20000);
+  const open = [...enough.doc.querySelectorAll('button, a')].find((el) => /^Checkout$/i.test((el.textContent ?? '').trim()));
+  if (open?.tagName !== 'A' || !(open.getAttribute('href') ?? '').includes('/checkout')) {
+    throw new Error('a R100 basket cannot reach the checkout');
+  }
+  enough.close();
+  return 'shut at R30 in both doors, open at R100';
+});
+
+await step('nothing selected cannot be added: the order and add buttons say what is missing', async () => {
+  /*
+   * Owner, 17 Nov 2026: "disable that if there is no food selected". A dish with
+   * a required choice used to accept the tap and then scold the customer with a
+   * toast — a button that is present, lit and then refuses reads as broken. The
+   * Add button is now disabled and says which choice is missing.
+   */
+  /* A plate: the builder's Add button, with no protein picked. */
+  const builder = [...s1.doc.querySelectorAll('section button')].find((el) => /Build your plate/i.test(el.textContent ?? ''));
+  if (!builder) throw new Error('no plate builder on the menu');
+  s1.click(builder);
+  await s1.waitFor(() => s1.dialogs().length > 0, 'the plate builder', 8000);
+  const addPlate = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((el) => /Pick a|Add plate/i.test(el.textContent ?? ''));
+  if (!addPlate) throw new Error('the plate builder has no add button');
+  if (!addPlate.disabled) throw new Error('a plate with no protein picked can still be added');
+  if (!/Pick a protein/i.test(addPlate.textContent ?? '')) throw new Error(`the add button does not say what is missing: ${addPlate.textContent}`);
+  const closeBuilder = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((el) => /close/i.test(el.getAttribute('aria-label') ?? ''));
+  s1.click(closeBuilder);
+  await s1.waitFor(() => s1.dialogs().length === 0, 'the builder to close', 8000);
+
+  /* A dish sheet with a required choice: same rule, same words. */
+  const cardBtn = [...s1.doc.querySelectorAll('article button')]
+    .find((el) => /Details for Mala-Mogodu/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!cardBtn) throw new Error('no Mala-Mogodu card');
+  s1.click(cardBtn);
+  await s1.waitFor(() => s1.dialogs().length > 0, 'the dish sheet', 8000);
+  const addDish = [...s1.doc.querySelectorAll('[role="dialog"] footer button')].find((el) => /Add to basket|Pick a/i.test(el.textContent ?? ''));
+  if (!addDish) throw new Error('the dish sheet has no add button');
+  if (!addDish.disabled) throw new Error('a dish with nothing chosen can still be added');
+  if (!/Pick a/i.test(addDish.textContent ?? '')) throw new Error(`the sheet's add button does not name the missing choice: ${addDish.textContent}`);
+  const closeSheet = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((el) => /close/i.test(el.getAttribute('aria-label') ?? ''));
+  s1.click(closeSheet);
+  await s1.waitFor(() => s1.dialogs().length === 0, 'the sheet to close', 8000);
+  return 'both add buttons disabled, both naming the missing choice';
 });
 
 await step('the menu can be read as a grid or a list, from a control beside the sort', async () => {
@@ -820,8 +922,14 @@ await step('choosing required options then adding puts the line in the basket', 
   }
   if (chosen < 2) throw new Error(`expected starch and side groups, found ${chosen}`);
   await sleep(150);
-  await s1.waitFor(() => s1.byText('button', /Add to basket/)[0], 'the add button to mount', 15000);
-  s1.click(s1.byText('button', /Add to basket/)[0]);
+  /*
+   * Scoped to the sheet: since the sides became products, "Add to basket" is
+   * also the label on every side card behind the dialog, and an unscoped match
+   * clicks the menu instead of the sheet.
+   */
+  const sheetAdd = () => [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to basket/i.test(b.textContent ?? ''));
+  await s1.waitFor(sheetAdd, 'the add button to mount', 15000);
+  s1.click(sheetAdd());
   /*
    * Adding deliberately no longer slides the drawer over the menu — a customer
    * ordering several plates was interrupted between each one. The pinned basket
