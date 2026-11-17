@@ -361,6 +361,32 @@ export interface ServiceWindow {
   label: string;
 }
 
+/**
+ * One past order, as the loyalty card may show it.
+ *
+ * Its shape is decided by what the lookup is allowed to publish: a receipt a
+ * customer could hold in their hand — the code, the date, the food, the money and
+ * where the order got to. No tracking token (that is the key to the order page)
+ * and no address (that is where they live), because the card is opened with a
+ * cell number alone.
+ */
+export interface PastOrder {
+  code: string;
+  createdAt: string;
+  status: OrderStatus;
+  statusLabel: string;
+  items: {
+    itemId: string;
+    name: string;
+    qty: number;
+    unitPrice: number;
+    options: { id: string; label: string; qty: number }[];
+  }[];
+  total: number;
+  paymentMethod: string;
+  paymentStatus: string;
+}
+
 export interface Order {
   id: string;
   code: string;

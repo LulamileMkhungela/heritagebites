@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart, toApiItems, cartSubtotal } from '../store/cart';
 import { useCatalog } from '../store/catalog';
 import { api, ApiError, STATIC_PREVIEW } from '../lib/api';
+import { OrderAgain } from '../components/OrderAgain';
 import { normalisePhone, zar } from '../lib/format';
 import { Button, ContactText, Field, HeritageMark, LinkButton, SectionLabel, WovenRule, inputCls } from '../components/ui';
 import { asset } from '../lib/assets';
@@ -12,7 +13,7 @@ import { AddressField } from '../components/AddressField';
 import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
 import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, type AddressSuggestion } from '../lib/address';
 import { deniedMessage, requestLocation, type LocationResult } from '../lib/geolocation';
-import type { BookableDate, Settings } from '../lib/types';
+import type { BookableDate, PastOrder, Settings } from '../lib/types';
 
 /*
  * `cash` is the stored value, and it means cash to the driver.
@@ -154,6 +155,23 @@ function rememberTracking(code: string, token: string) {
   }
 }
 
+/**
+ * The cell number of the last order this device placed.
+ *
+ * Kept so the checkout can offer that order back the next time this customer has
+ * an empty basket, without making them type their number first. A cell number is
+ * the loyalty key the business already uses, and it is the only thing stored:
+ * not the order, not the address, not the card.
+ */
+function rememberPhone(phone: string) {
+  try {
+    const trimmed = String(phone ?? '').trim();
+    if (trimmed) window.localStorage.setItem('hb.lastPhone', trimmed);
+  } catch {
+    /* Private mode can refuse storage; the order itself is unaffected. */
+  }
+}
+
 function LiveCheckout() {
   /*
    * A checkout is a form, not a page worth indexing: there is nothing in it to
@@ -170,6 +188,39 @@ function LiveCheckout() {
   const settings = catalog?.settings;
   const payments = catalog?.payments;
   const service = catalog?.service;
+  /**
+   * The last successful order this device placed, so an empty basket can offer
+   * it back.
+   *
+   * Read from the device, not asked of the server: the customer has not typed a
+   * cell number yet at this point, and asking for one before showing them their
+   * own last order is a worse exchange than remembering it locally. Only the
+   * code is stored — the totals and lines come back from the same loyalty
+   * lookup the card uses, priced from today's menu.
+   */
+  const [pastOrders, setPastOrders] = useState<PastOrder[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      let phone = '';
+      try {
+        phone = window.localStorage.getItem('hb.lastPhone') ?? '';
+      } catch {
+        return;
+      }
+      if (!phone) return;
+      try {
+        const card = await api.passport(phone);
+        if (alive && card.recent) setPastOrders(card.recent);
+      } catch {
+        /* A lookup that fails is not worth a message: the menu link below still works. */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   /**
    * Whether the customer can actually reach a Yoco payment page right now.
    * Driven by the server, which knows if the business has supplied a link or
@@ -520,6 +571,12 @@ function LiveCheckout() {
       /* The basket is only emptied once the order exists on the server. */
       clear();
       rememberTracking(order.code, trackingToken);
+      /*
+       * The number is kept so the next visit can offer this order back without
+       * asking for it again. It is the same number the loyalty card is keyed by,
+       * and it is the only thing stored — not the address, not the order.
+       */
+      rememberPhone(customer.phone);
 
       if (payment?.redirectUrl) {
         setRedirect({ orderCode: order.code, url: payment.redirectUrl });
@@ -602,6 +659,22 @@ function LiveCheckout() {
         <Link to="/menu" className="mt-6 inline-block rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone">
           Browse the menu
         </Link>
+
+        {/*
+          An empty basket is where a returning customer lands after tapping
+          "checkout" out of habit, and where they land when a basket is cleared.
+          Offering them their own last order here is the difference between a dead
+          end and a two-tap repeat order — the thing every delivery app gets right
+          and this one did not.
+        */}
+        {pastOrders.length > 0 && <div className="mt-12 text-left">
+          <OrderAgain
+            orders={pastOrders.slice(0, 2)}
+            to="/checkout"
+            heading="Or order what you had last time"
+            intro="Your last order is on this device. One tap puts it back, priced from today’s menu."
+          />
+        </div>}
       </section>
     );
   }

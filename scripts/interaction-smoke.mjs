@@ -2143,6 +2143,88 @@ await step('the loyalty card looks up stamps by cell number', async () => {
   return `empty state for a new number, ${api.stamps} stamp(s) for one that ordered`;
 });
 
+await step('a past order can be put back in the basket in one tap', async () => {
+  /*
+   * "Order it again" — the feature a returning customer actually wants.
+   *
+   * The order is seeded for a number this device "knows" (the checkout parks the
+   * last number in localStorage), the loyalty card is opened with that number, and
+   * the button is pressed the way a customer presses it. What is asserted is the
+   * basket that comes out: the same plate, the same starch and side, the same
+   * quantity, and a price read from today's catalogue rather than the receipt.
+   */
+  const phone = `+27 84 ${String(Date.now()).slice(-8)}`;
+  const seeded = await fetch(`${BASE}/api/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      channel: 'web',
+      fulfilment: 'delivery',
+      customer: {
+        name: 'Reorder Customer', phone, email: 'reorder@example.co.za',
+        address: '1 Maude Street, Sandton', suburb: 'Sandton', lat: -26.1075, lng: 28.055,
+      },
+      /* A plate built in the builder, so the group reconstruction is exercised. */
+      items: [{ kind: 'plate', plateId: 'traditional', qty: 2, selections: { protein: ['tshotlo'], starch: ['pap', 'dumpling'], veg: ['chakalaka'] } }],
+      payment: { method: 'cash' },
+    }),
+  }).then((r) => r.json());
+  if (!seeded.order?.code) throw new Error('could not seed the order to re-order');
+
+  const s8 = boot('/passport');
+  s8.doc.defaultView.localStorage.setItem('hb.lastPhone', phone);
+  await s8.waitFor(() => /Your loyalty card/i.test(s8.text()), 'loyalty card page');
+
+  const input = [...s8.doc.querySelectorAll('input')].find((f) => /\+27 82/.test(f.placeholder ?? ''));
+  if (!input) throw new Error('no phone input on the passport page');
+  s8.setInput(input, phone);
+  s8.click(s8.byText('button[type="submit"]', /Find my card/i)[0]);
+  await s8.waitFor(() => /Order it again/i.test(s8.text()), 'the past-order list', 15000);
+
+  /* The order reads as the customer's order, with its choices. */
+  if (!s8.text().includes(seeded.order.code)) throw new Error('the past order is missing its code');
+  for (const expected of [/2 × Traditional Plate/, /Tshotlo/, /Pap/, /Chakalaka/]) {
+    if (!expected.test(s8.text())) throw new Error(`the past order does not show ${expected}`);
+  }
+
+  const again = s8.byText('button', /Order this again|Replace my basket/i)[0];
+  if (!again) throw new Error('no "order this again" button');
+  s8.click(again);
+
+  /*
+   * The basket is the assertion, not the toast: read it from storage the way the
+   * basket bar does, so a passing test means the cart really holds the food.
+   */
+  await s8.waitFor(() => {
+    try {
+      const raw = JSON.parse(s8.doc.defaultView.localStorage.getItem('hb.cart') ?? '{}');
+      return (raw?.state?.lines ?? []).length > 0;
+    } catch {
+      return false;
+    }
+  }, 'the rebuilt basket', 15000);
+
+  const cart = JSON.parse(s8.doc.defaultView.localStorage.getItem('hb.cart'));
+  const lines = cart?.state?.lines ?? [];
+  if (lines.length !== 1) throw new Error(`expected one rebuilt line, saw ${lines.length}`);
+
+  const [line] = lines;
+  if (line.kind !== 'plate' || line.plateId !== 'traditional') throw new Error('the rebuilt line is not the plate that was ordered');
+  if (line.qty !== 2) throw new Error(`quantity was lost: ${line.qty}`);
+  if (line.unitPrice !== 100) throw new Error(`the plate was re-priced from the receipt, not the menu: R${line.unitPrice}`);
+
+  const labels = line.picks.map((p) => p.label);
+  for (const expected of ['Tshotlo (pounded beef)', 'Pap', 'Dumpling', 'Chakalaka']) {
+    if (!labels.includes(expected)) throw new Error(`the rebuild lost "${expected}": ${labels.join(' · ')}`);
+  }
+
+  /* And the page says where it went, so nobody has to guess. */
+  await s8.waitFor(() => /Checkout|Almost there|basket/i.test(s8.text()), 'the checkout after reordering', 15000);
+
+  s8.close();
+  return `${seeded.order.code} rebuilt: ${line.qty} × Traditional Plate · ${labels.join(' · ')} at R${line.unitPrice} a plate`;
+});
+
 /* ------------------------------------------------------------------ */
 /* Flow 1c: Build Your Heritage Plate configurator                     */
 /* ------------------------------------------------------------------ */

@@ -1397,6 +1397,59 @@ describe('loyalty card and contact', () => {
     assert.equal(card.cardsCompleted, 1);
   });
 
+  test('the loyalty card lists past orders without publishing anything private', async () => {
+    /*
+     * "Order it again" needs the customer's own past orders, and the only key the
+     * card has is a cell number. So this payload is a receipt and nothing more:
+     * it must never carry the tracking token (the key to /api/orders/:code) or the
+     * delivery address (where the customer lives), because anyone who knows a
+     * number could read them.
+     */
+    const phone = '+27 72 314 1592';
+    const placed = await placeOrder({
+      customer: { email: 't@e.co.za', name: 'Reorder Test', phone, ...ADDRESS },
+      items: [{ itemId: 'tshotlo-plate', qty: 2, options: { starch: 'pap', veg: 'chakalaka' } }],
+    });
+    assert.equal(placed.res.status, 201, `order should be accepted: ${JSON.stringify(placed.body)}`);
+
+    const card = await fetch(`${base}/api/passport`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    }).then(json);
+
+    assert.ok(Array.isArray(card.recent), 'the card publishes a recent-orders list');
+    assert.ok(card.recent.length >= 1, 'the order just placed is on it');
+    const [latest] = card.recent;
+    assert.equal(latest.code, placed.body.order.code, 'newest first');
+    assert.equal(latest.total, placed.body.order.totals.total);
+    assert.equal(latest.status, 'pending');
+    assert.ok(latest.items.length >= 1);
+    /* The lines keep the choices, because a reorder without them is a different order. */
+    const item = latest.items[0];
+    assert.equal(item.qty, 2);
+    assert.ok(item.options.some((o) => o.label === 'Pap'));
+    assert.ok(item.options.some((o) => o.label === 'Chakalaka'));
+
+    /* Nothing that would let a stranger read, cancel or find the order. */
+    const serialised = JSON.stringify(card.recent);
+    assert.equal(/trackingToken|token/i.test(serialised), false, 'no tracking token may be published');
+    assert.equal(serialised.includes(ADDRESS.address), false, 'the delivery address must stay private');
+    assert.equal(/address|suburb/i.test(serialised), false, 'no address fields at all');
+    assert.equal(/Oxford|Illovo/i.test(serialised), false, 'not even inside a string');
+  });
+
+  test('a number with no orders gets an empty list, not a missing one', async () => {
+    const fresh = `+27 84 ${String(Date.now()).slice(-7)}`;
+    const card = await fetch(`${base}/api/passport`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: fresh }),
+    }).then(json);
+    assert.equal(card.found, false);
+    assert.deepEqual(card.recent, [], 'the page can render without a special case');
+  });
+
   test('the contact form validates and records submitted messages', async () => {
     const bad = await fetch(`${base}/api/contact`, {
       method: 'POST',

@@ -1369,11 +1369,58 @@ app.post('/api/orders/:code/cancel', LIMITS.cancel, (req, res) => {
 
 /* ----------------------------- Loyalty card -------------------------- */
 
+/**
+ * A past order, as the loyalty card may show it.
+ *
+ * The loyalty card is looked up by cell number alone — no password, no token —
+ * so a page built on it must never hand out anything that would let a stranger
+ * read, cancel or track somebody else's order. That rules out the tracking token
+ * (it is the key to `/api/orders/:code`) and the delivery address (where the
+ * customer lives). What is left is what a paper receipt in a wallet would show:
+ * the code, when it was, what was in it, what it cost and where it got to.
+ *
+ * `code` is published because it is not a secret on its own: reading an order
+ * still needs the token, and the customer needs the code to quote it on the
+ * phone. Someone who guesses a code learns only that an order exists.
+ */
+function receiptSummary(order) {
+  return {
+    code: order.code,
+    createdAt: order.createdAt,
+    status: order.status,
+    statusLabel: STATUS_META[order.status]?.label ?? order.status,
+    items: (order.items ?? []).map((item) => ({
+      itemId: item.itemId,
+      name: item.name,
+      qty: item.qty,
+      unitPrice: item.unitPrice,
+      options: (item.options ?? []).map((o) => ({ id: o.id, label: o.label, qty: o.qty ?? 1 })),
+    })),
+    total: order.totals?.total ?? 0,
+    paymentMethod: order.payment?.method ?? 'cash',
+    paymentStatus: order.payment?.status ?? 'pending',
+  };
+}
+
 app.post('/api/passport', LIMITS.loyalty, (req, res) => {
   const key = String(req.body?.phone ?? '').replace(/\D/g, '');
   if (key.length < 9) return res.status(422).json({ error: 'Please enter a valid South African cell number.' });
   const record = get('stamps')[key];
-  if (!record) return res.json({ found: false, phone: key, stamps: 0, orders: 0, lifetime: 0 });
+  if (!record) return res.json({ found: false, phone: key, stamps: 0, orders: 0, lifetime: 0, recent: [] });
+
+  /*
+   * The last few orders, newest first — the "order it again" list.
+   *
+   * Matched on the same normalised number the stamp record is keyed by, so the
+   * card and the list can never disagree about whose orders these are. Five is
+   * enough to cover a household's usual rotation and short enough that the list
+   * is a shortcut rather than a second order-history page.
+   */
+  const recent = get('orders')
+    .filter((order) => String(order.customer?.phone ?? '').replace(/\D/g, '') === key)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 5)
+    .map(receiptSummary);
   /*
    * A completed card is due, not empty.
    *
@@ -1392,6 +1439,7 @@ app.post('/api/passport', LIMITS.loyalty, (req, res) => {
     lifetime: fromCents(record.lifetimeCents),
     untilFree: full ? 0 : 10 - (record.stamps % 10),
     cardsCompleted: Math.floor(record.stamps / 10),
+    recent,
   });
 });
 

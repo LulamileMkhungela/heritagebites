@@ -14,7 +14,7 @@
  *      browser with an honest message rather than a stack of failed requests.
  *      `VITE_STATIC_PREVIEW=1` turns that on; it is never set for the real site.
  */
-import type { Catalog, Order } from './types';
+import type { Catalog, Order, PastOrder } from './types';
 
 const env = import.meta.env ?? {};
 
@@ -290,6 +290,15 @@ export const api = {
       lifetime?: number;
       untilFree?: number;
       cardsCompleted?: number;
+      /**
+       * The last few orders for this number, newest first — what the "order it
+       * again" list is built from.
+       *
+       * Deliberately not a full `Order`: the loyalty card is opened with a cell
+       * number and nothing else, so the payload carries no tracking token and no
+       * delivery address. See `receiptSummary` on the server for why.
+       */
+      recent?: PastOrder[];
     }>('/api/passport', {
       method: 'POST',
       body: JSON.stringify({ phone }),
