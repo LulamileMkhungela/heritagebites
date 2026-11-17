@@ -23,9 +23,31 @@ export default function Home() {
 
   const featured = useMemo(() => (catalog?.menu ?? []).filter((m) => m.available).slice(0, 4), [catalog]);
 
+  const lines = useCart((s) => s.lines);
+  const setBasketOpen = useCart((s) => s.setOpen);
+  const navigate = useNavigate();
+  const openOrChoose = () => {
+    if (lines.length) {
+      setBasketOpen(true);
+      return;
+    }
+    navigate('/menu');
+  };
+
   return (
     <>
-      <Hero onOrder={() => document.getElementById('menu-preview')?.scrollIntoView({ behavior: 'smooth' })} />
+      {/*
+        "Order online" has to take the customer somewhere an order actually is.
+
+        Owner, 18 Nov 2026: "when i click order online it takes me to checkout and
+        on checkout its empty". The two halves of that are the same bug from
+        either end — a button promising an order, wired to a page with no basket
+        on it. So it now does the only two useful things: with a basket, open the
+        drawer so they can see what they are ordering; with nothing in it, send
+        them to the menu to pick something. Either way the tap costs one tap
+        fewer than giving up on an empty page.
+      */}
+      <Hero onOrder={openOrChoose} />
       <Ticker />
       <ThisWeek />
       <PlateMenuCTA />
@@ -187,9 +209,19 @@ function Hero({ onOrder }: { onOrder: () => void }) {
             <ul className="mt-5 space-y-3">
               {[
                 {
-                  t: shut ? 'Ordering closed' : 'Order online',
-                  d: shut ? 'The window has passed for today' : 'Card through Yoco, or cash to the driver',
-                  to: '/checkout',
+                  /*
+                   * Same rule as the hero: the checkout is where a basket
+                   * becomes an order, not where you go to find one. With an
+                   * empty basket this row says so in its own subtitle and points
+                   * at the menu instead of at an empty summary.
+                   */
+                  t: shut ? 'Ordering closed' : lines.length ? 'Order online' : 'Start an order',
+                  d: shut
+                    ? 'The window has passed for today'
+                    : lines.length
+                      ? 'Card through Yoco, or cash to the driver'
+                      : 'Pick your plates first — it takes a minute',
+                  to: lines.length ? '/checkout' : '/menu',
                 },
                 { t: 'WhatsApp', d: shut ? 'Ask if we can still cook for you' : 'Message us to place an order', href: waHrefOrder },
                 { t: 'Uber Eats', d: s?.channels?.ubereats?.url ? 'Order in the Uber Eats app' : 'Not on Uber Eats yet — ask on WhatsApp', href: s?.channels?.ubereats?.url },

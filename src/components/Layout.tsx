@@ -307,6 +307,8 @@ function Footer() {
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
   const wa = waHref(s?.whatsapp, CHANNEL_ENQUIRY);
+  /* Whether the Order column should offer a checkout or a first plate. */
+  const footerLines = useCart((st) => st.lines);
   /* The "Meals" group in the Order column starts closed; see the button below. */
   const [mealsOpen, setMealsOpen] = useState(false);
 
@@ -469,7 +471,21 @@ function Footer() {
                 <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Meals</Link></li>
                 <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">This week</Link></li>
                 <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
-                <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
+                {/*
+                  With a basket this is the checkout; with nothing in it, it is
+                  the menu. Landing a customer on "Your basket is empty" is a
+                  dead end they did not ask for (owner, 18 Nov 2026: "when i
+                  click order online it takes me to checkout and on checkout its
+                  empty").
+                */}
+                <li>
+                  <Link
+                    to={footerLines.length ? '/checkout' : '/menu'}
+                    className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre"
+                  >
+                    {footerLines.length ? 'Checkout & pay' : 'Start an order'}
+                  </Link>
+                </li>
               </ul>
             </li>
             {/* The pages that are not part of ordering a plate. "Loyalty card"
@@ -601,7 +617,7 @@ function CartDrawerPanel() {
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
             <span className="text-4xl">🍲</span>
             <p className="font-display text-lg">Nothing in the pot yet</p>
-            <p className="text-sm text-ink/55">Add a plate from the menu and it will show up here.</p>
+            <p className="text-sm text-ink/55">Add a plate or a side from the menu and it will show up here.</p>
             <Link to="/menu" onClick={() => setOpen(false)} className="mt-2 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-bone hover:bg-ink-3">
               Browse the menu
             </Link>
@@ -663,7 +679,7 @@ function CartDrawerPanel() {
                   <span className="font-mono">{zar(subtotal)}</span>
                 </div>
               </div>
-              <p className="mt-2 text-xs text-ink/45">
+              <p className="mt-2 text-xs text-ink/45" id={belowMinimum ? 'hb-drawer-minimum' : undefined}>
                 {belowMinimum
                   ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
                   : 'Delivery included in Sandton & Rosebank — anywhere else, the fee is added at checkout.'}
@@ -679,6 +695,23 @@ function CartDrawerPanel() {
                   <WhatsAppIcon className="h-4 w-4" />
                   Ask if we can cook it
                 </a>
+              ) : belowMinimum ? (
+                /*
+                 * The same gate the bottom bar applies (owner, 17 Nov 2026:
+                 * "disable the complete order if the items are less than 100").
+                 * The drawer and the bar are two doors to one checkout; a basket
+                 * that cannot be sent must not be able to leave through either.
+                 * The reason is right above it, so the button does not need to
+                 * repeat the amount.
+                 */
+                <button
+                  type="button"
+                  disabled
+                  aria-describedby="hb-drawer-minimum"
+                  className="mt-3 flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border-2 border-ink/20 bg-ink/5 px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink/40"
+                >
+                  Checkout
+                </button>
               ) : (
                 <Link
                   to="/checkout"
@@ -699,7 +732,7 @@ function CartDrawerPanel() {
               */}
               {/* When the window has closed this would be a second, weaker copy
                   of the same WhatsApp link directly above it. */}
-              {!shut && (
+              {!shut && !belowMinimum && (
               <Link
                 to="/checkout"
                 onClick={() => setOpen(false)}
@@ -834,7 +867,7 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
                 ))}
               </div>
               <p className="mt-5 text-xs leading-relaxed text-ink/40">
-                Search matches dish names, Setswana and isiZulu names, and ingredients. Press ⏎ to open, or + to add straight to your basket.
+                Search matches dish names, ingredients and what a dish is made of. Press ⏎ to open, or + to add straight to your basket.
               </p>
             </div>
           )}

@@ -6,6 +6,7 @@ import { normalisePhone } from '../lib/format';
 import { usePageSeo } from '../lib/seo';
 import { useCatalog } from '../store/catalog';
 import { waHref, loyaltyEnquiry } from '../lib/whatsapp';
+import { OrderAgain } from '../components/OrderAgain';
 
 const CARD_SIZE = 10;
 
@@ -154,6 +155,18 @@ export default function Passport() {
             </div>
           </div>
         </Reveal>
+      )}
+
+      {/*
+        The card answers "what have I earned?"; this answers the question that
+        actually brings somebody back — "what did I have last time?". It sits
+        directly under the card, because a returning customer opens this page for
+        exactly those two reasons and nothing else.
+      */}
+      {result?.found && result.recent && result.recent.length > 0 && (
+        <div className="mt-10">
+          <OrderAgain orders={result.recent} to="/checkout" />
+        </div>
       )}
 
       {/*

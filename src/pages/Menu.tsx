@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 import { zar } from '../lib/format';
-import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
+import { FALLBACK_WHATSAPP } from '../lib/whatsapp';
+import { Button, LoadError, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateGroup, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
@@ -58,6 +59,8 @@ export default function MenuPage() {
    */
   const catalog = useCatalog((s) => s.data);
   const loading = useCatalog((s) => s.loading);
+  const error = useCatalog((s) => s.error);
+  const load = useCatalog((s) => s.load);
   /*
    * The menu is the page most likely to be found from a search for a dish, so it
    * carries a schema.org Menu built from the same plates the customer sees —
@@ -68,6 +71,33 @@ export default function MenuPage() {
   const [modal, setModal] = useState<MenuItem | null>(null);
   const [activeCategory, setActiveCategory] = useState('');
   const [sort, setSort] = useState<SortId>('recommended');
+  /*
+   * List or grid.
+   *
+   * Owner, 17 Nov 2026: "the meals listview must have a listview and gridview …
+   * next to sort to have the view which is listview/gridview". Grid is the
+   * default because it is what the page has always been; list is the mode for
+   * somebody comparing prices, where four cards across a desk phone is one word
+   * of description each and no way to read two dishes against each other.
+   *
+   * Remembered in localStorage so a customer who prefers list gets list next
+   * time. Keyed to the browser, not the account — there is no account.
+   */
+  const [view, setView] = useState<'grid' | 'list'>(() => {
+    try {
+      return window.localStorage.getItem('hb.menuView') === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+  const chooseView = (next: 'grid' | 'list') => {
+    setView(next);
+    try {
+      window.localStorage.setItem('hb.menuView', next);
+    } catch {
+      /* Private mode can refuse storage; the choice still holds for this visit. */
+    }
+  };
   const [q, setQ] = useState('');
   const [builder, setBuilder] = useState<PlateMenu | null>(null);
   /*
@@ -138,9 +168,19 @@ export default function MenuPage() {
     if (!catalog) return [];
     const term = q.trim().toLowerCase();
 
+    /*
+     * Which list a category's dishes come from.
+     *
+     * Sides are their own products (see `sides` in the seed) rather than cards
+     * inside `menu`, so a category id has to say where to look. Everything else
+     * is a plate.
+     */
+    const poolFor = (categoryId: string) =>
+      (categoryId === 'sides' ? catalog.sides ?? [] : catalog.menu);
+
     const live: Section[] = catalog.categories
       .map((category) => {
-        let items = catalog.menu.filter((item) => item.category === category.id);
+        let items = poolFor(category.id).filter((item) => item.category === category.id);
         if (term) {
           items = items.filter((item) =>
             `${item.name} ${item.localName} ${item.language} ${item.description}`.toLowerCase().includes(term),
@@ -219,6 +259,12 @@ export default function MenuPage() {
     return () => observer.disconnect();
   }, [sections]);
 
+  /*
+   * The failure branch comes first, and it is not a spinner: a request that has
+   * already failed will not finish on its own, so the only honest thing on
+   * screen is what went wrong and a way to try again.
+   */
+  if (error && !catalog) return <LoadError what="the menu" message={error} onRetry={() => void load({ force: true })} whatsapp={FALLBACK_WHATSAPP} />;
   if (loading || !catalog) return <Spinner label="Opening the menu…" />;
 
   /* Expanding a folded section changes the page height, so the scroll waits a
@@ -300,40 +346,56 @@ export default function MenuPage() {
       {/* Category navigation stays visible and follows the section being read. */}
       <div className="sticky top-[var(--hb-header)] z-30 border-b-2 border-ink/10 bg-bone/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 py-3">
-          <nav className="no-scrollbar flex gap-2 overflow-x-auto" aria-label="Meal categories">
-            {sections.map((section) => (
-              <CatChip
-                key={section.id}
-                active={activeCategory === section.id}
-                onClick={() => scrollToCategory(section.id)}
-                label={section.name}
-                count={section.items.length}
-                soon={section.archived}
-              />
-            ))}
-          </nav>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {/* Sort sits on this line beside the search box: it is the only
-                control left here now that the filter chips are gone. */}
-            <label className="flex min-h-11 items-center gap-2 text-xs text-ink/55">
-              <span className="sr-only">Sort meals</span>
-              <span aria-hidden="true" className="hidden uppercase tracking-wide sm:inline">Sort</span>
-              <select
-                value={sort}
-                onChange={(event) => setSort(event.target.value as SortId)}
-                className="min-h-11 rounded-full border-2 border-ink/12 bg-white px-3 py-1.5 text-xs font-semibold text-ink outline-none focus:border-ochre"
-                aria-label="Sort meals"
-              >
-                {SORTS.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-            </label>
+          {/*
+            One line, and the order on it is the owner's (17 Nov 2026): "the sort
+            must be far to the right whilst inline with food categories and next
+            to sort to have the view which is listview/gridview".
+
+            So the categories scroll on the left, and the two view controls are
+            pinned to the right end of the same row. They were on a second row
+            under the chips, which on a phone put the only two controls on the
+            page below the fold of the sticky bar.
+
+            On a phone the controls stay in the row and the chips keep their own
+            horizontal scroll, so neither pushes the other off screen.
+          */}
+          <div className="flex items-center gap-3">
+            <nav className="no-scrollbar -mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1" aria-label="Meal categories">
+              {sections.map((section) => (
+                <CatChip
+                  key={section.id}
+                  active={activeCategory === section.id}
+                  onClick={() => scrollToCategory(section.id)}
+                  label={section.name}
+                  count={section.items.length}
+                  soon={section.archived}
+                />
+              ))}
+            </nav>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <label className="flex min-h-11 items-center gap-2 text-xs text-ink/55">
+                <span className="sr-only">Sort meals</span>
+                <span aria-hidden="true" className="hidden uppercase tracking-wide lg:inline">Sort</span>
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as SortId)}
+                  className="min-h-11 max-w-[9.5rem] rounded-full border-2 border-ink/12 bg-white px-3 py-1.5 text-xs font-semibold text-ink outline-none focus:border-ochre"
+                  aria-label="Sort meals"
+                >
+                  {SORTS.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <ViewToggle value={view} onChange={chooseView} />
+            </div>
+          </div>
+          <div className="mt-2">
             <input
               value={q}
               onChange={(event) => setQ(event.target.value)}
               placeholder="Search meals…"
-              className="min-h-11 w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre sm:w-auto"
+              className="min-h-11 w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre"
               aria-label="Search meals"
             />
           </div>
@@ -350,9 +412,15 @@ export default function MenuPage() {
         ) : sections.map((section) => {
           const open = !closed[section.id];
           const count = section.items.length;
+          /*
+           * The word follows the section. A bowl of salsa is not a plate, and
+           * "Sides & Relishes · 10 plates" would be the page miscounting itself.
+           */
           const countLabel = section.archived
             ? count === 1 ? 'dish' : 'dishes'
-            : count === 1 ? 'plate' : 'plates';
+            : section.id === 'sides'
+              ? count === 1 ? 'side' : 'sides'
+              : count === 1 ? 'plate' : 'plates';
           return (
           <section
             key={section.id}
@@ -427,10 +495,22 @@ export default function MenuPage() {
                   ))}
                 </ul>
               ) : (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                /*
+                 * One list, two shapes. `view` is the customer's choice and the
+                 * same card component renders either way, so a dish can never
+                 * show one price in the grid and another in the list.
+                 */
+                <div
+                  data-view={view}
+                  className={
+                    view === 'grid'
+                      ? 'grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                      : 'grid gap-4'
+                  }
+                >
                   {section.items.map((item, index) => (
                     <Reveal key={item.id} delay={Math.min(index, 5) * 50}>
-                      <MealCard item={item} onOpen={() => setModal(item)} />
+                      <MealCard item={item} onOpen={() => setModal(item)} layout={view} />
                     </Reveal>
                   ))}
                 </div>
@@ -483,6 +563,57 @@ export default function MenuPage() {
       {modal && <ItemModal item={modal} onClose={closeDish} />}
       {builder && <PlateBuilder plate={builder} onClose={closeBuilder} />}
     </>
+  );
+}
+
+/**
+ * Grid or list.
+ *
+ * Two icon buttons in a pill, not a select: there are two states, both are
+ * always visible, and the pressed one is filled — so what the page is currently
+ * doing is legible without opening anything. `aria-pressed` carries the state for
+ * a screen reader, and each button names the view it switches *to*, which is what
+ * a customer is choosing.
+ *
+ * Owner, 17 Nov 2026: "next to sort to have the view which is listview/gridview".
+ */
+function ViewToggle({ value, onChange }: { value: 'grid' | 'list'; onChange: (next: 'grid' | 'list') => void }) {
+  const icon = (kind: 'grid' | 'list') =>
+    kind === 'grid' ? (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+        <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+        <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+        <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+        <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+      </svg>
+    ) : (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+        <rect x="3" y="4" width="4.5" height="4.5" rx="1" />
+        <rect x="9.5" y="4" width="11.5" height="4.5" rx="1" />
+        <rect x="3" y="11" width="4.5" height="4.5" rx="1" />
+        <rect x="9.5" y="11" width="11.5" height="4.5" rx="1" />
+        <rect x="3" y="18" width="4.5" height="3" rx="1" />
+        <rect x="9.5" y="18" width="11.5" height="3" rx="1" />
+      </svg>
+    );
+
+  return (
+    <div className="inline-flex items-center rounded-full border-2 border-ink/12 bg-white p-0.5" role="group" aria-label="View meals as">
+      {(['grid', 'list'] as const).map((kind) => (
+        <button
+          key={kind}
+          type="button"
+          onClick={() => onChange(kind)}
+          aria-pressed={value === kind}
+          aria-label={kind === 'grid' ? 'Show meals as a grid' : 'Show meals as a list'}
+          /* 44px, not 40: this is a thumb control on a phone, and the mobile
+             audit treats anything under 44 as a miss. */
+          className={`grid h-11 w-11 place-items-center rounded-full transition-colors ${value === kind ? 'bg-ink text-bone' : 'text-ink/50 hover:text-ink'}`}
+        >
+          {icon(kind)}
+        </button>
+      ))}
+    </div>
   );
 }
 

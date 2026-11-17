@@ -13,6 +13,13 @@
       "tagline": "The contemporary kitchen",
       "blurb": "Mash, savoury rice, baby potatoes, cous cous or garlic bread with wings, short rib or lamb stew.",
       "accent": "clay"
+    },
+    {
+      "id": "sides",
+      "name": "Sides & Relishes",
+      "tagline": "The things that make the plate",
+      "blurb": "Every vegetable side you can choose inside a plate, now sold by the bowl as well — braised cabbage, spinach, morogo, salsa, chakalaka, atchaar and green salad, plus corn ribs and glazed carrots.",
+      "accent": "sky"
     }
   ],
   "comingSoon": [
@@ -73,105 +80,16 @@
           "status": "coming-soon"
         }
       ]
-    },
-    {
-      "id": "sides-relishes",
-      "name": "Sides & Relishes",
-      "tagline": "The things that make the plate",
-      "blurb": "Every vegetable side you can choose inside a plate — braised cabbage, spinach, morogo, salsa, chakalaka, atchaar and green salad — plus stywe pap from the old kitchen.",
-      "accent": "sky",
-      "items": [
-        {
-          "id": "archive-braised-cabbage",
-          "name": "Braised cabbage",
-          "price": 0,
-          "image": "/img/pap-cabbage.jpg",
-          "description": "Cabbage braised slowly with onion until it is sweet and soft.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-spinach",
-          "name": "Spinach",
-          "price": 0,
-          "image": "/img/samp-beans.jpg",
-          "description": "Spinach wilted down with a little onion and seasoning.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-morogo",
-          "name": "Morogo",
-          "price": 0,
-          "image": "/img/samp-beans.jpg",
-          "description": "Wild African greens, cooked the traditional way.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-salsa",
-          "name": "Salsa",
-          "price": 0,
-          "image": "/img/chakalaka.jpg",
-          "description": "Fresh tomato and onion salsa, chopped and served cold.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-chakalaka",
-          "name": "Chakalaka",
-          "price": 0,
-          "image": "/img/chakalaka.jpg",
-          "description": "Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-atchaar",
-          "name": "Atchaar",
-          "price": 0,
-          "image": "/img/atchaar.jpg",
-          "description": "Tangy mango atchaar, made in the kitchen and spooned over the plate.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-green-salad",
-          "name": "Green salad",
-          "price": 0,
-          "image": "/img/chakalaka.jpg",
-          "description": "Crisp lettuce, cucumber and tomato with a light dressing.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-corn-ribs",
-          "name": "Corn ribs",
-          "price": 0,
-          "image": "/img/russian-chips.jpg",
-          "description": "Sweetcorn ribs, cut and grilled until the kernels caramelise.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-glazed-carrots",
-          "name": "Glazed carrots",
-          "price": 0,
-          "image": "/img/pap-cabbage.jpg",
-          "description": "Carrots roasted and glazed until they shine.",
-          "status": "coming-soon"
-        },
-        {
-          "id": "archive-stywe-pap",
-          "name": "Stywe Pap",
-          "price": 30,
-          "image": "/img/pap-cabbage.jpg",
-          "description": "Stiff maize pap, the traditional partner to a braai or a pot of mogodu.",
-          "status": "coming-soon"
-        }
-      ]
     }
   ],
   "menu": [
     {
       "id": "mogodu-plate",
       "plateId": "traditional",
-      "name": "Mogodu Plate",
-      "localName": "Mogodu",
-      "language": "Setswana / Sepedi",
-      "pronunciation": "mo-GOH-doo",
+      "name": "Mala-Mogodu",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
       "category": "traditional",
       "price": 100,
       "image": "/img/plate-mogodu.jpg",
@@ -279,10 +197,10 @@
     {
       "id": "tshotlo-plate",
       "plateId": "traditional",
-      "name": "Tshotlo Plate",
-      "localName": "Tshotlo",
-      "language": "Setswana",
-      "pronunciation": "CHOH-tloh",
+      "name": "Tshotlo",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
       "category": "traditional",
       "price": 100,
       "image": "/img/plate-tshotlo.jpg",
@@ -390,8 +308,8 @@
     {
       "id": "chicken-hardbody-plate",
       "plateId": "traditional",
-      "name": "Chicken Hardbody Plate",
-      "localName": "Hardbody",
+      "name": "Chicken Hardbody",
+      "localName": "",
       "language": "",
       "pronunciation": "",
       "category": "traditional",
@@ -501,10 +419,10 @@
     {
       "id": "tlhakwana-plate",
       "plateId": "traditional",
-      "name": "Tlhakwana Plate",
-      "localName": "Tlhakwana",
-      "language": "Setswana",
-      "pronunciation": "tla-KWAH-na",
+      "name": "Tlhakwana",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
       "category": "traditional",
       "price": 100,
       "image": "/img/plate-placeholder.svg",
@@ -613,8 +531,8 @@
     {
       "id": "smiley-plate",
       "plateId": "traditional",
-      "name": "Smiley Plate",
-      "localName": "Smiley",
+      "name": "Smiley",
+      "localName": "",
       "language": "",
       "pronunciation": "",
       "category": "traditional",
@@ -1074,6 +992,248 @@
           ]
         }
       ]
+    }
+  ],
+  "sides": [
+    {
+      "id": "side-braised-cabbage",
+      "name": "Braised cabbage",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/side-braised-cabbage.jpg",
+      "description": "Cabbage braised slowly with onion until it is sweet and soft.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 0,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One bowl, enough for two beside a plate.",
+      "options": []
+    },
+    {
+      "id": "side-spinach",
+      "name": "Spinach",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/side-spinach.jpg",
+      "description": "Spinach wilted down with a little onion and seasoning.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 0,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One bowl, enough for two beside a plate.",
+      "options": []
+    },
+    {
+      "id": "side-morogo",
+      "name": "Morogo",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/side-morogo.jpg",
+      "description": "Wild African greens, cooked the traditional way.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 0,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One bowl, enough for two beside a plate.",
+      "options": []
+    },
+    {
+      "id": "side-salsa",
+      "name": "Salsa",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/side-salsa.jpg",
+      "description": "Fresh tomato and onion salsa, chopped and served cold.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 0,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One small bowl, served cold.",
+      "options": []
+    },
+    {
+      "id": "side-chakalaka",
+      "name": "Chakalaka",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/chakalaka.jpg",
+      "description": "Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 2,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One bowl, enough for two beside a plate.",
+      "options": []
+    },
+    {
+      "id": "side-atchaar",
+      "name": "Atchaar",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/atchaar.jpg",
+      "description": "Tangy mango atchaar, made in the kitchen and spooned over the plate.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 2,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One small bowl — a spoonful goes a long way.",
+      "options": []
+    },
+    {
+      "id": "side-green-salad",
+      "name": "Green salad",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/side-green-salad.jpg",
+      "description": "Crisp lettuce, cucumber and tomato with a light dressing.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 0,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One bowl, enough for two beside a plate.",
+      "options": []
+    },
+    {
+      "id": "side-corn-ribs",
+      "name": "Corn ribs",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/side-corn-ribs.jpg",
+      "description": "Sweetcorn ribs, cut and grilled until the kernels caramelise.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 0,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "Four ribs, grilled to order.",
+      "options": []
+    },
+    {
+      "id": "side-glazed-carrots",
+      "name": "Glazed carrots",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/side-glazed-carrots.jpg",
+      "description": "Carrots roasted and glazed until they shine.",
+      "story": "",
+      "tags": [
+        "side",
+        "vegetable"
+      ],
+      "spice": 0,
+      "prepMins": 5,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One bowl, enough for two beside a plate.",
+      "options": []
+    },
+    {
+      "id": "side-stywe-pap",
+      "name": "Stywe Pap",
+      "localName": "",
+      "language": "",
+      "pronunciation": "",
+      "category": "sides",
+      "price": 30,
+      "image": "/img/side-stywe-pap.jpg",
+      "description": "Stiff maize pap, the traditional partner to a braai or a pot of mogodu.",
+      "story": "",
+      "tags": [
+        "side",
+        "starch"
+      ],
+      "spice": 0,
+      "prepMins": 10,
+      "serves": 2,
+      "rating": 4.8,
+      "orders": 0,
+      "available": true,
+      "portion": "One bowl, enough for two beside a plate.",
+      "options": []
     }
   ],
   "plateMenus": [
@@ -1555,12 +1715,12 @@
     "isServiceDay": false,
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Monday",
-    "timeLabel": "22:52",
+    "dayLabel": "Tuesday",
+    "timeLabel": "18:16",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Monday: closed",
+    "todayLabel": "Tuesday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Monday is a rest day",
+    "headline": "Tuesday is a rest day",
     "message": "The pots are resting today — and honestly, so are we. We cook on Thursdays and Fridays, 12:00–13:30, and we are working towards being open every day. We are back Thursday 12:00–13:30.",
     "shortMessage": "We cook Thursdays and Fridays, 12:00–13:30. Your order goes in first on Thursday.",
     "serviceDays": [
@@ -1744,5 +1904,5 @@
   "notifications": {
     "push": false
   },
-  "today": 1
+  "today": 2
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
-import { ContactText, SectionLabel, Spinner } from '../components/ui';
+import { ContactText, LoadError, SectionLabel, Spinner } from '../components/ui';
 import { usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
 
@@ -26,6 +26,9 @@ export default function Policies() {
     if (hash) setActive(hash.replace(/^#/, ''));
   }, [hash]);
 
+  const error = useCatalog((s) => s.error);
+  const load = useCatalog((s) => s.load);
+  if (error && !catalog) return <LoadError what="our policies" message={error} onRetry={() => void load({ force: true })} />;
   if (!catalog) return <Spinner label="Loading policies…" />;
 
   return (

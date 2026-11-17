@@ -52,7 +52,7 @@ const step = (label, fn) =>
     }
   })();
 
-function boot(path, { seedCart } = {}) {
+function boot(path, { seedCart, offline } = {}) {
   const errors = [];
   const vc = new VirtualConsole();
   /*
@@ -85,6 +85,23 @@ function boot(path, { seedCart } = {}) {
   const w = dom.window;
   w.fetch = (input, init) => {
     const url = typeof input === 'string' && input.startsWith('/') ? `${BASE}${input}` : input;
+    /*
+     * `offline: 'fail'` simulates a connection that drops, and `offline: 'hang'`
+     * one that opens and then never answers. Both are real states of a phone,
+     * and both used to leave three pages spinning for ever — the owner's report
+     * on 17 Nov 2026. Only the catalogue request is affected, so the page's own
+     * static assets still load and the assertion is about the API alone.
+     */
+    if (offline && String(url).includes('/api/')) {
+      if (offline === 'fail') return Promise.reject(new TypeError('Failed to fetch'));
+      return new Promise((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const e = new w.Error('aborted');
+          e.name = 'AbortError';
+          reject(e);
+        });
+      });
+    }
     return fetch(url, init);
   };
   w.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
@@ -233,8 +250,8 @@ await s1.waitFor(() => /The full menu/i.test(s1.text()), 'menu page');
 const arch = boot('/menu');
 await arch.waitFor(() => /Kasi Fast Food/i.test(arch.text()), 'archive sections', 15000);
 
-await step('the menu sells exactly the two approved plate categories', async () => {
-  for (const c of ['Traditional Plates', 'Contemporary Plates']) {
+await step('the menu sells exactly the two approved plate categories, and the sides', async () => {
+  for (const c of ['Traditional Plates', 'Contemporary Plates', 'Sides & Relishes']) {
     if (!s1.text().includes(c)) throw new Error(`missing category: ${c}`);
   }
   /*
@@ -250,9 +267,14 @@ await step('the menu sells exactly the two approved plate categories', async () 
    * deleted, so the section and its copy are one uncomment away. The remaining
    * archive chips must still be there and the hidden one must NOT be.
    */
-  for (const name of [/Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
+  for (const name of [/Kasi Fast Food/, /Morning Heritage/]) {
     if (!name.test(navText)) throw new Error(`the archive category chip is missing from the menu nav: ${name}`);
   }
+  /*
+   * Sides & Relishes is a *sellable* chip now (17 Nov 2026), not an archive one —
+   * the sides carry prices and go in the basket, so it belongs with the plates.
+   */
+  if (!/Sides & Relishes/.test(navText)) throw new Error('the sides have no category chip');
   if (/Heritage Pots/i.test(arch.text())) throw new Error('Heritage Pots is still on the page after being hidden');
   /*
    * Modern Favourites was dropped by the owner: every dish in it — short ribs,
@@ -263,16 +285,371 @@ await step('the menu sells exactly the two approved plate categories', async () 
   if (/Cold & Warm/.test(navText)) throw new Error('the unapproved drinks category must stay commented out');
 
   const sellableSections = s1.doc.querySelectorAll('main > section[data-sellable]');
-  if (sellableSections.length !== 2) {
-    throw new Error(`expected 2 sellable sections, found ${sellableSections.length}`);
+  if (sellableSections.length !== 3) {
+    throw new Error(`expected 3 sellable sections (two plate kitchens and the sides), found ${sellableSections.length}`);
   }
   const archiveSections = [...arch.doc.querySelectorAll('main > section')].filter((section) =>
     section.querySelector('[data-coming-soon]'),
   );
-  if (archiveSections.length !== 3) {
-    throw new Error(`expected 3 archive sections, found ${archiveSections.length}`);
+  if (archiveSections.length !== 2) {
+    throw new Error(`expected 2 archive sections, found ${archiveSections.length}`);
   }
-  return '2 sellable sections plus 3 archive chips, Heritage Pots hidden';
+  return '3 sellable sections plus 2 archive chips, Heritage Pots hidden';
+});
+
+await step('the sides are priced, open their details, and go in the basket', async () => {
+  /*
+   * Owner, 17 Nov 2026: "some sides & relishes must have prices and details when
+   * clicked", and on whether one can be bought: "they can add to cart but be
+   * unable to checkout if items are less than 100".
+   *
+   * So this checks both halves of that arrangement: a side is a real product with
+   * a price and its own photograph, tapping it opens details — and the R100
+   * minimum, not a special rule, is what stops a lone bowl being checked out.
+   */
+  const sidesSection = s1.doc.getElementById('menu-category-sides');
+  if (!sidesSection) throw new Error('the menu has no Sides & Relishes section');
+  const cards = [...sidesSection.querySelectorAll('article')];
+  if (cards.length < 9) throw new Error(`expected the nine vegetable sides, found ${cards.length} cards`);
+
+  const section = sidesSection.textContent ?? '';
+  if (!/portion/i.test(section)) throw new Error('the sides do not say they are sold by the portion');
+  /* Every card carries a price and a picture of itself. */
+  for (const card of cards) {
+    const text = card.textContent ?? '';
+    if (!/R\d/.test(text)) throw new Error(`a side card has no price: "${text.slice(0, 80)}"`);
+    const img = card.querySelector('img');
+    if (!img?.getAttribute('src')) throw new Error('a side card has no photograph');
+  }
+  /* The photographs are the side's own, not a borrowed plate. */
+  const borrowed = cards
+    .map((c) => c.querySelector('img')?.getAttribute('src') ?? '')
+    .filter((src) => /plate-|pizza|hero-feast/.test(src));
+  if (borrowed.length) throw new Error(`the sides are using plate photographs: ${borrowed.join(', ')}`);
+
+  /* Tapping one opens its details: what it is, how much, and what a portion is. */
+  const chakalaka = cards.find((c) => /Chakalaka/i.test(c.textContent ?? ''));
+  if (!chakalaka) throw new Error('no chakalaka card to tap');
+  s1.click([...chakalaka.querySelectorAll('button')].find((b) => /Details/i.test(b.getAttribute('aria-label') ?? '')));
+  await s1.waitFor(() => /Add to basket/i.test(s1.text()), 'the side details sheet', 6000);
+  const sheet = s1.doc.querySelector('[role="dialog"]')?.textContent ?? '';
+  if (!/Spicy carrot, bean and pepper relish/i.test(sheet)) throw new Error('the side details do not describe the dish');
+  if (!/R\d/.test(sheet)) throw new Error('the side details do not show a price');
+
+  /* Add it, and it lands in the basket at its own price. */
+  const addBtn = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to basket/i.test(b.textContent ?? ''));
+  s1.click(addBtn);
+  await sleep(400);
+  if (!/Chakalaka/i.test(s1.text())) throw new Error('the side never reached the basket');
+  return `${cards.length} priced sides with their own photos, details and a basket path`;
+});
+
+await step('a lone bowl of chakalaka is blocked at checkout by the R100 minimum', async () => {
+  /*
+   * The owner's rule, end to end: "they can add to cart but be unable to checkout
+   * if items are less than 100". One R30 bowl is a basket, and it is not an
+   * order — the same minimum every small order already meets.
+   */
+  /*
+   * A basket with one R30 bowl in it — the shape the basket store writes, so the
+   * page restores it rather than starting empty and testing nothing.
+   */
+  const bowl = boot('/checkout', {
+    seedCart: {
+      state: {
+        fulfilment: 'delivery',
+        lines: [{
+          key: 'side-chakalaka::',
+          itemId: 'side-chakalaka',
+          name: 'Chakalaka',
+          image: '/img/chakalaka.jpg',
+          unitPrice: 30,
+          qty: 1,
+          picks: [],
+          kind: 'menu',
+        }],
+      },
+      version: 2,
+    },
+  });
+  await bowl.waitFor(() => /Almost there/i.test(bowl.text()), 'checkout', 20000);
+  bowl.setInput([...bowl.doc.querySelectorAll('input')].find((f) => /Thabo Mahlangu/.test(f.placeholder ?? '')), 'Side Only');
+  bowl.setInput([...bowl.doc.querySelectorAll('input')].find((f) => /\+27 82/.test(f.placeholder ?? '')), '+27 82 000 9090');
+  await sleep(600);
+
+  const page = bowl.text();
+  /* The wording the basket uses for the same rule. */
+  if (!/Delivery orders start at|minimum order is|reach the R100|R100 minimum/i.test(page)) {
+    throw new Error(`a R30 basket is not told about the minimum order: ${page.slice(0, 400)}`);
+  }
+  const wa = [...bowl.doc.querySelectorAll('a[href^="https://wa.me/"]')].find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+  if (wa) throw new Error('a R30 bowl can reach checkout without meeting the minimum');
+
+  /*
+   * And neither order button can be pressed — not the WhatsApp one, and not the
+   * paid one. Owner, 17 Nov 2026: "disable the complete order if the items are
+   * less than 100". The paid button used to be live here and only the server
+   * refused it, after the customer had filled the whole form in.
+   */
+  const paid = [...bowl.doc.querySelectorAll('button[type="submit"]')][0];
+  if (!paid) throw new Error('no primary order button on the checkout');
+  if (!paid.disabled) throw new Error('the paid order button is still live below the minimum');
+  if (!/Add R\d/.test(paid.textContent ?? '')) throw new Error(`the disabled order button does not say how much more is needed: ${paid.textContent}`);
+
+  bowl.close();
+  return 'the R100 minimum is what stops a lone bowl, not a rule against sides';
+});
+
+await step('"Order online" takes an empty basket to the menu, not to an empty checkout', async () => {
+  /*
+   * Owner, 18 Nov 2026: "when i click order online it takes me to checkout and on
+   * checkout its empty".
+   *
+   * The button promised an order and delivered a page saying there was none. With
+   * nothing in the basket the only useful destination is the menu; with something
+   * in it, the checkout is right — so the first tap must not cost the customer a
+   * dead end, and the second must still go where it always went.
+   */
+  const fresh = boot('/');
+  await fresh.waitFor(() => /A taste of South African heritage/i.test(fresh.text()), 'the home page', 20000);
+  const orderBtn = () => [...fresh.doc.querySelectorAll('button')].find((b) => /^Order online$/i.test((b.textContent ?? '').trim()));
+  if (!orderBtn()) throw new Error('the home page has no Order online button');
+  fresh.click(orderBtn());
+  await fresh.waitFor(() => fresh.w.location.pathname === '/menu', 'an empty basket to be sent to the menu', 8000);
+  await fresh.waitFor(() => /The full menu/i.test(fresh.text()), 'the menu to render', 15000);
+
+  /* The hero list's own row follows the same rule, and says so. */
+  const row = [...fresh.doc.querySelectorAll('a')].find((a) => /Start an order|Order online/.test(a.textContent ?? ''));
+  if (!row) throw new Error('the order-channel row is missing');
+  if (!/Start an order/.test(row.textContent ?? '')) {
+    throw new Error(`with an empty basket the row still promises an online order: ${row.textContent}`);
+  }
+  if (row.getAttribute('href') !== '/menu') throw new Error(`the row points at ${row.getAttribute('href')}, not the menu`);
+
+  const foot = [...fresh.doc.querySelectorAll('a')].find((a) => /Start an order|Checkout & pay/.test(a.textContent ?? ''));
+  if (!foot || foot.getAttribute('href') !== '/menu') throw new Error('the footer still offers a checkout with nothing in the basket');
+  fresh.close();
+  return 'one tap to the menu, three entry points agreeing';
+});
+
+await step('with a basket, "Order online" opens the basket instead of a page', async () => {
+  /*
+   * The other half of the same rule. A returning customer who taps the loudest
+   * button with a plate already chosen should see what they are ordering — not a
+   * reload of the home page, and not a trip through the menu.
+   */
+  const shopper = boot('/', {
+    seedCart: {
+      state: {
+        fulfilment: 'delivery',
+        lines: [{
+          key: 'plate::traditional::starch=pap|veg=chakalaka',
+          itemId: 'plate-traditional',
+          plateId: 'traditional',
+          name: 'Traditional Plate',
+          image: '/img/plate-mogodu.jpg',
+          unitPrice: 100,
+          qty: 1,
+          picks: [],
+          kind: 'plate',
+        }],
+      },
+      version: 2,
+    },
+  });
+  await shopper.waitFor(() => /A taste of South African heritage/i.test(shopper.text()), 'the home page', 20000);
+  const btn = [...shopper.doc.querySelectorAll('button')].find((b) => /^Order online$/i.test((b.textContent ?? '').trim()));
+  shopper.click(btn);
+  await shopper.waitFor(() => shopper.doc.querySelector('[role="dialog"][aria-label="Your basket"]'), 'the basket drawer', 8000);
+  if (!/Traditional Plate/.test(shopper.doc.querySelector('[role="dialog"]')?.textContent ?? '')) {
+    throw new Error('the drawer opened without the plate in it');
+  }
+  if (shopper.w.location.pathname !== '/') throw new Error('the basket opened by navigating away from the page');
+
+  /* And the row now offers the checkout, because there is something to check out. */
+  const row = [...shopper.doc.querySelectorAll('a')].find((a) => /^Order online/.test((a.textContent ?? '').trim()));
+  if (!row || row.getAttribute('href') !== '/checkout') throw new Error('the channel row will not offer the checkout with a basket full');
+  shopper.close();
+  return 'drawer with the plate, checkout offered, page unchanged';
+});
+
+await step('a menu that cannot load says so instead of spinning for ever', async () => {
+  /*
+   * Owner, 17 Nov 2026: "why loader loads forever".
+   *
+   * All three catalogue pages branched on `!catalog` with no branch for a failed
+   * request, so a dropped connection left a spinner turning for as long as the
+   * customer was willing to look at it. A spinner is a promise that something is
+   * coming; once the request has failed there is nothing coming.
+   *
+   * The bar to clear is three things: no spinner, a sentence that says what
+   * happened, and a way out that is not "reload the site".
+   */
+  const pages = [
+    ['/menu', /We could not load the menu/i],
+    ['/specials', /We could not load this week/i],
+    ['/policies', /We could not load our policies/i],
+  ];
+  for (const [path, headline] of pages) {
+    const dead = boot(path, { offline: 'fail' });
+    await dead.waitFor(() => headline.test(dead.text()), `an error on ${path} rather than a spinner`, 20000);
+    if (dead.doc.querySelector('.animate-spin')) throw new Error(`${path} still shows a spinner after the request failed`);
+    const retry = [...dead.doc.querySelectorAll('button')].find((b) => /Try again/i.test(b.textContent ?? ''));
+    if (!retry) throw new Error(`${path} offers no way to try again`);
+    const wa = [...dead.doc.querySelectorAll('a[href^="https://wa.me/"]')][0];
+    if (path === '/menu' && !wa) throw new Error('the failed menu has no WhatsApp door for a customer who still needs to order');
+    dead.close();
+  }
+  return 'menu, specials and policies all fail out loud, with a retry';
+});
+
+await step('trying again after a dropped connection actually reloads the catalogue', async () => {
+  /*
+   * A "Try again" that re-renders the same error is worse than none at all: it
+   * tells the customer their tap worked when nothing was asked. The first load is
+   * made to fail, the retry is a real second request, and the page has to end up
+   * rendering the real thing.
+   */
+  const revived = boot('/specials', { offline: 'fail' });
+  await revived.waitFor(() => /We could not load this week/i.test(revived.text()), 'the error state', 20000);
+
+  /* The wire comes back. */
+  revived.w.fetch = (input, init) => {
+    const url = typeof input === 'string' && input.startsWith('/') ? `${BASE}${input}` : input;
+    return fetch(url, init);
+  };
+  const retry = [...revived.doc.querySelectorAll('button')].find((b) => /Try again/i.test(b.textContent ?? ''));
+  revived.click(retry);
+  await revived.waitFor(() => /Cooked Thursdays/i.test(revived.text()), 'the page to load after the retry', 15000);
+  if (revived.doc.querySelector('.animate-spin')) throw new Error('the spinner came back instead of the page');
+  revived.close();
+  return 'one tap re-asks and the page loads';
+});
+
+await step('the checkout door is shut while the basket is under R100, and open once it is not', async () => {
+  /*
+   * Owner, 17 Nov 2026: "disable the complete order if the items are less than
+   * 100". Until now the bottom bar offered a live Checkout pill to a R30 basket:
+   * it led to a page that then refused the order, which is a button that lies.
+   *
+   * Two baskets, the same page, only the amount different — the bar and the
+   * drawer are two doors to one checkout, so both are checked.
+   */
+  const line = (unitPrice, n) => ({
+    key: `t::${unitPrice}`,
+    itemId: 'side-chakalaka',
+    name: n,
+    image: '/img/chakalaka.jpg',
+    unitPrice,
+    qty: 1,
+    picks: [],
+    kind: 'menu',
+  });
+
+  const short = boot('/menu', { seedCart: { state: { fulfilment: 'delivery', lines: [line(30, 'Chakalaka')] }, version: 2 } });
+  await short.waitFor(() => /1 item · delivery/.test(short.text()), 'the basket bar with a short basket', 20000);
+
+  const door = () => [...short.doc.querySelectorAll('button, a')].find((el) => /^Checkout$/i.test((el.textContent ?? '').trim()));
+  const shut = door();
+  if (!shut) throw new Error('the basket bar has no checkout door');
+  if (shut.tagName === 'A' && (shut.getAttribute('href') ?? '').includes('/checkout')) {
+    throw new Error('a R30 basket is still offered a live checkout link');
+  }
+  if (shut.tagName === 'BUTTON' && !shut.disabled) throw new Error('the checkout door is a button but not disabled');
+  /* The amount still needed, said out loud beside it. */
+  if (!/Add R\d/.test(short.text()) || !/R100 minimum/.test(short.text())) {
+    throw new Error(`the bar does not say how far short the basket is: ${short.text().slice(0, 200)}`);
+  }
+
+  /* The drawer is the same door, so it is shut the same way. */
+  short.click([...short.doc.querySelectorAll('button')].find((b) => /basket/i.test(b.getAttribute('aria-label') ?? '')));
+  await short.waitFor(() => short.doc.querySelector('[role="dialog"][aria-label="Your basket"]'), 'the basket drawer', 6000);
+  const drawerShut = [...short.doc.querySelectorAll('[role="dialog"] button')].find((b) => /^Checkout$/i.test((b.textContent ?? '').trim()));
+  if (!drawerShut) throw new Error('the drawer lost its checkout button');
+  if (!drawerShut.disabled) throw new Error('the drawer lets a R30 basket through while the bar does not');
+  short.close();
+
+  /* The same basket at R100 is a different story. */
+  const enough = boot('/menu', { seedCart: { state: { fulfilment: 'delivery', lines: [line(100, 'Traditional Plate')] }, version: 2 } });
+  await enough.waitFor(() => /1 item · delivery/.test(enough.text()), 'the basket bar with a full basket', 20000);
+  const open = [...enough.doc.querySelectorAll('button, a')].find((el) => /^Checkout$/i.test((el.textContent ?? '').trim()));
+  if (open?.tagName !== 'A' || !(open.getAttribute('href') ?? '').includes('/checkout')) {
+    throw new Error('a R100 basket cannot reach the checkout');
+  }
+  enough.close();
+  return 'shut at R30 in both doors, open at R100';
+});
+
+await step('nothing selected cannot be added: the order and add buttons say what is missing', async () => {
+  /*
+   * Owner, 17 Nov 2026: "disable that if there is no food selected". A dish with
+   * a required choice used to accept the tap and then scold the customer with a
+   * toast — a button that is present, lit and then refuses reads as broken. The
+   * Add button is now disabled and says which choice is missing.
+   */
+  /* A plate: the builder's Add button, with no protein picked. */
+  const builder = [...s1.doc.querySelectorAll('section button')].find((el) => /Build your plate/i.test(el.textContent ?? ''));
+  if (!builder) throw new Error('no plate builder on the menu');
+  s1.click(builder);
+  await s1.waitFor(() => s1.dialogs().length > 0, 'the plate builder', 8000);
+  const addPlate = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((el) => /Pick a|Add plate/i.test(el.textContent ?? ''));
+  if (!addPlate) throw new Error('the plate builder has no add button');
+  if (!addPlate.disabled) throw new Error('a plate with no protein picked can still be added');
+  if (!/Pick a protein/i.test(addPlate.textContent ?? '')) throw new Error(`the add button does not say what is missing: ${addPlate.textContent}`);
+  const closeBuilder = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((el) => /close/i.test(el.getAttribute('aria-label') ?? ''));
+  s1.click(closeBuilder);
+  await s1.waitFor(() => s1.dialogs().length === 0, 'the builder to close', 8000);
+
+  /* A dish sheet with a required choice: same rule, same words. */
+  const cardBtn = [...s1.doc.querySelectorAll('article button')]
+    .find((el) => /Details for Mala-Mogodu/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!cardBtn) throw new Error('no Mala-Mogodu card');
+  s1.click(cardBtn);
+  await s1.waitFor(() => s1.dialogs().length > 0, 'the dish sheet', 8000);
+  const addDish = [...s1.doc.querySelectorAll('[role="dialog"] footer button')].find((el) => /Add to basket|Pick a/i.test(el.textContent ?? ''));
+  if (!addDish) throw new Error('the dish sheet has no add button');
+  if (!addDish.disabled) throw new Error('a dish with nothing chosen can still be added');
+  if (!/Pick a/i.test(addDish.textContent ?? '')) throw new Error(`the sheet's add button does not name the missing choice: ${addDish.textContent}`);
+  const closeSheet = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((el) => /close/i.test(el.getAttribute('aria-label') ?? ''));
+  s1.click(closeSheet);
+  await s1.waitFor(() => s1.dialogs().length === 0, 'the sheet to close', 8000);
+  return 'both add buttons disabled, both naming the missing choice';
+});
+
+await step('the menu can be read as a grid or a list, from a control beside the sort', async () => {
+  /*
+   * Owner, 17 Nov 2026: "the meals listview must have a listview and gridview …
+   * the sort must be far to the right whilst inline with food categories and next
+   * to sort to have the view which is listview/gridview".
+   *
+   * Two assertions, because both were asked for: the control exists beside the
+   * sort, and it actually changes the shape of the list.
+   */
+  const sortSelect = [...s1.doc.querySelectorAll('select')].find((el) => /Sort meals/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!sortSelect) throw new Error('no sort control on the menu');
+  const toggle = s1.doc.querySelector('[role="group"][aria-label="View meals as"]');
+  if (!toggle) throw new Error('no list/grid control on the menu');
+  /* Beside the sort, not on a row of its own. */
+  const controls = toggle.parentElement;
+  if (!controls?.contains(sortSelect)) throw new Error('the view control is not beside the sort');
+  const buttons = [...toggle.querySelectorAll('button')];
+  if (buttons.length !== 2) throw new Error('the view control is not a two-state switch');
+
+  const panel = s1.doc.getElementById('menu-panel-sides');
+  const before = panel?.querySelector('[data-view]')?.getAttribute('data-view');
+  if (before !== 'grid') throw new Error(`the menu does not start in grid: ${before}`);
+
+  s1.click(buttons.find((b) => /list/i.test(b.getAttribute('aria-label') ?? '')));
+  await sleep(200);
+  const after = s1.doc.getElementById('menu-panel-sides')?.querySelector('[data-view]')?.getAttribute('data-view');
+  if (after !== 'list') throw new Error(`the list control did not switch the layout: ${after}`);
+  if (buttons.find((b) => /list/i.test(b.getAttribute('aria-label') ?? ''))?.getAttribute('aria-pressed') !== 'true') {
+    throw new Error('the list control does not report itself as pressed');
+  }
+  /* And back, so the later steps see the page as a customer first meets it. */
+  s1.click(buttons.find((b) => /grid/i.test(b.getAttribute('aria-label') ?? '')));
+  await sleep(150);
+  return 'grid + list, switched from a control beside the sort';
 });
 
 await step('a category heading carries its plate count inline and folds its section', async () => {
@@ -363,7 +740,7 @@ await step('⌘K opens search and typing returns meal suggestions', async () => 
 
   s1.setInput(dialogInput(), 'mogodu');
   // Debounced 180ms, then a server round trip.
-  await s1.waitFor(() => /Mogodu Plate/i.test(dialogText()), 'results for "mogodu" inside the dialog', 10000);
+  await s1.waitFor(() => /Mala-Mogodu/i.test(dialogText()), 'results for "mogodu" inside the dialog', 10000);
   if (!/R\s?100/i.test(dialogText())) throw new Error('result does not show the plate price');
   if (!inDialog('button', /\+\s?Add/i).length) throw new Error('result has no "+ Add" control');
 
@@ -382,11 +759,13 @@ await step('picking a search result opens that dish on the menu', async () => {
   const result = await (async () => {
     const start = Date.now();
     while (Date.now() - start < 10000) {
-      const hit = inDialog('button', /Smiley Plate/i)[0];
+      /* The dish is called "Smiley" now — no "Plate" suffix. The row's text is
+         "SmileyR100,00+ Add", so only the leading word can be matched. */
+      const hit = inDialog('button', /^\s*Smiley/i)[0];
       if (hit) return hit;
       await sleep(100);
     }
-    throw new Error(`no "Smiley Plate" result inside the dialog. dialog text: ${dialogText().slice(0, 120)}`);
+    throw new Error(`no "Smiley" result inside the dialog. dialog text: ${dialogText().slice(0, 120)}`);
   })();
 
   s1.click(result);
@@ -457,7 +836,12 @@ await step('About Us contains vision, mission and story without separate nav lin
 await step('the kitchen archive reads like the menu but cannot be ordered', async () => {
   const blocks = [...arch.doc.querySelectorAll('[data-coming-soon]')];
   if (!blocks.length) throw new Error('the archive sections are missing');
-  if (blocks.length !== 3) throw new Error(`expected 3 archive sections (Heritage Pots is hidden), found ${blocks.length}`);
+  /*
+   * Two, not three: Sides & Relishes left the archive on 17 Nov 2026 when the
+   * sides became orderable products. What is left is genuinely not on sale —
+   * Kasi fast food and the morning kitchen.
+   */
+  if (blocks.length !== 2) throw new Error(`expected 2 archive sections (Heritage Pots is hidden, sides are sellable), found ${blocks.length}`);
   const block = blocks[0];
   const archiveSections = blocks.map((grid) => grid.closest('section'));
 
@@ -469,14 +853,9 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
     card grid may be a control, a link or a dish sheet.
   */
   for (const grid of blocks) {
-    /*
-     * Sides & Relishes is the exception to "every archive card shows a price":
-     * a vegetable side has no price of its own, because it is included inside
-     * the plate. Its cards say so instead ("Chosen inside a plate · included").
-     */
-    const isSides = /Sides & Relishes/i.test(grid.closest('section')?.textContent ?? '');
-    if (!isSides && !/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
-    if (isSides && /R\s?0[,.\s]?00/.test(grid.textContent ?? '')) throw new Error('a side is showing a R0,00 price');
+    /* Every card left in the archive is a dish the kitchen would sell, so every
+       one shows a guide price. */
+    if (!/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
     if (!/Coming soon/i.test(grid.textContent ?? '')) throw new Error('archive cards are missing their "Coming soon" tag');
     const interactive = grid.querySelectorAll('a, button, input, select, textarea, [role="link"], [role="button"], [onclick]');
     if (interactive.length) throw new Error(`the archive must not be orderable, but a card grid holds ${interactive.length} control(s)`);
@@ -484,9 +863,11 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
   if (arch.doc.querySelectorAll('[data-coming-soon] a').length) throw new Error('an archive card contains a link');
 
   const body = archiveSections.map((section) => section?.textContent ?? '').join(' ');
-  for (const name of [/Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
+  for (const name of [/Kasi Fast Food/, /Morning Heritage/]) {
     if (!name.test(body)) throw new Error(`archive category missing: ${name}`);
   }
+  /* The sides are sellable now, so they must NOT be in the archive. */
+  if (/Sides & Relishes/i.test(body)) throw new Error('Sides & Relishes is still rendered as a coming-soon section');
   /* Hidden by the owner (14 Nov 2026), commented out in the seed, not deleted. */
   if (/Heritage Pots/i.test(body)) throw new Error('Heritage Pots is still rendered after being hidden');
   if (/Cold & Warm|Mageu|Rooibos/i.test(body)) throw new Error('unapproved drinks must stay commented out');
@@ -508,7 +889,7 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
     if (/coming soon/i.test(heading)) throw new Error('the category heading still carries a coming-soon badge');
   }
   const archiveChips = [...arch.doc.querySelectorAll('nav[aria-label="Meal categories"] button')]
-    .filter((chip) => /Heritage Pots|Kasi Fast Food|Morning Heritage|Sides & Relishes/.test(chip.textContent ?? ''));
+    .filter((chip) => /Heritage Pots|Kasi Fast Food|Morning Heritage/.test(chip.textContent ?? ''));
   for (const chip of archiveChips) {
     if (/soon/i.test(chip.textContent ?? '')) throw new Error(`an archive chip still says "soon": ${chip.textContent}`);
   }
@@ -516,19 +897,19 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
   const placeholders = [...block.querySelectorAll('img')].filter((img) => img.getAttribute('src')?.includes('placeholder'));
   if (placeholders.length) throw new Error('archive cards are showing placeholder images instead of photos');
 
-  return '3 categories, priced cards, 0 order controls';
+  return '2 categories, priced cards, 0 order controls';
 });
 
-await step('every vegetable side a plate offers is also on Sides & Relishes', async () => {
+await step('every vegetable side a plate offers is also sold on Sides & Relishes', async () => {
   /*
    * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
-   * Sides & Relishes".
+   * Sides & Relishes". Since 17 Nov 2026 they are not archive cards but products,
+   * so they live in the sellable section — and the rule is the same one it was:
+   * the two lists must agree.
    *
-   * The options are read out of the plate builder's own DOM — open the builder,
-   * collect the "Choose your vegetable side" checkboxes — and then matched
-   * against the cards in the Sides & Relishes section. Comparing the two rendered
-   * lists is the point: a hard-coded list here would pass even if the builder
-   * gained a side the section never showed.
+   * The options are read out of the plate builder's own DOM and matched against
+   * the rendered cards, because a hard-coded list here would pass even if the
+   * builder gained a side the section never showed.
    */
   const builderButton = [...arch.doc.querySelectorAll('section button')]
     .find((el) => /Build your plate/i.test(el.textContent ?? ''));
@@ -536,11 +917,6 @@ await step('every vegetable side a plate offers is also on Sides & Relishes', as
   arch.click(builderButton);
   await arch.waitFor(() => arch.dialogs().length > 0, 'plate builder to open', 8000);
 
-  /*
-   * The choices are buttons with role="checkbox", not real inputs — the group is
-   * a fieldset whose legend asks the question. Each row reads "Braised cabbage
-   * Included", so the price note is stripped before comparing.
-   */
   const group = [...arch.doc.querySelectorAll('[role="dialog"] fieldset')]
     .find((el) => /Choose your vegetable side/i.test(el.querySelector('legend')?.textContent ?? ''));
   if (!group) throw new Error('the plate builder has no vegetable-side group');
@@ -549,23 +925,20 @@ await step('every vegetable side a plate offers is also on Sides & Relishes', as
     .filter(Boolean);
   if (options.length < 5) throw new Error(`expected the vegetable sides, saw ${options.length}: ${options.slice(0, 6)}`);
 
-  /* Close it the way a customer does — the sheet's own close control — so the
-     menu is back to its sections for the comparison below. */
   const closeBuilder = [...arch.doc.querySelectorAll('[role="dialog"] button')]
     .find((el) => /close/i.test(el.getAttribute('aria-label') ?? ''));
   if (!closeBuilder) throw new Error('the plate builder has no close control');
   arch.click(closeBuilder);
   await arch.waitFor(() => arch.dialogs().length === 0, 'plate builder to close', 8000);
 
-  const sidesSection = [...arch.doc.querySelectorAll('section')]
-    .find((section) => /Sides & Relishes/i.test(section.querySelector('h2')?.textContent ?? ''));
+  const sidesSection = arch.doc.getElementById('menu-category-sides');
   if (!sidesSection) throw new Error('the Sides & Relishes section is missing');
-  const cards = [...sidesSection.querySelectorAll('[data-coming-soon] article h3')]
+  const cards = [...sidesSection.querySelectorAll('article h3')]
     .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase());
 
   const missing = options.filter((option) => !cards.some((card) => card === option.toLowerCase()));
-  if (missing.length) throw new Error(`sides in the plate builder but not on Sides & Relishes: ${missing.join(', ')}`);
-  return `${options.length} sides in the builder, all ${cards.length} cards on Sides & Relishes match`;
+  if (missing.length) throw new Error(`sides in the plate builder but not sold on Sides & Relishes: ${missing.join(', ')}`);
+  return `${options.length} sides in the builder, all ${cards.length} cards match`;
 });
 
 await step('no plate card carries a bare prep-time figure', async () => {
@@ -661,7 +1034,13 @@ await step('clicking a dish opens its detail sheet with the heritage story', asy
   if (!card) throw new Error('no dish card found');
   s1.click(card);
   await s1.waitFor(() => /Every bite tells a story/i.test(s1.text()), 'dish story panel');
-  if (!/mogodu/i.test(s1.text()) || !/mo-GOH-doo/.test(s1.text())) throw new Error('pronunciation not shown');
+  /*
+   * Owner, 17 Nov 2026: "remove Setswana / Sepedi in all meals". The sheet used to
+   * print "/mo-GOH-doo/ · Setswana" under the name — the line the owner struck
+   * along with the local-name teaser on the card.
+   */
+  if (!/Mala-Mogodu/i.test(s1.text())) throw new Error('the dish name is not on its sheet');
+  if (/Setswana|Sepedi/ .test(s1.text())) throw new Error('the removed language label is back on the dish sheet');
   return 'story + pronunciation visible';
 });
 
@@ -686,8 +1065,14 @@ await step('choosing required options then adding puts the line in the basket', 
   }
   if (chosen < 2) throw new Error(`expected starch and side groups, found ${chosen}`);
   await sleep(150);
-  await s1.waitFor(() => s1.byText('button', /Add to basket/)[0], 'the add button to mount', 15000);
-  s1.click(s1.byText('button', /Add to basket/)[0]);
+  /*
+   * Scoped to the sheet: since the sides became products, "Add to basket" is
+   * also the label on every side card behind the dialog, and an unscoped match
+   * clicks the menu instead of the sheet.
+   */
+  const sheetAdd = () => [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to basket/i.test(b.textContent ?? ''));
+  await s1.waitFor(sheetAdd, 'the add button to mount', 15000);
+  s1.click(sheetAdd());
   /*
    * Adding deliberately no longer slides the drawer over the menu — a customer
    * ordering several plates was interrupted between each one. The pinned basket
@@ -700,7 +1085,7 @@ await step('choosing required options then adding puts the line in the basket', 
   if (!openBasket) throw new Error('no basket control');
   s1.click(openBasket);
   await s1.waitFor(() => /Your basket/i.test(s1.text()), 'basket drawer');
-  if (!/Mogodu Plate/.test(s1.text())) throw new Error('added item not in basket');
+  if (!/Mala-Mogodu/.test(s1.text())) throw new Error('added item not in basket');
   if (!/Pap/.test(s1.text()) || !/Braised cabbage/.test(s1.text())) {
     throw new Error('chosen starch and side are not carried into the basket line');
   }
@@ -827,8 +1212,19 @@ s7.w.fetch = async (input, init) => {
   if (url.startsWith('https://photon.komoot.io/')) {
     s7.photonCalls.push(url);
     const q = (new URL(url).searchParams.get('q') ?? '').trim().toLowerCase();
+    /*
+     * A bare coordinate pair is the reverse lookup behind "Use my current
+     * location". Photon answers it with whatever is at that point — here the
+     * Illovo house from the fixture, which is what the customer's own fix will
+     * put in the address box.
+     */
+    const reverse = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(q);
     /* A house number followed by a partial street name: nothing, as in real life. */
-    const body = /^173\s+oxf/.test(q) ? { type: 'FeatureCollection', features: [] } : /^oxf/.test(q) ? PHOTON_STREET_FIXTURE : PHOTON_FIXTURE;
+    const body = reverse
+      ? { type: 'FeatureCollection', features: [PHOTON_FIXTURE.features[0]] }
+      : /^173\s+oxf/.test(q)
+        ? { type: 'FeatureCollection', features: [] }
+        : /^oxf/.test(q) ? PHOTON_STREET_FIXTURE : PHOTON_FIXTURE;
     return {
       ok: true,
       status: 200,
@@ -840,70 +1236,99 @@ s7.w.fetch = async (input, init) => {
 
 await s7.waitFor(() => /Almost there/i.test(s7.text()), 'checkout page');
 
-await step('the checkout states where the record lives, and never promises an email receipt', async () => {
+await step('the checkout promises no receipt email, and no longer explains its bookkeeping', async () => {
   /*
-   * Email receipts need SMTP configured on the host before a single message can
-   * go out, and the order now finishes in a WhatsApp chat that is its own
-   * record — so the page stopped describing email machinery entirely. What it
-   * must still do is say plainly where the customer's record is, and never
-   * claim an email it cannot send.
+   * Owner, 17 Nov 2026, removing three paragraphs at once: the minimum-order
+   * line, the "No email receipts — your WhatsApp chat is the record" line, and
+   * the two minute estimates on Specials.
+   *
+   * The rule underneath is unchanged and still asserted: the page must never
+   * claim an email it cannot send. What went is the explanation — a customer
+   * mid-checkout does not need to be told about the host's SMTP configuration,
+   * and the minimum order is enforced at the button with its own sentence.
    */
   const text = s7.text();
-  if (/We email your receipt/i.test(s7.text())) {
+  if (/We email your receipt/i.test(text)) {
     throw new Error('the checkout promises a receipt email this server cannot send');
   }
-  if (!/your WhatsApp chat is the record/i.test(text)) {
-    throw new Error('the checkout does not tell the customer where their record actually is');
+  for (const gone of [
+    /No email receipts/i,
+    /your WhatsApp chat is the record/i,
+    /Minimum order R/i,
+  ]) {
+    if (gone.test(text)) throw new Error(`the removed checkout paragraph is back: ${gone}`);
   }
-  return 'no receipt email promised, and the WhatsApp record is stated';
+  return 'no receipt email promised, and the three removed paragraphs stay removed';
 });
 
-await step('the delivery address is three boxes: house number, street and suburb', async () => {
+await step('the delivery address is one box again, typed the way an address is said', async () => {
   /*
-   * Owner, 16 Nov 2026: "delivery address (house number, street and suburb) on
-   * checkout page". One free-text box accepted "Oxford Road" with no number and
-   * asked for the suburb twice — once in a select and once inside the sentence.
-   * The three parts are now three fields, and the suburb is a fact rather than a
-   * second copy of the delivery area.
+   * Owner, 17 Nov 2026: "i think the enter address was fine because it pulls what
+   * you typed and street number, bring back the entering of location as it was."
+   *
+   * The three boxes of 16 Nov (house number / street / suburb) are gone. What is
+   * asserted here is the shape the owner asked for: one input labelled "Delivery
+   * address", and no separate house-number or suburb input. The house number is
+   * not a field any more — it is part of what the customer types, and the map puts
+   * it back onto a street-only match (checked two steps below).
    */
   const inputs = [...s7.doc.querySelectorAll('input')];
-  const house = inputs.find((el) => el.placeholder === '12');
-  const street = inputs.find((el) => /Oxford Road/.test(el.placeholder ?? ''));
-  const suburb = inputs.find((el) => el.placeholder === 'Illovo');
-  if (!house) throw new Error('no house number box on the checkout');
-  if (!street) throw new Error('no street box on the checkout');
-  if (!suburb) throw new Error('no suburb box on the checkout');
-  /* The labels the customer reads, in the order a driver needs them. */
-  for (const label of ['House no.', 'Street', 'Suburb']) {
-    if (!new RegExp(label.replace('.', '\\.')).test(s7.text())) throw new Error(`the "${label}" label is missing`);
+  const addressBoxes = inputs.filter((el) => /Oxford Road/.test(el.placeholder ?? ''));
+  if (addressBoxes.length !== 1) throw new Error(`expected one address box, found ${addressBoxes.length}`);
+  const address = addressBoxes[0];
+  const label = address.closest('label')?.textContent?.trim() ?? '';
+  if (!/^Delivery address/i.test(label)) {
+    throw new Error(`the address box is not labelled "Delivery address": "${label}"`);
   }
-  /*
-   * The same three boxes on a phone, not three stacked paragraphs.
-   *
-   * jsdom does not compute layout, so this reads the classes that decide it: the
-   * grid must be six columns at *every* width (no `sm:` prefix on the track
-   * count), with the house number and the street sharing a row. Before, the box
-   * was `grid` only, so on a phone each part took a full line and "House no."
-   * stretched as wide as the street.
-   */
-  const row = house.closest('.grid');
-  if (!row) throw new Error('the address fields are not in a grid');
-  if (!/(^|\s)grid-cols-6(\s|$)/.test(row.className)) {
-    throw new Error(`the address grid collapses to one column on a phone: "${row.className}"`);
+  if (!/^12 Oxford Road, Illovo, Sandton$/.test(address.placeholder)) {
+    throw new Error(`the placeholder does not show the shape of an address: "${address.placeholder}"`);
   }
-  const houseCol = house.closest('[class*="col-span"]');
-  const streetCol = street.closest('[class*="col-span"]');
-  if (!houseCol || !streetCol) throw new Error('the address boxes have no column spans');
-  if (/(^|\s)col-span-2(\s|$)/.test(houseCol.className) === false) throw new Error('the house number is not a narrow column');
-  if (/(^|\s)col-span-4(\s|$)/.test(streetCol.className) === false) throw new Error('the street does not take the rest of the row');
+  /* No leftovers from the three boxes. */
+  if (inputs.some((el) => el.placeholder === '12')) throw new Error('the house-number box is back');
+  if (inputs.some((el) => el.placeholder === 'Illovo')) throw new Error('the suburb box is back');
+  if (/^House no\.|^Suburb$/m.test(s7.text())) throw new Error('the three-box labels are still on the page');
 
   /*
-   * No location is asked for here on purpose: the device fix wins over the
-   * picked address everywhere on this page, so tapping the button in a step that
-   * exists to check the boxes would silently change what the next four steps are
-   * measuring.
+   * The delivery area is still a field of its own, with no hint under it. The
+   * owner struck the hint ("decides the fee"), not the choice: without it a
+   * customer who types an address and never picks a suggestion keeps whatever
+   * area the page opened on, and the fee follows that guess.
    */
-  return 'house number, street and suburb are separate fields, on one row on a phone';
+  const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
+  if (!select) throw new Error('the delivery address has no delivery area beside it');
+
+  return 'one "Delivery address" box, no house/suburb inputs, and the area still selectable';
+});
+
+await step('the four hints the owner struck are gone from the checkout', async () => {
+  /*
+   * Owner, 17 Nov 2026, listing them: "remove 'decides the fee', 'optional — for a
+   * written reply', 'optional', 'pick it from the list so we can check the
+   * distance'". Asked whether that included the plain "optional" on email and
+   * notes, the answer was yes — all four.
+   *
+   * Checked as text, not as markup, because the complaint was about what the page
+   * says to a customer. A field being optional is still true; saying so on every
+   * optional field is the noise.
+   */
+  const page = s7.text();
+  for (const hint of [
+    'decides the fee',
+    'optional — for a written reply',
+    'pick it from the list so we can check the distance',
+  ]) {
+    if (page.includes(hint)) throw new Error(`the removed hint "${hint}" is back on the checkout`);
+  }
+  /*
+   * The bare word "optional" is matched in a hint position — right after a label
+   * and before the input — rather than anywhere on the page, because "optional"
+   * appears in ordinary sentences too and the assertion is about the labels.
+   */
+  const hints = [...s7.doc.querySelectorAll('label > span')]
+    .map((el) => el.textContent ?? '')
+    .filter((text) => /^\s*optional\s*$/i.test(text));
+  if (hints.length) throw new Error(`${hints.length} field(s) still say "optional" in the label: ${hints.join(' / ')}`);
+  return 'none of the four hints is on the checkout';
 });
 
 await step('typing a delivery address offers OpenStreetMap suggestions', async () => {
@@ -916,13 +1341,17 @@ await step('typing a delivery address offers OpenStreetMap suggestions', async (
 
   await s7.waitFor(() => s7.photonCalls.length > 0, 'a geocoder request', 6000);
   const queried = new URL(s7.photonCalls[0]);
-  /* The house number is its own box now, so only the street is sent. */
+  /*
+   * The whole line is sent, house number and all — that is the point of one box,
+   * and `suggestAddresses` is what retries without the number when the map
+   * answers that query badly.
+   */
   if (queried.searchParams.get('q') !== '12 Oxford') throw new Error(`unexpected query: ${queried.searchParams.get('q')}`);
   /* The search is bounded to Rosebank/Sandton, and biased to Johannesburg. */
   if (!queried.searchParams.get('bbox')) throw new Error('the geocoder query is not limited to the delivery envelope');
   if (!queried.searchParams.get('lat') || !queried.searchParams.get('lon')) throw new Error('the geocoder query is not biased to Johannesburg');
 
-  await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Street suggestions"]'), 'the suggestion list', 6000);
+  await s7.waitFor(() => s7.doc.querySelector('[role="listbox"][aria-label="Address suggestions"]'), 'the suggestion list', 6000);
   const options = [...s7.doc.querySelectorAll('[role="option"]')];
   /*
    * The fixture holds four places: Sandton, Rosebank, Bryanston and Heidelberg.
@@ -988,9 +1417,9 @@ await step('the other delivery area is still searchable while Rosebank is select
 
   const shown = [...s7.doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
   /*
-   * The list shows the street and its suburb, not the joined sentence the old
-   * single box produced — the house number has a field of its own now, so the
-   * suburb is what distinguishes two Oxford Roads.
+   * The list shows the whole line, house number included, plus the suburb that
+   * distinguishes two Oxford Roads — which is what the owner meant by "it pulls
+   * what you typed and street number".
    */
   if (!shown.some((text) => /Illovo/.test(text))) throw new Error('the Sandton address is missing while Rosebank is selected');
   if (!shown.some((text) => /Rosebank/.test(text))) throw new Error('the Rosebank address is missing');
@@ -1007,19 +1436,17 @@ await step('typing a house number and a half-typed street still finds the addres
    * object — which carries no suburb tag. The field must survive both: retry
    * without the number, place the street by its coordinates, and put the number
    * back on the line.
+   *
+   * With one box this is also the acceptance test for "it pulls what you typed
+   * and street number": the number is not a field any more, so the only way it
+   * survives the round trip is `applyHouseHint`.
    */
   const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   input.dispatchEvent(new s7.w.FocusEvent('focus', { bubbles: true }));
   s7.setInput(input, '');
   await sleep(50);
 
-  /* The customer types the number into its own box, then the street. */
-  const houseBox = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === '12');
-  if (houseBox) s7.setInput(houseBox, '173');
   const before = s7.photonCalls.length;
-  /* The house number now has a box of its own, so the street is what is typed —
-     and a house number typed into the street box out of habit must still be
-     stripped before the lookup, which is what this checks. */
   s7.setInput(input, '173 oxf');
 
   await s7.waitFor(() => s7.photonCalls.length >= before + 2, 'the retry without the house number', 8000);
@@ -1046,8 +1473,9 @@ await step('typing a house number and a half-typed street still finds the addres
    * the radius, not merely the old suburb list.
    */
   if (options.length !== 1) throw new Error(`expected exactly the Rosebank street, saw ${JSON.stringify(options)}`);
+  /* The number the customer typed is on the line the map never gave it. */
+  if (!/^173 Oxford Road/.test(options[0])) throw new Error(`the typed house number is not on the suggestion: "${options[0]}"`);
 
-  /* The option shows the street and suburb now, not the joined sentence. */
   const button = [...s7.doc.querySelectorAll('[role="option"]')]
     .find((o) => /Oxford Road/.test(o.textContent ?? '') && /Rosebank/.test(o.textContent ?? ''))
     ?.querySelector('button');
@@ -1055,14 +1483,12 @@ await step('typing a house number and a half-typed street still finds the addres
   button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
   await sleep(200);
 
-  /* The street box takes the street; the number is its own field and keeps
-     whatever the customer typed into it. */
-  if (input.value !== 'Oxford Road') throw new Error(`picking filled the street box with "${input.value}"`);
-  const houseAfter = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === '12');
-  if (houseAfter?.value !== '173') throw new Error(`picking the street lost the house number: "${houseAfter?.value}"`);
+  /* Picking fills the one box with the whole line, number and all. */
+  if (!/^173 Oxford Road/.test(input.value)) throw new Error(`picking filled the address box with "${input.value}"`);
+  if (!/Rosebank/.test(input.value)) throw new Error(`the picked line does not name its suburb: "${input.value}"`);
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
   if (select.value !== 'Rosebank') throw new Error(`the delivery area was filled with "${select.value}"`);
-  return 'half-typed street found, house number kept, area filled';
+  return 'half-typed street found, typed number kept, area filled';
 });
 
 await step('picking a suggestion moves the delivery area to match the address', async () => {
@@ -1086,10 +1512,15 @@ await step('picking a suggestion moves the delivery area to match the address', 
   const button = sandton.querySelector('button');
   button.dispatchEvent(new s7.w.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: s7.w }));
 
+  /*
+   * The whole line goes into the one box — number, street and the suburb the map
+   * knows — because that sentence is what the order stores, the WhatsApp message
+   * carries and the driver reads.
+   */
   await s7.waitFor(() => {
     const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
-    return input?.value === 'Oxford Road';
-  }, 'the street to autofill', 4000);
+    return input?.value === '12 Oxford Road, Illovo, Sandton';
+  }, 'the address to autofill', 4000);
 
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   if (!select) throw new Error('no delivery area select');
@@ -1157,8 +1588,18 @@ async function pickAddressSuggestion(session, text) {
 
 /** Tap "Use my current location" — the no-network way to locate the customer. */
 async function useMyLocation(session) {
+  /*
+   * The phone's answer to "where am I", as the checkout will look it up.
+   *
+   * Tapping the button now performs a reverse lookup at the fix and writes the
+   * street it found into the address box (owner, 17 Nov 2026: "if i select use my
+   * current location does it fill the address inputfield- if not it must be").
+   * The lookup is stubbed to the Sandton address already in the fixture, so the
+   * step can assert *that the box was filled* without this suite depending on
+   * Photon being up.
+   */
   const button = [...session.doc.querySelectorAll('button')]
-    .find((b) => /Use my current location|Checking…|Location checked/i.test(b.textContent ?? ''));
+    .find((b) => /Use my current location|Checking…|Location checked|Finding your address/i.test(b.textContent ?? ''));
   if (!button) throw new Error('no "Use my current location" button on the checkout');
   session.click(button);
   /*
@@ -1220,6 +1661,52 @@ await step('a typed address with no location is not enough to reach WhatsApp', a
   await useMyLocation(s7);
   s7.__geoRestored = true;
   return 'an unlocated address blocks the handoff, with a reason';
+});
+
+await step('"Use my current location" writes the street it found into the address box', async () => {
+  /*
+   * Owner, 17 Nov 2026: "if i select use my current location does it fill the
+   * address inputfield- if not it must be".
+   *
+   * It did not. The button collected a precise fix, printed a distance and left
+   * the box empty — so the price came from one point and the delivery instruction
+   * was whatever had been typed before, or nothing. The fix must now be written
+   * down, in words the customer can read and correct, and the coordinates must
+   * still be what the distance is measured from.
+   *
+   * The reverse lookup is stubbed (see the fetch stub above) to answer a bare
+   * "lat,lng" query with the Illovo house from the fixture.
+   */
+  const fresh = boot('/checkout', { seedCart: s7.seedCart });
+  await fresh.waitFor(() => /Almost there/i.test(fresh.text()), 'checkout', 20000);
+  /* Share the fixture-backed geocoder, so the reverse lookup is answerable. */
+  fresh.w.fetch = s7.w.fetch;
+  fresh.w.__geo = { lat: -26.1, lng: 28.05 };
+
+  const field = () => [...fresh.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
+  if (field()?.value) throw new Error('the address box was not empty to begin with');
+
+  await useMyLocation(fresh);
+  await fresh.waitFor(() => /Oxford Road/.test(field()?.value ?? ''), 'the address box to be filled', 8000);
+
+  const filled = field().value;
+  if (!/^12 Oxford Road/.test(filled)) throw new Error(`the location filled the box with "${filled}"`);
+  if (!/km away/i.test(fresh.text())) throw new Error('the location was written down but no distance was calculated');
+
+  /* The area follows the address, exactly as it does when one is picked. */
+  const select = [...fresh.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
+  if (select?.value !== 'Sandton') throw new Error(`the area was left on "${select?.value}" for a Sandton fix`);
+
+  /*
+   * And it stays editable: this is a guess by the map, not a fact the customer
+   * may not correct. Typing over it must take.
+   */
+  field().dispatchEvent(new fresh.w.FocusEvent('focus', { bubbles: true }));
+  fresh.setInput(field(), '5 Rivonia Road, Sandton');
+  if (!/^5 Rivonia Road/.test(field().value)) throw new Error('the address the location wrote cannot be overwritten');
+
+  fresh.close?.();
+  return `the fix filled the box with "${filled}" and can be corrected`;
 });
 
 await step('"Use my current location" asks the browser for a precise fix', async () => {
@@ -1382,13 +1869,11 @@ await step('a customer outside the delivery radius is refused, and told how far 
   s7b.setInput(byPh(/Thabo Mahlangu/), 'Far Customer');
   s7b.setInput(byPh(/\+27 82/), '+27 82 000 4321');
   /*
-   * The address is three boxes now: the house number in its own field, the street
-   * in the suggestion box, and the suburb in the select. Polokwane is set as the
-   * suburb through the select, because "1 Church Street" alone says nothing about
-   * which province it is in.
+   * One address box, filled the way a customer types a far-away address, and the
+   * area set to "another area" through the select. Polokwane is typed in full
+   * because the location button below puts the fix there — the two must agree.
    */
-  s7b.setInput(byPh(/^12$/), '1');
-  s7b.setInput(byPh(/Oxford Road/), 'Church Street, Polokwane');
+  s7b.setInput(byPh(/Oxford Road/), '1 Church Street, Polokwane');
   const farSelect = [...s7b.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Rosebank'));
   farSelect.value = [...farSelect.options].find((o) => /^another area/i.test(o.value)).value;
   farSelect.dispatchEvent(new s7b.w.Event('change', { bubbles: true }));
@@ -1445,8 +1930,7 @@ await step('the WhatsApp order is blocked until the customer details are filled'
 
   /*
    * Fill exactly what it asks for, and nothing else — name and number. The
-   * address is already there from the step above: a number, a street and a
-   * suburb, in three boxes.
+   * address is already there from the step above, in the one box.
    */
   const byPh = (re) => [...s7.doc.querySelectorAll('input')].find((f) => re.test(f.placeholder ?? ''));
   s7.setInput(byPh(/Thabo Mahlangu/), 'Delivery Test');
@@ -1470,23 +1954,16 @@ await step('the WhatsApp order message carries the delivery address and the Yoco
   if (!waLink) throw new Error('checkout has no WhatsApp order button');
   const waText = new URL(waLink.href).searchParams.get('text') ?? '';
   /*
-   * The exact line the message must carry: the suburb from the select, and the
-   * address as the three boxes compose it. It is asserted as a whole so a change
-   * to any of the three parts — number, street, suburb — shows up here rather
-   * than quietly shipping a half address.
+   * The address line is read from the box rather than written here, because this
+   * step runs after several others have typed into it and tapped the location
+   * button — the assertion is that whatever the customer ended up with travels
+   * with the order verbatim, exactly as they would read it back to the driver.
    */
-  /*
-   * The address line is read from the boxes rather than written here, because
-   * this step runs after several others have typed into them — the assertion is
-   * that whatever the customer entered travels with the order verbatim.
-   */
-  const house = [...s7.doc.querySelectorAll('input')].find((f) => f.placeholder === '12')?.value ?? '';
   const street = [...s7.doc.querySelectorAll('input')].find((f) => /Oxford Road/.test(f.placeholder ?? ''))?.value ?? '';
-  const suburb = [...s7.doc.querySelectorAll('input')].find((f) => f.placeholder === 'Illovo')?.value ?? '';
-  if (!house || !street || !suburb) throw new Error(`the three address boxes are not all filled: ${house} / ${street} / ${suburb}`);
+  if (!street) throw new Error('the delivery address box is empty');
   for (const wanted of [
     /I would like it delivered/,
-    new RegExp(`Address: ${house}, ${street}, ${suburb}`),
+    new RegExp(`Address: ${street.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
     /I will pay by Yoco/,
     /send me the payment link/,
   ]) {
@@ -1806,6 +2283,7 @@ await step('an address that contradicts the chosen area is refused with both nam
    */
   const streetBox = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
   s7.setInput(streetBox, '12 Oxford Road, Illovo, Sandton');
+  await sleep(200);
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   /* The customer now switches the area instead of the address. */
   select.value = 'Rosebank';
@@ -1832,9 +2310,10 @@ await step('an address that contradicts the chosen area is refused with both nam
 
 await step('an address with no suburb only asks the customer to check', async () => {
   const input = [...s7.doc.querySelectorAll('input')].find((el) => /Oxford Road/.test(el.placeholder ?? ''));
-  /* The suburb box emptied on purpose: that is the address this step is about. */
-  const suburbBox = [...s7.doc.querySelectorAll('input')].find((el) => el.placeholder === 'Illovo');
-  if (suburbBox) s7.setInput(suburbBox, '');
+  /*
+   * A street with no suburb in it — the address this step is about. With one box
+   * that is simply what gets typed; there is no separate suburb field to empty.
+   */
   const select = [...s7.doc.querySelectorAll('select')].find((el) => [...el.options].some((o) => o.value === 'Sandton'));
   select.value = 'Sandton';
   select.dispatchEvent(new s7.w.Event('change', { bubbles: true }));
@@ -2143,6 +2622,88 @@ await step('the loyalty card looks up stamps by cell number', async () => {
   return `empty state for a new number, ${api.stamps} stamp(s) for one that ordered`;
 });
 
+await step('a past order can be put back in the basket in one tap', async () => {
+  /*
+   * "Order it again" — the feature a returning customer actually wants.
+   *
+   * The order is seeded for a number this device "knows" (the checkout parks the
+   * last number in localStorage), the loyalty card is opened with that number, and
+   * the button is pressed the way a customer presses it. What is asserted is the
+   * basket that comes out: the same plate, the same starch and side, the same
+   * quantity, and a price read from today's catalogue rather than the receipt.
+   */
+  const phone = `+27 84 ${String(Date.now()).slice(-8)}`;
+  const seeded = await fetch(`${BASE}/api/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      channel: 'web',
+      fulfilment: 'delivery',
+      customer: {
+        name: 'Reorder Customer', phone, email: 'reorder@example.co.za',
+        address: '1 Maude Street, Sandton', suburb: 'Sandton', lat: -26.1075, lng: 28.055,
+      },
+      /* A plate built in the builder, so the group reconstruction is exercised. */
+      items: [{ kind: 'plate', plateId: 'traditional', qty: 2, selections: { protein: ['tshotlo'], starch: ['pap', 'dumpling'], veg: ['chakalaka'] } }],
+      payment: { method: 'cash' },
+    }),
+  }).then((r) => r.json());
+  if (!seeded.order?.code) throw new Error('could not seed the order to re-order');
+
+  const s8 = boot('/passport');
+  s8.doc.defaultView.localStorage.setItem('hb.lastPhone', phone);
+  await s8.waitFor(() => /Your loyalty card/i.test(s8.text()), 'loyalty card page');
+
+  const input = [...s8.doc.querySelectorAll('input')].find((f) => /\+27 82/.test(f.placeholder ?? ''));
+  if (!input) throw new Error('no phone input on the passport page');
+  s8.setInput(input, phone);
+  s8.click(s8.byText('button[type="submit"]', /Find my card/i)[0]);
+  await s8.waitFor(() => /Order it again/i.test(s8.text()), 'the past-order list', 15000);
+
+  /* The order reads as the customer's order, with its choices. */
+  if (!s8.text().includes(seeded.order.code)) throw new Error('the past order is missing its code');
+  for (const expected of [/2 × Traditional Plate/, /Tshotlo/, /Pap/, /Chakalaka/]) {
+    if (!expected.test(s8.text())) throw new Error(`the past order does not show ${expected}`);
+  }
+
+  const again = s8.byText('button', /Order this again|Replace my basket/i)[0];
+  if (!again) throw new Error('no "order this again" button');
+  s8.click(again);
+
+  /*
+   * The basket is the assertion, not the toast: read it from storage the way the
+   * basket bar does, so a passing test means the cart really holds the food.
+   */
+  await s8.waitFor(() => {
+    try {
+      const raw = JSON.parse(s8.doc.defaultView.localStorage.getItem('hb.cart') ?? '{}');
+      return (raw?.state?.lines ?? []).length > 0;
+    } catch {
+      return false;
+    }
+  }, 'the rebuilt basket', 15000);
+
+  const cart = JSON.parse(s8.doc.defaultView.localStorage.getItem('hb.cart'));
+  const lines = cart?.state?.lines ?? [];
+  if (lines.length !== 1) throw new Error(`expected one rebuilt line, saw ${lines.length}`);
+
+  const [line] = lines;
+  if (line.kind !== 'plate' || line.plateId !== 'traditional') throw new Error('the rebuilt line is not the plate that was ordered');
+  if (line.qty !== 2) throw new Error(`quantity was lost: ${line.qty}`);
+  if (line.unitPrice !== 100) throw new Error(`the plate was re-priced from the receipt, not the menu: R${line.unitPrice}`);
+
+  const labels = line.picks.map((p) => p.label);
+  for (const expected of ['Tshotlo (pounded beef)', 'Pap', 'Dumpling', 'Chakalaka']) {
+    if (!labels.includes(expected)) throw new Error(`the rebuild lost "${expected}": ${labels.join(' · ')}`);
+  }
+
+  /* And the page says where it went, so nobody has to guess. */
+  await s8.waitFor(() => /Checkout|Almost there|basket/i.test(s8.text()), 'the checkout after reordering', 15000);
+
+  s8.close();
+  return `${seeded.order.code} rebuilt: ${line.qty} × Traditional Plate · ${labels.join(' · ')} at R${line.unitPrice} a plate`;
+});
+
 /* ------------------------------------------------------------------ */
 /* Flow 1c: Build Your Heritage Plate configurator                     */
 /* ------------------------------------------------------------------ */
@@ -2379,12 +2940,10 @@ await step('email is optional, the checkout has no card fields, and the WhatsApp
    * on every order and the WhatsApp button stays blocked without it.
    */
   /*
-   * The address is typed into the three boxes the checkout now shows — house
-   * number, street, suburb — and the location button is what makes it
-   * measurable.
+   * The address is typed into the one box the checkout shows, and the location
+   * button is what makes it measurable.
    */
-  s1.setInput(byPlaceholder(/^12$/), '12');
-  s1.setInput(byPlaceholder(/Oxford Road/), 'Oxford Road');
+  s1.setInput(byPlaceholder(/Oxford Road/), '12 Oxford Road, Illovo, Sandton');
   await sleep(300);
   await useMyLocation(s1);
 
@@ -2734,15 +3293,12 @@ await step('a cash order can be placed with no card details at all', async () =>
    * carries no coordinates, so the 50 km rule cannot be checked against it.
    */
   /*
-   * Three boxes now: the house number, the street, then the suburb (already on
-   * Rosebank). The order cannot leave until one of the two location routes has
-   * been used too, so both are done here.
+   * One box, typed, and then the location button — the order cannot leave until
+   * one of the two location routes has been used, so both are done here.
    */
   const addressField = byPh(/Oxford Road/);
   if (!addressField) throw new Error('checkout has no delivery address field');
-  const houseField = byPh(/^12$/);
-  if (houseField) s6.setInput(houseField, '15');
-  s6.setInput(addressField, 'Oxford Road, Rosebank');
+  s6.setInput(addressField, '15 Oxford Road, Rosebank');
   await sleep(300);
   await useMyLocation(s6);
 
@@ -2845,7 +3401,7 @@ const s8 = boot('/menu', {
   },
 });
 
-await s8.waitFor(() => /3 plates/.test(s8.text()), 'the pinned basket bar', 20000);
+await s8.waitFor(() => /3 items/.test(s8.text()), 'the pinned basket bar', 20000);
 
 await step('the basket bar states the one arrangement there is: delivery', async () => {
   /*
@@ -2854,7 +3410,7 @@ await step('the basket bar states the one arrangement there is: delivery', async
    * replaced by a single true sentence, and the check is that no collection
    * wording survives anywhere in the basket.
    */
-  if (!/3 plates · delivery/.test(s8.text())) throw new Error('the bar does not show the plate count and delivery');
+  if (!/3 items · delivery/.test(s8.text())) throw new Error('the bar does not show the item count and delivery');
   /*
    * "Collection" may only survive in the stamp counter ("Stamps collected"),
    * which is a different word doing a different job. What must be gone is the
@@ -2959,11 +3515,11 @@ const RELOAD_CART = {
 };
 
 const s9 = boot('/menu', { seedCart: RELOAD_CART });
-await s9.waitFor(() => /3 plates/.test(s9.text()), 'the basket bar after a reload', 20000);
+await s9.waitFor(() => /3 items/.test(s9.text()), 'the basket bar after a reload', 20000);
 
 await step('a page load still shows the plates that were already picked', async () => {
   /* The saved `collection` cart must read as delivery after the version-3 migration. */
-  if (!/3 plates · delivery/.test(s9.text())) throw new Error(`the bar lost the plates or kept the retired collection mode: ${s9.text().slice(0, 200)}`);
+  if (!/3 items · delivery/.test(s9.text())) throw new Error(`the bar lost the items or kept the retired collection mode: ${s9.text().slice(0, 200)}`);
   if (!/R330/.test(s9.text())) throw new Error(`the bar lost the running total: ${s9.text().slice(0, 200)}`);
 
   const open = [...s9.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
@@ -3007,11 +3563,31 @@ await step('the footer keeps ordering behind one "Meals" toggle', async () => {
   if (toggle.getAttribute('aria-expanded') !== 'false') throw new Error('the menu should start closed');
   if (!/hidden/.test(group.className)) throw new Error('the closed menu is still showing');
 
-  /* Every route a customer orders on is inside it. */
-  const inside = [...group.querySelectorAll('a')].map((a) => a.getAttribute('href'));
-  for (const href of ['/menu', '/specials', '/passport', '/checkout']) {
-    if (!inside.includes(href)) throw new Error(`${href} is missing from the Meals menu`);
+  /*
+   * Every route a customer orders on is inside it. The fourth slot is not always
+   * the checkout: with a basket it is, and with an empty one it is the menu under
+   * the label "Start an order" — a checkout link that leads to "your basket is
+   * empty" is the dead end the owner reported (18 Nov 2026). So the assertion is
+   * on the destination, not on a fixed path list.
+   */
+  const inside = [...group.querySelectorAll('a')].map((a) => ({
+    href: a.getAttribute('href'),
+    label: (a.textContent ?? '').trim(),
+  }));
+  for (const href of ['/menu', '/specials', '/passport']) {
+    if (!inside.some((l) => l.href === href)) throw new Error(`${href} is missing from the Meals menu`);
   }
+  const orderSlot = inside.find((l) => l.href === '/checkout' || /Start an order/i.test(l.label));
+  if (!orderSlot) throw new Error('the Meals menu offers no way to reach the checkout');
+  /*
+   * The step immediately above this one clears the basket, so by the time the
+   * footer is checked this customer genuinely has nothing to order — and the slot
+   * must therefore point at the menu. The basket-full half of the rule is checked
+   * in the "Order online" step; this one only has to prove the footer agrees with
+   * the rest of the site about which of the two is right.
+   */
+  if (orderSlot.href !== '/menu') throw new Error(`with an empty basket the footer order slot points at ${orderSlot.href}`);
+  if (!/Start an order/i.test(orderSlot.label)) throw new Error(`the emptied footer still promises a checkout: ${orderSlot.label}`);
 
   s9.click(toggle);
   await sleep(150);

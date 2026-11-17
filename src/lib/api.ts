@@ -14,7 +14,7 @@
  *      browser with an honest message rather than a stack of failed requests.
  *      `VITE_STATIC_PREVIEW=1` turns that on; it is never set for the real site.
  */
-import type { Catalog, Order } from './types';
+import type { Catalog, Order, PastOrder } from './types';
 
 const env = import.meta.env ?? {};
 
@@ -185,7 +185,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },
     });
-  } catch {
+  } catch (e) {
+    /*
+     * An abort is not a dropped connection, and telling the customer to check
+     * their connection when the caller gave up on purpose is a wrong answer to a
+     * question they did not ask. Re-thrown intact so the caller can say what
+     * actually happened.
+     */
+    const err = e as { name?: string; message?: string } | null;
+    if (err?.name === 'AbortError' || /abort/i.test(err?.message ?? '')) throw e;
     throw new ApiError(0, 'We could not reach the Heritage Bites kitchen. Please check your connection and try again.');
   }
 
@@ -247,7 +255,10 @@ async function postToInbox(
 /* ------------------------------ Public -------------------------------- */
 
 export const api = {
-  catalog: () => request<Catalog>(STATIC_PREVIEW ? STATIC_CATALOG : '/api/catalog'),
+  /* The signal lets the caller give up on a request that never settles — see the
+     timeout in the catalogue store. */
+  catalog: (signal?: AbortSignal) =>
+    request<Catalog>(STATIC_PREVIEW ? STATIC_CATALOG : '/api/catalog', signal ? { signal } : {}),
 
   search: (q: string) =>
     request<{ results: { id: string; name: string; localName: string; price: number; image: string; category: string; available: boolean }[]; q: string }>(
@@ -290,6 +301,15 @@ export const api = {
       lifetime?: number;
       untilFree?: number;
       cardsCompleted?: number;
+      /**
+       * The last few orders for this number, newest first — what the "order it
+       * again" list is built from.
+       *
+       * Deliberately not a full `Order`: the loyalty card is opened with a cell
+       * number and nothing else, so the payload carries no tracking token and no
+       * delivery address. See `receiptSummary` on the server for why.
+       */
+      recent?: PastOrder[];
     }>('/api/passport', {
       method: 'POST',
       body: JSON.stringify({ phone }),

@@ -64,6 +64,77 @@ export {
 } from '../../shared/address.js';
 
 /** One address the customer can pick. Mirrors the typedef in `shared/address.js`. */
+/**
+ * Turn a set of coordinates into an address the customer can read and correct.
+ *
+ * Owner, 17 Nov 2026, on the "Use my current location" button: "if i select use my
+ * current location does it fill the address inputfield- if not it must be".
+ *
+ * It did not. The button collected a precise fix, checked the distance against it
+ * and left the address box empty — so the customer could submit an order whose
+ * price came from one place and whose delivery instruction was blank, and the
+ * WhatsApp handoff carried neither. Filling the box closes that gap: the fix
+ * decides the distance *and* writes down where it thinks you are, which the
+ * customer can then read, correct, or overwrite by typing.
+ *
+ * Two lookups, because Photon's reverse endpoint does not always carry a house
+ * number: the first asks for the address at the point, the second asks for the
+ * nearest house on the street the first one named. The first result that names a
+ * street wins; the house number is used when the map has one, and omitted rather
+ * than invented when it does not.
+ *
+ * Never throws. No network, a refusal or a timeout resolves to `null`, and the
+ * caller keeps whatever the customer had already typed.
+ */
+export async function describePoint(
+  lat: number,
+  lng: number,
+  options: { settings?: { deliveryAreas?: string[] } | null; timeoutMs?: number } = {},
+): Promise<AddressSuggestion | null> {
+  const ask = async (query: string): Promise<AddressSuggestion | null> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 4500);
+    try {
+      const url = new URL(PHOTON_ENDPOINT);
+      url.searchParams.set('q', query);
+      url.searchParams.set('limit', '5');
+      url.searchParams.set('lang', 'en');
+      /*
+       * The radius envelope still applies: a reverse lookup is a search like any
+       * other, and a coordinate outside the delivery area should come back as the
+       * nearest *real* address rather than the nearest address in another province.
+       */
+      url.searchParams.set('bbox', radiusBboxParam());
+      url.searchParams.set('lat', String(lat));
+      url.searchParams.set('lon', String(lng));
+
+      const res = await fetch(url.toString(), { signal: controller.signal, headers: { Accept: 'application/json' } });
+      if (!res.ok) return null;
+      const found = mapPhotonResponse(await res.json(), options.settings ?? null);
+      /* Ranked by the map's own distance ordering, so the first usable one is it. */
+      return found[0] ?? null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  /* 1. The address at the point itself. Photon can answer a bare lat/lon query. */
+  const exact = await ask(`${lat},${lng}`);
+  if (exact?.street) return exact;
+
+  /* 2. The street the first lookup named, to recover a house number. */
+  const street = exact?.line || '';
+  if (street) {
+    const house = await ask(street);
+    if (house?.street) return house;
+  }
+
+  /* 3. Nothing with a street: keep whatever the map did say, if anything. */
+  return exact;
+}
+
 export interface AddressSuggestion {
   id: string;
   line: string;
@@ -75,9 +146,11 @@ export interface AddressSuggestion {
   /** House number taken from the query when only the street matched. */
   house?: string;
   /*
-   * The address in parts, filled by `mapPhotonFeature` so the three boxes on the
-   * checkout can be populated from one tap. `suburb` is the map's locality tag —
-   * a postal fact — not the delivery area the order is priced against.
+   * The address in parts, filled by `mapPhotonFeature`. The checkout shows one
+   * line, but the parts are still what lets a picked suggestion move the delivery
+   * area and put the typed house number back on a street-only match. `suburb` is
+   * the map's locality tag — a postal fact — not the delivery area the order is
+   * priced against.
    */
   street?: string;
   suburb?: string;

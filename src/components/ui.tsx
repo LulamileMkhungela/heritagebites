@@ -160,6 +160,57 @@ export function Spinner({ label = 'Working…' }: { label?: string }) {
   );
 }
 
+/**
+ * The catalogue could not be loaded.
+ *
+ * A spinner is a promise that something is coming. When the request has already
+ * failed there is nothing coming, and the page sits there turning forever — the
+ * owner's report on 17 Nov 2026, and exactly what this rendered before: the
+ * menu, the specials page and the policies page all waited on `catalog` with no
+ * branch for `error`, so a dropped connection or a server that was down left the
+ * customer looking at an endless spinner with no way out.
+ *
+ * A retry sits with it because the usual cause is momentary — a phone switching
+ * from Wi-Fi to data — and reloading the whole site to try again is heavier than
+ * asking once more. The WhatsApp door is there for when the site is genuinely
+ * down and the customer still needs to eat.
+ */
+export function LoadError({
+  what,
+  message,
+  onRetry,
+  whatsapp,
+}: {
+  what: string;
+  message?: string | null;
+  onRetry?: () => void;
+  whatsapp?: string;
+}) {
+  const number = String(whatsapp ?? '').replace(/\D/g, '');
+  return (
+    <div className="mx-auto max-w-lg px-4 py-16 text-center" role="alert">
+      <p className="text-4xl" aria-hidden="true">🍢</p>
+      <h2 className="mt-4 font-display text-2xl font-semibold">We could not load {what}</h2>
+      <p className="mt-3 text-sm leading-relaxed text-ink/60">
+        {message?.trim() || 'The connection dropped before the kitchen answered.'} Nothing was charged and nothing was
+        ordered — try again, or message us and we will take the order in the chat.
+      </p>
+      <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        {onRetry && (
+          <Button onClick={onRetry} variant="primary">
+            Try again
+          </Button>
+        )}
+        {number && (
+          <LinkButton href={`https://wa.me/${number}`} variant="outline">
+            Order on WhatsApp
+          </LinkButton>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------- Toast ------------------------------- */
 
 export function Toast({ message, onDone }: { message: string | null; onDone: () => void }) {

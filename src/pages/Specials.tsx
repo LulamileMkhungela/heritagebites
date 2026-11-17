@@ -1,6 +1,6 @@
 import { useCatalog } from '../store/catalog';
 import { zar } from '../lib/format';
-import { LinkButton, Reveal, SectionLabel, Spinner } from '../components/ui';
+import { LinkButton, LoadError, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { usePageSeo } from '../lib/seo';
 import { waHref } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
@@ -19,7 +19,11 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 export default function Specials() {
   usePageSeo('/specials');
   const catalog = useCatalog((s) => s.data);
+  const error = useCatalog((s) => s.error);
+  const load = useCatalog((s) => s.load);
 
+  /* A failed load is not "loading": say so, and offer the retry. */
+  if (error && !catalog) return <LoadError what="this week's menu" message={error} onRetry={() => void load({ force: true })} />;
   if (!catalog) return <Spinner label="Loading this week…" />;
 
   const { settings, service, plateMenus } = catalog;
@@ -128,8 +132,15 @@ export default function Specials() {
                   ['Minimum order', `${zar(settings.minDeliveryOrder)} for plated meals`],
                   ['Delivery fee', `Included in ${settings.deliveryAreas.join(' and ')}`],
                   ['Furthest we deliver', `${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen`],
-                  ['Preparation', `About ${settings.prepEstimateMins} minutes, cooked to order`],
-                  ['Delivery time', `About ${settings.deliveryEstimateMins} minutes inside the window`],
+                  /*
+                   * "Preparation — About 20 minutes, cooked to order" and "Delivery
+                   * time — About 30 minutes inside the window" were removed on
+                   * 17 Nov 2026. Both were guesses dressed as commitments: the
+                   * kitchen cooks in batches on two days a week, and a per-order
+                   * minute count is a promise it cannot keep on a Thursday run.
+                   * The service window on the same list is the honest answer to
+                   * "when", and it is the one the order is actually held to.
+                   */
                 ].map(([term, value]) => (
                   <div key={term} className="grid gap-1 border-b border-ink/10 pb-2 sm:grid-cols-[10rem_1fr] sm:gap-3">
                     <dt className="font-semibold text-ink">{term}</dt>
