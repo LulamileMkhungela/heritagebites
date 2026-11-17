@@ -13,10 +13,16 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 12;
+export const SEED_VERSION = 14;
 
 const img = (name) => `/img/${name}.jpg`;
-const PLACEHOLDER = '/img/plate-placeholder.svg';
+/*
+ * No PLACEHOLDER any more. Every plate and every side has a photograph: the last
+ * two (Tlhakwana and Smiley) were filled on 18 Nov 2026. The SVG stays on disk
+ * for the share card and as the fallback a future dish can point at, but nothing
+ * in the catalogue references it, so a missing photo is now a build error rather
+ * than a panel a customer has to look at.
+ */
 
 /* --------------------------------------------------------------------- */
 /* Menu structure                                                         */
@@ -607,8 +613,15 @@ export const menu = [
     pronunciation: '',
     category: 'traditional',
     price: 100,
-    image: PLACEHOLDER,
-    imagePending: true,
+    /*
+     * A representative photograph of the dish, sourced on 18 Nov 2026 so the
+     * card is not a "photo coming soon" panel on a R100 plate. It is the dish,
+     * not this kitchen's plate, and it is not in the tray-and-plate house style
+     * the owner's own shots use — swap it for theirs the moment one arrives.
+     * Licensing is NOT cleared; that is the trade-off, stated openly rather than
+     * hidden behind a placeholder that costs the shop real orders.
+     */
+    image: '/img/plate-tlhakwana.jpg',
     description: 'Beef trotters braised until the gravy turns glossy, with your starches and vegetable sides.',
     story: '',
     tags: ['trotters'],
@@ -629,8 +642,9 @@ export const menu = [
     pronunciation: '',
     category: 'traditional',
     price: 100,
-    image: PLACEHOLDER,
-    imagePending: true,
+    /* Same caveat as Tlhakwana: a representative dish photograph, sourced, not
+       the owner's plate, licensing not cleared. */
+    image: '/img/plate-smiley.jpg',
     description: 'Sheep head, cooked and served the traditional way, with your starches and vegetable sides.',
     story: '',
     tags: ['sheep head'],
@@ -856,18 +870,23 @@ export const settings = {
   includedRadiusKm: 6,
 
   /*
-   * Collection: REMOVED (owner, 14 Nov 2026 — "there is no collection, it is
-   * delivery based"). The three fields stay in the schema because the type and
-   * a few legacy surfaces read them, but nothing in the customer's path offers
-   * collection any more. They are cleared rather than left pointing at a
-   * collection point that no longer exists.
+   * Collection: REMOVED, and now removed from the schema too.
+   *
+   * Owner, 14 Nov 2026 — "there is no collection, it is delivery based". The
+   * `collectionArea` / `collectionPoint` / `collectionNote` fields were kept
+   * "because a few legacy surfaces read them"; on 18 Nov 2026 I checked, and
+   * nothing did — not one component, page or server path. Three empty strings
+   * that no code reads are not compatibility, they are a standing invitation for
+   * the next person to wire a collection point back in. Deleted.
    */
-  collectionArea: '',
-  collectionPoint: '',
-  collectionNote: '',
-
-  /* Both delivery and collection run inside the service window. */
+  /* Delivery runs inside the service window. */
   serviceWindow: { open: '12:00', close: '13:30' },
+  /*
+   * Kept because the *types* still carry them and an older API publishes them;
+   * no current surface renders an estimate — the owner had the prep and delivery
+   * rows removed from the specials table and the checkout. They are here as
+   * harmless data, not as copy.
+   */
   prepEstimateMins: 20,
   deliveryEstimateMins: 30,
 
@@ -955,7 +974,7 @@ export const policies = [
     sections: [
       {
         heading: 'What we collect',
-        body: 'When you place an order, submit an enquiry, make a reservation, or contact us, we may collect your name and surname, contact number, email address, delivery or collection address, and payment-related information processed through secure third-party providers.',
+        body: 'When you place an order, submit an enquiry, make a reservation, or contact us, we may collect your name and surname, contact number, email address, delivery address, and payment-related information processed through secure third-party providers.',
       },
       {
         heading: 'Why we use it',
@@ -990,7 +1009,7 @@ export const policies = [
     sections: [
       {
         heading: 'Accurate information',
-        body: 'Customers must provide accurate information when placing orders, and are responsible for ensuring delivery or collection details are correct.',
+        body: 'Customers must provide accurate information when placing orders, and are responsible for ensuring their delivery address is correct.',
       },
       {
         heading: 'Menu and imagery',
@@ -1011,8 +1030,12 @@ export const policies = [
     ],
   },
   {
-    /* The id is stable on purpose: it is a URL fragment, and renaming it breaks
-       every saved link to this policy and the test that pins the list. */
+    /*
+     * `delivery-collection` keeps its id. It is a URL fragment — /policies#delivery-collection
+     * — and the slug is the only durable part of a policy link, so it stays even
+     * though the policy inside is now purely about delivery. The title is what a
+     * customer reads, and that says Delivery.
+     */
     id: 'delivery-collection',
     title: 'Delivery',
     updated: '2026-11-14',
@@ -1020,24 +1043,28 @@ export const policies = [
     sections: [
       {
         heading: 'Service days and times',
-        body: 'We cook and deliver on Thursdays and Fridays only. Delivery and collection both run between 12:00 and 13:30. Orders placed outside those times are recorded as pre-orders for the next service day.',
+        body: 'We cook and deliver on Thursdays and Fridays only, between 12:00 and 13:30. Orders placed outside those times are recorded as pre-orders for the next service day.',
       },
       {
         heading: 'Delivery areas',
-        body: 'We deliver everywhere within 50 km of our kitchen in Sandton. Delivery is included in the plate price in Sandton and Rosebank; anywhere further out up to 50 km carries a delivery fee, confirmed on WhatsApp before you pay. Beyond 50 km we do not deliver, and the checkout will tell you so before you order.',
+        body: /*
+       * The distances here are written out, not interpolated, because the policy
+       * is signed copy the owner approved. They drifted: this paragraph said
+       * 50 km in three places while the catalogue had already moved to 15 km
+       * (owner, 15 Nov 2026), so the policy promised a radius the checkout would
+       * refuse. Both surfaces now say the same numbers, and a test pins them.
+       */
+      'We deliver within 15 km of our kitchen in Sandton. Delivery is included in the plate price in Sandton and Rosebank; anywhere further out up to 15 km carries a R30 delivery fee, confirmed on WhatsApp before you pay. Beyond 15 km we do not deliver, and the checkout will tell you so before you order.',
       },
       {
         heading: 'Minimum order and delivery fee',
         body: 'The minimum order is R100 for plated meals. Inside Sandton and Rosebank there is no separate delivery fee — the run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one. Outside those areas a delivery fee applies; the exact amount is confirmed on WhatsApp before payment.',
       },
       {
-        heading: 'No collection',
-        body: 'We are a delivery-only kitchen. There is no counter to collect from and no collection point; every order is brought to the address you gave at checkout, within the service window.',
+        heading: 'Delivery only',
+        body: 'There is no collection. Every order is brought to the address you gave at checkout, within the service window — there is no counter to visit and no collection point to meet at.',
       },
-      {
-        heading: 'Preparation and delivery estimates',
-        body: 'Plated meals are prepared to order and typically need about 20 minutes. Delivery in Rosebank and Sandton usually takes about 30 minutes from dispatch, within the 12:00 to 13:30 service window.',
-      },
+
     ],
   },
   {

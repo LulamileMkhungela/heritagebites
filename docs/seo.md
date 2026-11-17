@@ -101,7 +101,7 @@ What happens without it:
 | --- | --- | --- |
 | `/` | yes | Restaurant + WebSite structured data, `hasMenu`, hours, areas |
 | `/menu` | yes | + a Menu node with every sellable plate and its price |
-| `/specials` | yes | the week's cooking, delivery and collection |
+| `/specials` | yes | the week's cooking and delivery |
 | `/about` | yes | story, vision, mission |
 | `/contact` | yes | phone, email, WhatsApp |
 | `/policies` | yes | delivery, refunds, cancellations, privacy, terms |
@@ -193,9 +193,9 @@ curl -s https://<domain>/menu | grep -E '<title>|canonical|og:'
    (name, address, phone) is the usual reason a local listing and a website
    disagree in search.
 5. **Keep the content honest.** The site deliberately has no street address in
-   its structured data, because the kitchen cooks in a hired kitchen and hands
-   orders over at a collection point. If a permanent address ever exists, it
-   belongs in `restaurantJsonLd` — and nowhere before then.
+   its structured data, because the kitchen cooks in a hired kitchen and
+   delivers; there is no shopfront to send anyone to. If a permanent address
+   ever exists, it belongs in `restaurantJsonLd` — and nowhere before then.
 
 ## Rebuilding the static preview
 

@@ -545,8 +545,15 @@ export default function MenuPage() {
               Every plate is cooked on a Thursday or a Friday, and any cooking day ahead can be booked. Delivery is
               included in {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} and up to{' '}
               {catalog?.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen.{' '}
+              {/*
+                "and collection" was wrong: collection was removed on 14 Nov
+                2026 and the specials page it links to now says so outright
+                ("We are a delivery-only kitchen"). Owner, 18 Nov 2026: "no
+                collection" — a link promising a policy the next page denies is
+                worse than no link.
+              */}
               <Link to="/specials" className="font-semibold text-ochre-deep underline">
-                How delivery and collection work
+                How delivery works
               </Link>
               .
             </p>

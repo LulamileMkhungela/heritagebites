@@ -288,10 +288,16 @@ export default function OrderStatus() {
               An order placed before collection was removed still has to render.
               Its tracking page says plainly that it was a collection order
               rather than inventing a delivery address it never had.
+
+              Owner, 18 Nov 2026: "no collection". The old copy offered to
+              negotiate a meeting point — "the kitchen will confirm where to meet
+              you" — which reads as if a collection could still be arranged. If
+              one of these old orders is still open, the honest answer is that it
+              cannot, and the kitchen sorts it out in the chat.
             */}
             <p className="mt-2 text-sm leading-relaxed text-ink/70">
               {order.fulfilment === 'collection'
-                ? 'This order was placed for collection, before we moved to delivery only. The kitchen will confirm where to meet you on WhatsApp.'
+                ? 'This order was placed for collection, back when we offered it. We are delivery-only now — message the kitchen and they will sort out what happens to this order.'
                 : `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout.`}
             </p>
             {order.fulfilment === 'collection' && (
@@ -301,7 +307,7 @@ export default function OrderStatus() {
                 rel="noreferrer"
                 className="mt-3 inline-flex min-h-11 items-center font-semibold text-ochre-deep hover:underline"
               >
-                Ask the kitchen where to meet →
+                Ask the kitchen about this order →
               </a>
             )}
             <p className="mt-3 text-sm text-ink/70">

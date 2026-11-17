@@ -166,10 +166,14 @@ export interface Settings {
   googlePlaceId?: string;
   googlePlaceName?: string;
   googleReviewUrl?: string;
-  /** Retired with collection; empty, and no surface reads it as an address. */
-  collectionArea: string;
-  collectionPoint: string;
-  collectionNote: string;
+  /*
+   * No collectionArea / collectionPoint / collectionNote.
+   *
+   * Removed with collection itself (owner, 18 Nov 2026: "no collection"). They
+   * survived as optional-looking required fields that nothing read, which is how
+   * a removed feature quietly comes back: someone sees the field, assumes the
+   * site still supports it, and wires it up again.
+   */
   serviceWindow: { open: string; close: string };
   prepEstimateMins: number;
   deliveryEstimateMins: number;

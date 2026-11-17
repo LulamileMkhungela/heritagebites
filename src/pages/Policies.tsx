@@ -40,7 +40,7 @@ export default function Policies() {
           <SectionLabel onDark>Policies</SectionLabel>
           <h1 className="max-w-3xl font-display text-5xl font-semibold md:text-6xl">Delivery, refunds and privacy, in plain language</h1>
           <p className="mt-4 max-w-2xl text-bone/70">
-            Privacy, terms of use, delivery and collection, refunds and cancellations — the policies that apply when you
+            Privacy, terms of use, delivery, refunds and cancellations — the policies that apply when you
             order from Heritage Bites.
           </p>
         </div>

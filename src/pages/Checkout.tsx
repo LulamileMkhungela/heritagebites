@@ -291,13 +291,11 @@ function LiveCheckout() {
   }, []);
 
   /*
-   * Card and cash are both accepted on collection *and* on delivery.
+   * Card and cash are both accepted, on the one way food leaves this kitchen.
    *
-   * The kitchen takes card either way — there is a Yoco card machine at the
-   * collection point, and the driver brings one to a delivery — so restricting
-   * cash to collection only forced a delivery customer into an online payment
-   * they may not have been able to make. The choice on screen is now simply the
-   * customer's, and it is honoured.
+   * The driver carries a Yoco card machine, so card is not the only route a
+   * delivery customer has and cash is not a collection-only relic. The choice on
+   * screen is simply the customer's, and it is honoured.
    */
   const method2: PayMethod = method;
 
@@ -959,13 +957,6 @@ function LiveCheckout() {
               </p>
             )}
             {/*
-              No "get the collection point" button here. The order now finishes
-              on WhatsApp, and the collection address is sent in that same chat,
-              so a button that opens a second conversation only loses the one
-              message the kitchen needs.
-            */}
-
-            {/*
               Payment belongs to the same question — how the food arrives and how
               it is paid for is one decision, made together at the top of the
               form rather than in its own section at the bottom.
@@ -978,12 +969,10 @@ function LiveCheckout() {
                     id: 'card' as PayMethod,
                     label: 'Card',
                     /*
-                     * Card is always offered, because the business can always
-                     * take it: on collection there is a Yoco card machine at the
-                     * counter, and on delivery the kitchen brings one. When the
-                     * online checkout is wired up the customer pays before the
-                     * food is cooked instead; that is a difference in *when*, not
-                     * in whether card is accepted.
+                     * Card is always offered: on delivery the driver carries a
+                     * Yoco card machine. When the online checkout is wired up the
+                     * customer pays before the food is cooked instead; that is a
+                     * difference in *when*, not in whether card is accepted.
                      */
                     /*
                      * The card blurb follows the fulfilment. Saying "at your
@@ -1120,7 +1109,7 @@ function LiveCheckout() {
                 One primary action, and a second way out that always works.
                 The order finishes on WhatsApp, so the second button is not a
                 fallback bolted on afterwards — it is the same order, sent to the
-                chat where the Yoco link and the collection address arrive.
+                chat where the Yoco link and the delivery details arrive.
               */}
               <Button
                 type="submit"

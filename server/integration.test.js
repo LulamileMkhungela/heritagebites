@@ -238,6 +238,45 @@ describe('catalogue + search', () => {
     assert.equal(c.settings.channels.ubereats.url, '', 'Uber Eats link waits for the store URL');
     assert.equal(c.settings.channels.mrd.url, '', 'Mr D link waits for the store URL');
 
+    /*
+     * No collection, anywhere in the catalogue.
+     *
+     * Owner, 18 Nov 2026: "no collection". On 14 Nov the *feature* was removed
+     * but three empty fields were left behind "for legacy surfaces" — none of
+     * which existed — and the policy text still promised collection in three
+     * separate paragraphs. A removed feature that leaves its vocabulary in the
+     * data and the copy is a feature waiting to be wired back up by accident.
+     */
+    for (const field of ['collectionArea', 'collectionPoint', 'collectionNote']) {
+      assert.equal(field in c.settings, false, `${field} is still in the catalogue`);
+    }
+    const policyText = JSON.stringify(c.policies);
+    /*
+     * Careful with the wording: the delivery policy legitimately contains the
+     * words "collection point" inside a sentence that DENIES one ("there is no
+     * counter to visit and no collection point to meet at"). A naive
+     * doesNotMatch would fail on the very copy that fixes the problem, so the
+     * assertion is on the phrases that can only mean collection is on offer.
+     */
+    assert.doesNotMatch(policyText, /delivery and collection|collection and delivery/i, 'a policy still offers collection');
+    assert.doesNotMatch(policyText, /collection both run|run between/i, 'a policy still schedules collection');
+    assert.doesNotMatch(policyText, /confirm where to meet|where to meet you/i, 'a policy still offers to arrange a collection point');
+    /* The delivery policy is the one that states the rule; it must say it plainly. */
+    assert.match(policyText, /no collection/i, 'the delivery policy no longer says there is no collection');
+
+    /*
+     * Every dish on sale has a photograph of its own.
+     *
+     * Owner, 18 Nov 2026. Two plates were still on the "photo coming soon" panel
+     * — a placeholder where the food should be, on a R100 product. Both were
+     * filled the same day; this test is what stops the next dish being added
+     * without one.
+     */
+    const placeholderDishes = [...c.menu, ...(c.sides ?? [])]
+      .filter((m) => /placeholder/i.test(m.image ?? '') || m.imagePending === true)
+      .map((m) => m.name);
+    assert.deepEqual(placeholderDishes, [], `dishes still on a placeholder photo: ${placeholderDishes.join(', ')}`);
+
     // Customer policies supplied by the business.
     assert.equal(c.policies.length, 5);
     assert.deepEqual(c.policies.map((p) => p.id), ['privacy', 'terms', 'delivery-collection', 'refunds', 'cancellations']);

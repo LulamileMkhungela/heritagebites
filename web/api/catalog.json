@@ -425,8 +425,7 @@
       "pronunciation": "",
       "category": "traditional",
       "price": 100,
-      "image": "/img/plate-placeholder.svg",
-      "imagePending": true,
+      "image": "/img/plate-tlhakwana.jpg",
       "description": "Beef trotters braised until the gravy turns glossy, with your starches and vegetable sides.",
       "story": "",
       "tags": [
@@ -537,8 +536,7 @@
       "pronunciation": "",
       "category": "traditional",
       "price": 100,
-      "image": "/img/plate-placeholder.svg",
-      "imagePending": true,
+      "image": "/img/plate-smiley.jpg",
       "description": "Sheep head, cooked and served the traditional way, with your starches and vegetable sides.",
       "story": "",
       "tags": [
@@ -1493,7 +1491,7 @@
       "sections": [
         {
           "heading": "What we collect",
-          "body": "When you place an order, submit an enquiry, make a reservation, or contact us, we may collect your name and surname, contact number, email address, delivery or collection address, and payment-related information processed through secure third-party providers."
+          "body": "When you place an order, submit an enquiry, make a reservation, or contact us, we may collect your name and surname, contact number, email address, delivery address, and payment-related information processed through secure third-party providers."
         },
         {
           "heading": "Why we use it",
@@ -1521,7 +1519,7 @@
       "sections": [
         {
           "heading": "Accurate information",
-          "body": "Customers must provide accurate information when placing orders, and are responsible for ensuring delivery or collection details are correct."
+          "body": "Customers must provide accurate information when placing orders, and are responsible for ensuring their delivery address is correct."
         },
         {
           "heading": "Menu and imagery",
@@ -1549,23 +1547,19 @@
       "sections": [
         {
           "heading": "Service days and times",
-          "body": "We cook and deliver on Thursdays and Fridays only. Delivery and collection both run between 12:00 and 13:30. Orders placed outside those times are recorded as pre-orders for the next service day."
+          "body": "We cook and deliver on Thursdays and Fridays only, between 12:00 and 13:30. Orders placed outside those times are recorded as pre-orders for the next service day."
         },
         {
           "heading": "Delivery areas",
-          "body": "We deliver everywhere within 50 km of our kitchen in Sandton. Delivery is included in the plate price in Sandton and Rosebank; anywhere further out up to 50 km carries a delivery fee, confirmed on WhatsApp before you pay. Beyond 50 km we do not deliver, and the checkout will tell you so before you order."
+          "body": "We deliver within 15 km of our kitchen in Sandton. Delivery is included in the plate price in Sandton and Rosebank; anywhere further out up to 15 km carries a R30 delivery fee, confirmed on WhatsApp before you pay. Beyond 15 km we do not deliver, and the checkout will tell you so before you order."
         },
         {
           "heading": "Minimum order and delivery fee",
           "body": "The minimum order is R100 for plated meals. Inside Sandton and Rosebank there is no separate delivery fee — the run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one. Outside those areas a delivery fee applies; the exact amount is confirmed on WhatsApp before payment."
         },
         {
-          "heading": "No collection",
-          "body": "We are a delivery-only kitchen. There is no counter to collect from and no collection point; every order is brought to the address you gave at checkout, within the service window."
-        },
-        {
-          "heading": "Preparation and delivery estimates",
-          "body": "Plated meals are prepared to order and typically need about 20 minutes. Delivery in Rosebank and Sandton usually takes about 30 minutes from dispatch, within the 12:00 to 13:30 service window."
+          "heading": "Delivery only",
+          "body": "There is no collection. Every order is brought to the address you gave at checkout, within the service window — there is no counter to visit and no collection point to meet at."
         }
       ]
     },
@@ -1635,9 +1629,6 @@
       "lng": 28.049
     },
     "includedRadiusKm": 6,
-    "collectionArea": "",
-    "collectionPoint": "",
-    "collectionNote": "",
     "serviceWindow": {
       "open": "12:00",
       "close": "13:30"
@@ -1716,7 +1707,7 @@
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Tuesday",
-    "timeLabel": "18:16",
+    "timeLabel": "21:26",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Tuesday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",

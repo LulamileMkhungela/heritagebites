@@ -4,7 +4,7 @@
 
 ## Where the site stands
 
-The public storefront and the customer journey are complete and tested: menu, plate builder, basket, collection or delivery, checkout by card or cash on collection, secure order receipt, loyalty-card lookup, a contact form that reaches the business inbox, and the five approved customer policies.
+The public storefront and the customer journey are complete and tested: menu, plate builder, basket, delivery only, checkout by card or cash to the driver, secure order receipt, loyalty-card lookup, a contact form that reaches the business inbox, and the five approved customer policies.
 
 The catalogue is the owner-signed content: **Traditional plates R100** (five proteins, four starches, four sides) and **Contemporary plates R130** (three proteins, five starches, six sides), **Thursdays and Fridays 12:00–13:30**, delivery in **Rosebank and Sandton** at **no extra charge — included in the plate price**, **R100 minimum order**.
 
@@ -13,7 +13,7 @@ What is not yet live is operational, not cosmetic. In order:
 ## Before taking live orders
 
 1. **Kitchen push alert.** Run `npm run push:keys`, set `HB_VAPID_*` and `HB_OWNER_PUSH_KEY` in the host's secret settings, then enrol the kitchen phone and the counter tablet at `/alerts`. No email account or SMTP password is involved — that channel was removed because it needed exactly the kind of server setup an owner should not have to do.
-2. **Live card payments.** There is no card form any more: the customer pays on Yoco's own page and a signed webhook marks the order paid. Send either a Yoco **payment link** (`HB_YOCO_PAYMENT_URL`) or the **secret key** (`HB_YOCO_SECRET_KEY`), plus the **webhook signing secret** (`HB_YOCO_WEBHOOK_SECRET`). Step-by-step in [`production-payments-yoco.md`](production-payments-yoco.md). Until then the checkout says online payment is not switched on and offers WhatsApp or cash on collection.
+2. **Live card payments.** There is no card form any more: the customer pays on Yoco's own page and a signed webhook marks the order paid. Send either a Yoco **payment link** (`HB_YOCO_PAYMENT_URL`) or the **secret key** (`HB_YOCO_SECRET_KEY`), plus the **webhook signing secret** (`HB_YOCO_WEBHOOK_SECRET`). Step-by-step in [`production-payments-yoco.md`](production-payments-yoco.md). Until then the checkout says online payment is not switched on and offers WhatsApp or cash to the driver.
 3. **Contact inbox.** The Formspree endpoint is wired and each submission is saved locally as well. Confirm which address it delivers to and who replies.
 4. **Staff order workflow.** There is no staff console. The push alert is a notification, not a queue: nobody can accept, update, complete or cancel a ticket from the site. Someone must watch the kitchen device and the WhatsApp chat during the service window and confirm timing with the customer. Either accept that manual process formally, or commission a small protected order queue.
 5. **Collection point.** The exact Standard Bank Rosebank/Sandton point is still to be confirmed. The site currently says so honestly instead of publishing a guessed address.
@@ -40,7 +40,7 @@ What is not yet live is operational, not cosmetic. In order:
 - Opening hours — the service window is real: inside it orders are for today, outside it they are pre-orders labelled with the next window on the order page.
 - Minimum order and delivery fee — enforced; delivery is included in the plate price, so no fee line appears.
 - Contact form — forwards to the business Formspree inbox and keeps a local fallback record.
-- Policies — privacy, terms, delivery/collection, refunds and cancellations published at `/policies`.
+- Policies — privacy, terms, delivery, refunds and cancellations published at `/policies`.
 - Live card payments — PCI-safe hosted-checkout path built and gated on Yoco keys; raw card data is refused once live.
-- Cash — on collection only, as confirmed.
+- Cash — to the driver, as confirmed.
 - Retired content — unapproved dishes, add-ons, discount codes, testimonials and day-of-week promotions removed.

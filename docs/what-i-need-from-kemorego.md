@@ -6,10 +6,18 @@ Your answers are in and the site has been updated to match them. The full respon
 
 ## From you (content)
 
-1. **Photos for Tlhakwana and Smiley.** Both plates currently show a "photo coming soon" panel. Please send one photo each, in the same tray-and-plate style as the others. Do not send a photo of a different dish to fill the gap.
+1. **Photos for Tlhakwana and Smiley.** Both plates currently show a "photo
+   coming soon" panel. I have sourced representative photographs of both dishes
+   and they are ready to drop in — but they are stock images of the *dish*, not of
+   your plate. Yours will always be better: send one each, in the same
+   tray-and-plate style as the others, and I will swap them. Do not send a photo
+   of a different dish to fill the gap.
 2. **Drinks, if you sell them online.** Names and prices. They are not on the site at the moment because no drinks were signed off.
 3. **Add-ons, if they exist.** For example an extra starch or an extra side, with the price. The old R18–R65 add-ons were invented, so they were removed rather than guessed.
-4. **The exact collection point** at Standard Bank, Rosebank and Sandton. Until then the site says the point is confirmed by WhatsApp.
+4. ~~The exact collection point at Standard Bank, Rosebank and Sandton.~~ **No
+   longer needed.** Collection was removed on 14 November 2026 — the kitchen is
+   delivery-only — so there is no collection point to publish. The policies, the
+   menu and the tracking page now all say so.
 5. **Uber Eats / Mr D store links**, if you use those platforms. Direct "share store" URLs only — the buttons stay disabled until then.
 6. **Confirm the contact-form inbox.** Your Formspree endpoint is wired in; please confirm it delivers to `heritagebitesfood@gmail.com` and who is responsible for replying.
 
@@ -85,5 +93,5 @@ your inbox and your phone can.
 - Switch live card payments on, and run a real R100 test order plus a refund.
 - Enrol your phone for order alerts, place a live test order, and confirm with you
   that the push and the WhatsApp order both arrived.
-- Publish the exact collection point.
+- ~~Publish the exact collection point.~~ Done differently: collection is gone.
 - Enable the delivery-partner buttons when real store links exist.

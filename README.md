@@ -16,7 +16,7 @@ These are implemented, not just described. `server/seed.js` is the source of tru
 | Delivery fee | None — included in the plate price |
 | Minimum order | R100 for plated meals |
 | Preparation / delivery | ~20 minutes / ~30 minutes inside the window |
-| Collection | Standard Bank, Rosebank and Sandton (exact point still to be confirmed) |
+| Collection | **None** — the kitchen is delivery-only (removed 14 Nov 2026) |
 | Payments | Card (Yoco) and cash on collection. No cash on delivery. |
 | Customer email | Optional — used only if the customer wants a written reply; no receipt is emailed |
 | Contact | 067 013 7587 · heritagebitesfood@gmail.com · Formspree inbox |
