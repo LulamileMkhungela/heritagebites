@@ -400,6 +400,79 @@ await step('a lone bowl of chakalaka is blocked at checkout by the R100 minimum'
   return 'the R100 minimum is what stops a lone bowl, not a rule against sides';
 });
 
+await step('"Order online" takes an empty basket to the menu, not to an empty checkout', async () => {
+  /*
+   * Owner, 18 Nov 2026: "when i click order online it takes me to checkout and on
+   * checkout its empty".
+   *
+   * The button promised an order and delivered a page saying there was none. With
+   * nothing in the basket the only useful destination is the menu; with something
+   * in it, the checkout is right — so the first tap must not cost the customer a
+   * dead end, and the second must still go where it always went.
+   */
+  const fresh = boot('/');
+  await fresh.waitFor(() => /A taste of South African heritage/i.test(fresh.text()), 'the home page', 20000);
+  const orderBtn = () => [...fresh.doc.querySelectorAll('button')].find((b) => /^Order online$/i.test((b.textContent ?? '').trim()));
+  if (!orderBtn()) throw new Error('the home page has no Order online button');
+  fresh.click(orderBtn());
+  await fresh.waitFor(() => fresh.w.location.pathname === '/menu', 'an empty basket to be sent to the menu', 8000);
+  await fresh.waitFor(() => /The full menu/i.test(fresh.text()), 'the menu to render', 15000);
+
+  /* The hero list's own row follows the same rule, and says so. */
+  const row = [...fresh.doc.querySelectorAll('a')].find((a) => /Start an order|Order online/.test(a.textContent ?? ''));
+  if (!row) throw new Error('the order-channel row is missing');
+  if (!/Start an order/.test(row.textContent ?? '')) {
+    throw new Error(`with an empty basket the row still promises an online order: ${row.textContent}`);
+  }
+  if (row.getAttribute('href') !== '/menu') throw new Error(`the row points at ${row.getAttribute('href')}, not the menu`);
+
+  const foot = [...fresh.doc.querySelectorAll('a')].find((a) => /Start an order|Checkout & pay/.test(a.textContent ?? ''));
+  if (!foot || foot.getAttribute('href') !== '/menu') throw new Error('the footer still offers a checkout with nothing in the basket');
+  fresh.close();
+  return 'one tap to the menu, three entry points agreeing';
+});
+
+await step('with a basket, "Order online" opens the basket instead of a page', async () => {
+  /*
+   * The other half of the same rule. A returning customer who taps the loudest
+   * button with a plate already chosen should see what they are ordering — not a
+   * reload of the home page, and not a trip through the menu.
+   */
+  const shopper = boot('/', {
+    seedCart: {
+      state: {
+        fulfilment: 'delivery',
+        lines: [{
+          key: 'plate::traditional::starch=pap|veg=chakalaka',
+          itemId: 'plate-traditional',
+          plateId: 'traditional',
+          name: 'Traditional Plate',
+          image: '/img/plate-mogodu.jpg',
+          unitPrice: 100,
+          qty: 1,
+          picks: [],
+          kind: 'plate',
+        }],
+      },
+      version: 2,
+    },
+  });
+  await shopper.waitFor(() => /A taste of South African heritage/i.test(shopper.text()), 'the home page', 20000);
+  const btn = [...shopper.doc.querySelectorAll('button')].find((b) => /^Order online$/i.test((b.textContent ?? '').trim()));
+  shopper.click(btn);
+  await shopper.waitFor(() => shopper.doc.querySelector('[role="dialog"][aria-label="Your basket"]'), 'the basket drawer', 8000);
+  if (!/Traditional Plate/.test(shopper.doc.querySelector('[role="dialog"]')?.textContent ?? '')) {
+    throw new Error('the drawer opened without the plate in it');
+  }
+  if (shopper.w.location.pathname !== '/') throw new Error('the basket opened by navigating away from the page');
+
+  /* And the row now offers the checkout, because there is something to check out. */
+  const row = [...shopper.doc.querySelectorAll('a')].find((a) => /^Order online/.test((a.textContent ?? '').trim()));
+  if (!row || row.getAttribute('href') !== '/checkout') throw new Error('the channel row will not offer the checkout with a basket full');
+  shopper.close();
+  return 'drawer with the plate, checkout offered, page unchanged';
+});
+
 await step('a menu that cannot load says so instead of spinning for ever', async () => {
   /*
    * Owner, 17 Nov 2026: "why loader loads forever".
@@ -3490,11 +3563,31 @@ await step('the footer keeps ordering behind one "Meals" toggle', async () => {
   if (toggle.getAttribute('aria-expanded') !== 'false') throw new Error('the menu should start closed');
   if (!/hidden/.test(group.className)) throw new Error('the closed menu is still showing');
 
-  /* Every route a customer orders on is inside it. */
-  const inside = [...group.querySelectorAll('a')].map((a) => a.getAttribute('href'));
-  for (const href of ['/menu', '/specials', '/passport', '/checkout']) {
-    if (!inside.includes(href)) throw new Error(`${href} is missing from the Meals menu`);
+  /*
+   * Every route a customer orders on is inside it. The fourth slot is not always
+   * the checkout: with a basket it is, and with an empty one it is the menu under
+   * the label "Start an order" — a checkout link that leads to "your basket is
+   * empty" is the dead end the owner reported (18 Nov 2026). So the assertion is
+   * on the destination, not on a fixed path list.
+   */
+  const inside = [...group.querySelectorAll('a')].map((a) => ({
+    href: a.getAttribute('href'),
+    label: (a.textContent ?? '').trim(),
+  }));
+  for (const href of ['/menu', '/specials', '/passport']) {
+    if (!inside.some((l) => l.href === href)) throw new Error(`${href} is missing from the Meals menu`);
   }
+  const orderSlot = inside.find((l) => l.href === '/checkout' || /Start an order/i.test(l.label));
+  if (!orderSlot) throw new Error('the Meals menu offers no way to reach the checkout');
+  /*
+   * The step immediately above this one clears the basket, so by the time the
+   * footer is checked this customer genuinely has nothing to order — and the slot
+   * must therefore point at the menu. The basket-full half of the rule is checked
+   * in the "Order online" step; this one only has to prove the footer agrees with
+   * the rest of the site about which of the two is right.
+   */
+  if (orderSlot.href !== '/menu') throw new Error(`with an empty basket the footer order slot points at ${orderSlot.href}`);
+  if (!/Start an order/i.test(orderSlot.label)) throw new Error(`the emptied footer still promises a checkout: ${orderSlot.label}`);
 
   s9.click(toggle);
   await sleep(150);

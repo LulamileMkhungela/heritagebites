@@ -1639,6 +1639,66 @@ describe('static hosting', () => {
   });
 });
 
+describe('the app on a home screen', () => {
+  /*
+   * Owner, 18 Nov 2026, looking at the installed app on their phone: "it must be
+   * HeritageBites full or one word and the logo used there its wrong".
+   *
+   * Both halves are checked here because both are easy to regress: the name lives
+   * in a JSON file nobody reads, and the icon is a generated bitmap that a future
+   * brand-asset run can quietly put back to a pot on a black square.
+   */
+  const manifest = async () => {
+    const res = await fetch(`${base}/manifest.webmanifest`);
+    assert.equal(res.status, 200, 'the manifest must be served');
+    return res.json();
+  };
+
+  test('the installed name is HeritageBites, on every platform', async () => {
+    const m = await manifest();
+    assert.equal(m.short_name, 'HeritageBites');
+    assert.match(m.name, /^HeritageBites\b/);
+    /* No stray space, which is what an Android launcher would show. */
+    assert.doesNotMatch(m.short_name, /\s/, 'the home-screen label must be one word');
+
+    /*
+     * iOS ignores short_name entirely and reads the meta tag instead, so a site
+     * that only fixes the manifest still shows the old title under an iPhone
+     * icon. The head has to carry both.
+     */
+    const { body } = await (async () => {
+      const res = await fetch(`${base}/`, { headers: { Accept: 'text/html' } });
+      return { body: await res.text() };
+    })();
+    assert.match(body, /<meta name="apple-mobile-web-app-title" content="HeritageBites"/);
+    assert.match(body, /<meta name="application-name" content="HeritageBites"/);
+  });
+
+  test('the home-screen icon is the whole badge, opaque, at every size', async () => {
+    const m = await manifest();
+    const tile = m.icons.filter((i) => /icon-(192|512|maskable-512)\.png/.test(i.src));
+    assert.equal(tile.length, 3, 'the manifest must still declare the three home-screen sizes');
+
+    for (const icon of tile) {
+      const res = await fetch(`${base}/${icon.src}`);
+      assert.equal(res.status, 200, `${icon.src} must be served`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      /* PNG header, then the IHDR width/height. */
+      assert.equal(buf.subarray(1, 4).toString(), 'PNG', `${icon.src} is not a PNG`);
+      const width = buf.readUInt32BE(16);
+      const height = buf.readUInt32BE(20);
+      assert.equal(`${width}x${height}`, icon.sizes, `${icon.src} is not the size it claims`);
+      /*
+       * Opaque: the old icon was the pot on a transparent-backed tile, and a
+       * transparent home-screen icon composites onto black on some launchers.
+       * A PNG with no alpha channel at all is the safest proof.
+       */
+      const colourType = buf[25];
+      assert.ok(colourType !== 6 && colourType !== 4, `${icon.src} still has an alpha channel`);
+    }
+  });
+});
+
 describe('the head served to a crawler', () => {
   /*
    * The React app sets these itself, but only after it has run. A crawler that

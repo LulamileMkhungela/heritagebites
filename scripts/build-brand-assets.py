@@ -189,6 +189,45 @@ def tile(mark: Image.Image, size: int, inset: float = 0.09, rounded: bool = True
     return canvas.resize((size, size), Image.LANCZOS)
 
 
+def tile_badge(
+    badge: Image.Image,
+    size: int,
+    inset: float = 0.06,
+    ink_ground: bool = False,
+    rounded: bool = True,
+    radius: float = 0.22,
+) -> Image.Image:
+    """
+    The full badge on a ground, for the places a browser or a phone shows a tile.
+
+    Ink ground when the mark has to sit against a dark chrome (nothing to do
+    today, kept so the option is one argument away), bone otherwise.
+
+    A tile smaller than 96px gets a gentler corner: Android's squircle clips a
+    22% radius hard, and at 32px that eats the corner of a circle-of-letters. The
+    badge is round already, so a small radius loses nothing.
+    """
+    if size < 96:
+        radius = min(radius, 0.12)
+    big = size * 4
+    ground = (INK if ink_ground else BONE) + (255,)
+    canvas = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    if rounded:
+        ImageDraw.Draw(canvas).rounded_rectangle(
+            [0, 0, big - 1, big - 1], radius=int(big * radius), fill=ground
+        )
+    else:
+        ImageDraw.Draw(canvas).rectangle([0, 0, big, big], fill=ground)
+
+    inner = int(big * (1 - inset * 2))
+    art = badge.resize((inner, inner), Image.LANCZOS)
+    # On a light ground the white artwork is invisible: swap the mark to ink.
+    if not ink_ground:
+        art = recoloured(art, INK)
+    canvas.alpha_composite(art, ((big - inner) // 2, (big - inner) // 2))
+    return canvas.resize((size, size), Image.LANCZOS)
+
+
 def social_card(badge: Image.Image) -> Image.Image:
     """
     The picture WhatsApp, Facebook, Slack and LinkedIn show for a pasted link.
@@ -249,12 +288,38 @@ def main() -> int:
     save_png(white, IMG / "logo-badge.png", 512)
     save_png(recoloured(white, INK), IMG / "logo-badge-ink.png", 512)
 
-    # Icons: the pot, on ink, at every size a browser or phone asks for.
-    tile(pot, 512).save(PUBLIC / "icon-512.png", optimize=True)
-    tile(pot, 512, inset=0.18).save(PUBLIC / "icon-maskable-512.png", optimize=True)
-    tile(pot, 192).save(PUBLIC / "icon-192.png", optimize=True)
-    # iOS composites transparency onto black, so the home-screen icon is opaque.
-    tile(pot, 180, rounded=False).convert("RGB").save(PUBLIC / "apple-touch-icon.png", optimize=True)
+    '''
+    The home-screen icon is the WHOLE badge on bone, not the pot on ink.
+
+    Owner, 18 Nov 2026, looking at the app on their phone: "the logo used there
+    its wrong". It was: the old builder lifted the pot out of the engraving and
+    set it on an ink tile, because a 16px tab cannot read a ring of lettering.
+    That reasoning holds for a favicon and fails for a home-screen tile — at
+    192-512px the badge is entirely legible, and "pot on a black square" is a
+    generic cooking mark, not this shop. The circles are the brand.
+
+    Bone ground rather than ink, because the artwork is ink: the mark is a stamp,
+    and a stamp belongs on paper. It also survives Android's round mask, which
+    crops a square icon to a circle — the badge is circular already, so a centred
+    badge loses nothing but its outer margin.
+    '''
+    '''
+    Flattened to RGB, not saved with an alpha channel.
+
+    The tile is a solid disc, but an RGBA PNG declares alpha anyway, and some
+    launchers composite an RGBA icon onto black — which is how a bone-tiled badge
+    turns into a white mark on a black square. An opaque file cannot be
+    misinterpreted.
+    '''
+    tile_badge(badge, 512, ink_ground=False).convert("RGB").save(PUBLIC / "icon-512.png", optimize=True)
+    tile_badge(badge, 512, ink_ground=False, inset=0.20).convert("RGB").save(PUBLIC / "icon-maskable-512.png", optimize=True)
+    tile_badge(badge, 192, ink_ground=False).convert("RGB").save(PUBLIC / "icon-192.png", optimize=True)
+    # iOS composites transparency onto black, so the home-screen icon is opaque
+    # and square — iOS rounds the corners itself, and an already-rounded tile
+    # would show its own curve inside Apple's.
+    tile_badge(badge, 180, ink_ground=False, rounded=False).convert("RGB").save(PUBLIC / "apple-touch-icon.png", optimize=True)
+    # Tabs keep the pot: see the module docstring — the ring of lettering cannot
+    # survive 16px, and the pot is the one shape in the badge that does.
     tile(pot, 32).save(PUBLIC / "favicon-32.png", optimize=True)
     tile(pot, 16).save(PUBLIC / "favicon-16.png", optimize=True)
     ico_sizes = [(16, 16), (32, 32), (48, 48)]

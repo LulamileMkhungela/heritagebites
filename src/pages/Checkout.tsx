@@ -8,7 +8,7 @@ import { normalisePhone, zar } from '../lib/format';
 import { Button, ContactText, Field, HeritageMark, LinkButton, SectionLabel, WovenRule, inputCls } from '../components/ui';
 import { asset } from '../lib/assets';
 import { usePageSeo } from '../lib/seo';
-import { basketHref } from '../lib/whatsapp';
+import { basketHref, waHref } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
 import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaOptions } from '../../shared/service.js';
 import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, describePoint, type AddressSuggestion } from '../lib/address';
@@ -646,10 +646,34 @@ function LiveCheckout() {
           className="mx-auto h-24 w-24 object-contain opacity-85"
         />
         <h1 className="mt-4 font-display text-4xl font-semibold">Your basket is empty</h1>
-        <p className="mt-3 text-ink/60">Add a plate or a side from the menu and come back here to check out.</p>
-        <Link to="/menu" className="mt-6 inline-block rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone">
-          Browse the menu
-        </Link>
+        {/*
+          Say what a checkout needs, not just that this one is empty.
+
+          Owner, 18 Nov 2026: "when i click order online it takes me to checkout
+          and on checkout its empty". The entry points now send an empty basket
+          to the menu instead, but this page is still reachable — a bookmark, the
+          footer, a browser back button — so it has to explain itself. The
+          minimum is named here because it is the next thing that will stop them,
+          and finding that out only at the end of the form is the same dead end
+          in a later costume.
+        */}
+        <p className="mt-3 text-ink/60">
+          A checkout needs something in it. Pick a plate or a side from the menu — delivery orders start at{' '}
+          {zar(Number(settings?.minDeliveryOrder ?? 100))}.
+        </p>
+        <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link to="/menu" className="inline-flex min-h-11 items-center rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone">
+            Browse the menu
+          </Link>
+          <a
+            href={waHref(settings?.whatsapp, 'Hi Heritage Bites! I would like to place an order — what can you cook for me?')}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center rounded-full border-2 border-ink px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+          >
+            Order on WhatsApp
+          </a>
+        </div>
 
         {/*
           An empty basket is where a returning customer lands after tapping

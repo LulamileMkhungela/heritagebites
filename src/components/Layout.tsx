@@ -307,6 +307,8 @@ function Footer() {
   const catalog = useCatalog((s) => s.data);
   const s = catalog?.settings;
   const wa = waHref(s?.whatsapp, CHANNEL_ENQUIRY);
+  /* Whether the Order column should offer a checkout or a first plate. */
+  const footerLines = useCart((st) => st.lines);
   /* The "Meals" group in the Order column starts closed; see the button below. */
   const [mealsOpen, setMealsOpen] = useState(false);
 
@@ -469,7 +471,21 @@ function Footer() {
                 <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Meals</Link></li>
                 <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">This week</Link></li>
                 <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
-                <li><Link to="/checkout" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Checkout &amp; pay</Link></li>
+                {/*
+                  With a basket this is the checkout; with nothing in it, it is
+                  the menu. Landing a customer on "Your basket is empty" is a
+                  dead end they did not ask for (owner, 18 Nov 2026: "when i
+                  click order online it takes me to checkout and on checkout its
+                  empty").
+                */}
+                <li>
+                  <Link
+                    to={footerLines.length ? '/checkout' : '/menu'}
+                    className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre"
+                  >
+                    {footerLines.length ? 'Checkout & pay' : 'Start an order'}
+                  </Link>
+                </li>
               </ul>
             </li>
             {/* The pages that are not part of ordering a plate. "Loyalty card"

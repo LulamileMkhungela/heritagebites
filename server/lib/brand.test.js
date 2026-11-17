@@ -198,7 +198,12 @@ describe('the page head', () => {
 describe('the manifest', () => {
   test('is valid JSON and names icons that exist', () => {
     const manifest = JSON.parse(readFileSync(join(PUBLIC, 'manifest.webmanifest'), 'utf8'));
-    assert.equal(manifest.short_name, 'Heritage Bites');
+    /*
+     * One word, by the owner's instruction (18 Nov 2026): the launcher label was
+     * "Heritage Bites", which an Android home screen truncates to
+     * "Heritage Bites…" beside the icon.
+     */
+    assert.equal(manifest.short_name, 'HeritageBites');
     assert.equal(manifest.display, 'standalone');
     assert.equal(manifest.theme_color.toLowerCase(), '#16100c');
     assert.ok(manifest.icons.length >= 3);
