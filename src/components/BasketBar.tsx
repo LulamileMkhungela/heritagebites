@@ -84,7 +84,14 @@ export function BasketBar() {
                 <span className="text-ochre-deep" role="status">✓ {flash}</span>
               ) : (
                 <>
-                  {count} {count === 1 ? 'plate' : 'plates'} · delivery
+                  {/*
+                    "plate" was right while every basket line was a plate. A bowl
+                    of chakalaka is not one, and the bar is the last thing a
+                    customer reads before paying — so the word follows what is
+                    actually in there. Owner, 17 Nov 2026: the sides are sold by
+                    the portion.
+                  */}
+                  {count} {count === 1 ? 'item' : 'items'} · delivery
                 </>
               )}
             </span>
@@ -113,7 +120,7 @@ export function BasketBar() {
             type="button"
             onClick={clear}
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-2 border-ink/15 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink/60 transition-colors hover:border-chili hover:text-chili sm:px-4"
-            aria-label={`Clear the basket, ${count} plate${count === 1 ? '' : 's'}`}
+            aria-label={`Clear the basket, ${count} item${count === 1 ? '' : 's'}`}
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6" />

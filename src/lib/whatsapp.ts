@@ -134,7 +134,13 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
    * plates and names the address; the kitchen adds any out-of-area fee on the
    * quote it confirms in this same chat.
    */
-  parts.push(`Plates: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'})`);
+  /*
+   * "Items", not "plates": a basket can hold a bowl of chakalaka on its own now
+   * (owner, 17 Nov 2026 — the sides are sold by the portion), and a WhatsApp
+   * message that calls one bowl "1 plate" is the order misdescribed to the kitchen
+   * that has to pack it.
+   */
+  parts.push(`Items: ${zar(subtotal)} (${count} item${count === 1 ? '' : 's'})`);
   /*
    * The suburb, when it is a real one.
    *

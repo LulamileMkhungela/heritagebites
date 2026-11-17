@@ -171,8 +171,23 @@ describe('catalogue + search', () => {
   test('catalogue exposes the approved plates, prices and rules', async () => {
     const c = await fetch(`${base}/api/catalog`).then(json);
 
-    assert.equal(c.categories.length, 2, 'traditional and contemporary plates only');
+    /*
+     * Three categories: the two plate kitchens, and Sides & Relishes — which
+     * became a category of products on 17 Nov 2026 when the owner asked for the
+     * sides to carry prices and be addable to the basket.
+     */
+    assert.equal(c.categories.length, 3, 'traditional and contemporary plates, plus the sides');
     assert.equal(c.menu.length, 8, 'five traditional plates and three contemporary plates');
+    assert.equal(c.sides.length, 10, 'nine vegetable sides by the portion, plus stywe pap');
+    /* Every side is a product: a price, a portion, a photo of itself. */
+    for (const side of c.sides) {
+      assert.ok(side.id.startsWith('side-'), `${side.id} is not a side id`);
+      assert.ok(side.price > 0, `${side.id} is sold by the portion, so it needs a price`);
+      assert.ok(side.portion && side.portion.length > 10, `${side.id} needs a portion sentence`);
+      assert.ok(side.image.startsWith('/img/side-') || side.image === '/img/chakalaka.jpg' || side.image === '/img/atchaar.jpg',
+        `${side.id} borrows another dish's photograph: ${side.image}`);
+      assert.equal(side.category, 'sides');
+    }
     assert.equal(c.plateMenus.length, 2);
 
     const traditional = c.plateMenus.find((p) => p.id === 'traditional');
@@ -245,7 +260,7 @@ describe('catalogue + search', () => {
     const c = await fetch(`${base}/api/catalog`).then(json);
 
     assert.ok(Array.isArray(c.comingSoon), 'the archive categories are published for the view-only section');
-    assert.ok(c.comingSoon.length >= 3, 'the categories the site carried before the two-tier menu are back');
+    assert.ok(c.comingSoon.length >= 2, 'the categories the site carried before the two-tier menu are back');
     /*
      * Modern Favourites is gone on purpose: every dish in it is now a
      * Contemporary plate, and "coming soon" on food that is already on sale was
@@ -255,29 +270,35 @@ describe('catalogue + search', () => {
      * Heritage Pots was hidden on 14 Nov 2026 at the owner's request, so the
      * archive is three categories, not four.
      */
+    /*
+     * Sides & Relishes was the third archive category until 17 Nov 2026, when the
+     * owner made the sides sellable by the portion: a bowl can now go in the
+     * basket, and nothing in a coming-soon section can be sold. It is a real
+     * category in `categories` now, with its products in `sides`.
+     */
     assert.deepEqual(c.comingSoon.map((cat) => cat.id), [
       'kasi-fast-food',
       'morning-heritage',
-      'sides-relishes',
     ]);
 
     const archived = c.comingSoon.flatMap((cat) => cat.items);
 
     /*
      * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
-     * Sides & Relishes". Every side a plate offers must have a card there, and it
-     * must be the same list the plate builder reads.
+     * Sides & Relishes". Every side a plate offers is a product of its own now
+     * (17 Nov 2026), and it must still be the same list the plate builder reads —
+     * same ids, so the two cannot drift.
      */
-    const sidesSection = c.comingSoon.find((cat) => cat.id === 'sides-relishes');
-    const sideCards = new Set(sidesSection.items.map((item) => item.id));
+    assert.ok(Array.isArray(c.sides) && c.sides.length > 0, 'the sides are published for sale');
+    const sideIds = new Set(c.sides.map((item) => item.id));
     for (const side of [...new Set(c.plateMenus.flatMap((p) => p.groups.filter((g) => g.id === 'veg').flatMap((g) => g.items.map((i) => i.id))))]) {
-      assert.ok(sideCards.has(`archive-${side}`), `the vegetable side "${side}" is missing from Sides & Relishes`);
+      assert.ok(sideIds.has(`side-${side}`), `the vegetable side "${side}" is missing from the sides`);
     }
-    /* Eight, because Heritage Pots (three cards) was hidden on 14 Nov 2026. */
-    assert.ok(archived.length >= 8);
+    /* Five, because Heritage Pots (three cards) was hidden on 14 Nov 2026. */
+    assert.ok(archived.length >= 5);
 
     /* Nothing that can already be ordered belongs in the archive. */
-    const sellableNames = c.menu.map((m) => m.name.toLowerCase());
+    const sellableNames = [...c.menu, ...(c.sides ?? [])].map((m) => m.name.toLowerCase());
     for (const item of archived) {
       const clashes = sellableNames.filter((name) => name.startsWith(item.name.toLowerCase().split(' — ')[0]));
       assert.deepEqual(clashes, [], `${item.id} duplicates a dish that is already on sale`);
@@ -289,17 +310,9 @@ describe('catalogue + search', () => {
         /* The owner asked for archive cards to read like menu cards: name,
            guide price and a line of description. */
         assert.equal(typeof item.price, 'number', `${item.id} needs a guide price to show`);
-        /*
-         * A vegetable side has no price of its own — it is chosen *inside* the
-         * R100/R130 plate — so `0` is the honest value for it and the card prints
-         * no price at all. Every other archive dish is a dish the kitchen would
-         * sell on its own, and a zero there would be a broken card.
-         */
-        const sideOfAPlate = cat.id === 'sides-relishes' && c.plateMenus.some((plate) =>
-          plate.groups.some((group) => group.id === 'veg' && group.items.some((i) => `archive-${i.id}` === item.id)),
-        );
-        if (sideOfAPlate) assert.equal(item.price, 0, `${item.id} is a side, so it carries no price`);
-        else assert.ok(item.price > 0, `${item.id} has a nonsense price`);
+        /* Every archive card is a dish the kitchen would sell on its own, so a
+           guide price of zero would be a broken card. */
+        assert.ok(item.price > 0, `${item.id} has a nonsense price`);
         assert.ok(item.description && item.description.length > 20, `${item.id} needs a description`);
         assert.equal(item.status, 'coming-soon');
         assert.ok(item.image.startsWith('/img/'), `${item.id} needs a photo to show`);
@@ -308,7 +321,7 @@ describe('catalogue + search', () => {
 
     // The archive is never part of the sellable menu, so it cannot be priced,
     // searched, added to a basket or checked out.
-    const sellable = new Set(c.menu.map((m) => m.id));
+    const sellable = new Set([...c.menu, ...(c.sides ?? [])].map((m) => m.id));
     for (const item of archived) assert.equal(sellable.has(item.id), false, `${item.id} leaked into the menu`);
 
     const search = await fetch(`${base}/api/search?q=Kota`).then(json);

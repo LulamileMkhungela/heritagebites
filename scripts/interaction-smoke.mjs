@@ -233,8 +233,8 @@ await s1.waitFor(() => /The full menu/i.test(s1.text()), 'menu page');
 const arch = boot('/menu');
 await arch.waitFor(() => /Kasi Fast Food/i.test(arch.text()), 'archive sections', 15000);
 
-await step('the menu sells exactly the two approved plate categories', async () => {
-  for (const c of ['Traditional Plates', 'Contemporary Plates']) {
+await step('the menu sells exactly the two approved plate categories, and the sides', async () => {
+  for (const c of ['Traditional Plates', 'Contemporary Plates', 'Sides & Relishes']) {
     if (!s1.text().includes(c)) throw new Error(`missing category: ${c}`);
   }
   /*
@@ -250,9 +250,14 @@ await step('the menu sells exactly the two approved plate categories', async () 
    * deleted, so the section and its copy are one uncomment away. The remaining
    * archive chips must still be there and the hidden one must NOT be.
    */
-  for (const name of [/Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
+  for (const name of [/Kasi Fast Food/, /Morning Heritage/]) {
     if (!name.test(navText)) throw new Error(`the archive category chip is missing from the menu nav: ${name}`);
   }
+  /*
+   * Sides & Relishes is a *sellable* chip now (17 Nov 2026), not an archive one —
+   * the sides carry prices and go in the basket, so it belongs with the plates.
+   */
+  if (!/Sides & Relishes/.test(navText)) throw new Error('the sides have no category chip');
   if (/Heritage Pots/i.test(arch.text())) throw new Error('Heritage Pots is still on the page after being hidden');
   /*
    * Modern Favourites was dropped by the owner: every dish in it — short ribs,
@@ -263,16 +268,143 @@ await step('the menu sells exactly the two approved plate categories', async () 
   if (/Cold & Warm/.test(navText)) throw new Error('the unapproved drinks category must stay commented out');
 
   const sellableSections = s1.doc.querySelectorAll('main > section[data-sellable]');
-  if (sellableSections.length !== 2) {
-    throw new Error(`expected 2 sellable sections, found ${sellableSections.length}`);
+  if (sellableSections.length !== 3) {
+    throw new Error(`expected 3 sellable sections (two plate kitchens and the sides), found ${sellableSections.length}`);
   }
   const archiveSections = [...arch.doc.querySelectorAll('main > section')].filter((section) =>
     section.querySelector('[data-coming-soon]'),
   );
-  if (archiveSections.length !== 3) {
-    throw new Error(`expected 3 archive sections, found ${archiveSections.length}`);
+  if (archiveSections.length !== 2) {
+    throw new Error(`expected 2 archive sections, found ${archiveSections.length}`);
   }
-  return '2 sellable sections plus 3 archive chips, Heritage Pots hidden';
+  return '3 sellable sections plus 2 archive chips, Heritage Pots hidden';
+});
+
+await step('the sides are priced, open their details, and go in the basket', async () => {
+  /*
+   * Owner, 17 Nov 2026: "some sides & relishes must have prices and details when
+   * clicked", and on whether one can be bought: "they can add to cart but be
+   * unable to checkout if items are less than 100".
+   *
+   * So this checks both halves of that arrangement: a side is a real product with
+   * a price and its own photograph, tapping it opens details — and the R100
+   * minimum, not a special rule, is what stops a lone bowl being checked out.
+   */
+  const sidesSection = s1.doc.getElementById('menu-category-sides');
+  if (!sidesSection) throw new Error('the menu has no Sides & Relishes section');
+  const cards = [...sidesSection.querySelectorAll('article')];
+  if (cards.length < 9) throw new Error(`expected the nine vegetable sides, found ${cards.length} cards`);
+
+  const section = sidesSection.textContent ?? '';
+  if (!/portion/i.test(section)) throw new Error('the sides do not say they are sold by the portion');
+  /* Every card carries a price and a picture of itself. */
+  for (const card of cards) {
+    const text = card.textContent ?? '';
+    if (!/R\d/.test(text)) throw new Error(`a side card has no price: "${text.slice(0, 80)}"`);
+    const img = card.querySelector('img');
+    if (!img?.getAttribute('src')) throw new Error('a side card has no photograph');
+  }
+  /* The photographs are the side's own, not a borrowed plate. */
+  const borrowed = cards
+    .map((c) => c.querySelector('img')?.getAttribute('src') ?? '')
+    .filter((src) => /plate-|pizza|hero-feast/.test(src));
+  if (borrowed.length) throw new Error(`the sides are using plate photographs: ${borrowed.join(', ')}`);
+
+  /* Tapping one opens its details: what it is, how much, and what a portion is. */
+  const chakalaka = cards.find((c) => /Chakalaka/i.test(c.textContent ?? ''));
+  if (!chakalaka) throw new Error('no chakalaka card to tap');
+  s1.click([...chakalaka.querySelectorAll('button')].find((b) => /Details/i.test(b.getAttribute('aria-label') ?? '')));
+  await s1.waitFor(() => /Add to basket/i.test(s1.text()), 'the side details sheet', 6000);
+  const sheet = s1.doc.querySelector('[role="dialog"]')?.textContent ?? '';
+  if (!/Spicy carrot, bean and pepper relish/i.test(sheet)) throw new Error('the side details do not describe the dish');
+  if (!/R\d/.test(sheet)) throw new Error('the side details do not show a price');
+
+  /* Add it, and it lands in the basket at its own price. */
+  const addBtn = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to basket/i.test(b.textContent ?? ''));
+  s1.click(addBtn);
+  await sleep(400);
+  if (!/Chakalaka/i.test(s1.text())) throw new Error('the side never reached the basket');
+  return `${cards.length} priced sides with their own photos, details and a basket path`;
+});
+
+await step('a lone bowl of chakalaka is blocked at checkout by the R100 minimum', async () => {
+  /*
+   * The owner's rule, end to end: "they can add to cart but be unable to checkout
+   * if items are less than 100". One R30 bowl is a basket, and it is not an
+   * order — the same minimum every small order already meets.
+   */
+  /*
+   * A basket with one R30 bowl in it — the shape the basket store writes, so the
+   * page restores it rather than starting empty and testing nothing.
+   */
+  const bowl = boot('/checkout', {
+    seedCart: {
+      state: {
+        fulfilment: 'delivery',
+        lines: [{
+          key: 'side-chakalaka::',
+          itemId: 'side-chakalaka',
+          name: 'Chakalaka',
+          image: '/img/chakalaka.jpg',
+          unitPrice: 30,
+          qty: 1,
+          picks: [],
+          kind: 'menu',
+        }],
+      },
+      version: 2,
+    },
+  });
+  await bowl.waitFor(() => /Almost there/i.test(bowl.text()), 'checkout', 20000);
+  bowl.setInput([...bowl.doc.querySelectorAll('input')].find((f) => /Thabo Mahlangu/.test(f.placeholder ?? '')), 'Side Only');
+  bowl.setInput([...bowl.doc.querySelectorAll('input')].find((f) => /\+27 82/.test(f.placeholder ?? '')), '+27 82 000 9090');
+  await sleep(600);
+
+  const page = bowl.text();
+  /* The wording the basket uses for the same rule. */
+  if (!/Delivery orders start at|minimum order is|reach the R100|R100 minimum/i.test(page)) {
+    throw new Error(`a R30 basket is not told about the minimum order: ${page.slice(0, 400)}`);
+  }
+  const wa = [...bowl.doc.querySelectorAll('a[href^="https://wa.me/"]')].find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
+  if (wa) throw new Error('a R30 bowl can reach checkout without meeting the minimum');
+  bowl.close();
+  return 'the R100 minimum is what stops a lone bowl, not a rule against sides';
+});
+
+await step('the menu can be read as a grid or a list, from a control beside the sort', async () => {
+  /*
+   * Owner, 17 Nov 2026: "the meals listview must have a listview and gridview …
+   * the sort must be far to the right whilst inline with food categories and next
+   * to sort to have the view which is listview/gridview".
+   *
+   * Two assertions, because both were asked for: the control exists beside the
+   * sort, and it actually changes the shape of the list.
+   */
+  const sortSelect = [...s1.doc.querySelectorAll('select')].find((el) => /Sort meals/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!sortSelect) throw new Error('no sort control on the menu');
+  const toggle = s1.doc.querySelector('[role="group"][aria-label="View meals as"]');
+  if (!toggle) throw new Error('no list/grid control on the menu');
+  /* Beside the sort, not on a row of its own. */
+  const controls = toggle.parentElement;
+  if (!controls?.contains(sortSelect)) throw new Error('the view control is not beside the sort');
+  const buttons = [...toggle.querySelectorAll('button')];
+  if (buttons.length !== 2) throw new Error('the view control is not a two-state switch');
+
+  const panel = s1.doc.getElementById('menu-panel-sides');
+  const before = panel?.querySelector('[data-view]')?.getAttribute('data-view');
+  if (before !== 'grid') throw new Error(`the menu does not start in grid: ${before}`);
+
+  s1.click(buttons.find((b) => /list/i.test(b.getAttribute('aria-label') ?? '')));
+  await sleep(200);
+  const after = s1.doc.getElementById('menu-panel-sides')?.querySelector('[data-view]')?.getAttribute('data-view');
+  if (after !== 'list') throw new Error(`the list control did not switch the layout: ${after}`);
+  if (buttons.find((b) => /list/i.test(b.getAttribute('aria-label') ?? ''))?.getAttribute('aria-pressed') !== 'true') {
+    throw new Error('the list control does not report itself as pressed');
+  }
+  /* And back, so the later steps see the page as a customer first meets it. */
+  s1.click(buttons.find((b) => /grid/i.test(b.getAttribute('aria-label') ?? '')));
+  await sleep(150);
+  return 'grid + list, switched from a control beside the sort';
 });
 
 await step('a category heading carries its plate count inline and folds its section', async () => {
@@ -363,7 +495,7 @@ await step('⌘K opens search and typing returns meal suggestions', async () => 
 
   s1.setInput(dialogInput(), 'mogodu');
   // Debounced 180ms, then a server round trip.
-  await s1.waitFor(() => /Mogodu Plate/i.test(dialogText()), 'results for "mogodu" inside the dialog', 10000);
+  await s1.waitFor(() => /Mala-Mogodu/i.test(dialogText()), 'results for "mogodu" inside the dialog', 10000);
   if (!/R\s?100/i.test(dialogText())) throw new Error('result does not show the plate price');
   if (!inDialog('button', /\+\s?Add/i).length) throw new Error('result has no "+ Add" control');
 
@@ -382,11 +514,13 @@ await step('picking a search result opens that dish on the menu', async () => {
   const result = await (async () => {
     const start = Date.now();
     while (Date.now() - start < 10000) {
-      const hit = inDialog('button', /Smiley Plate/i)[0];
+      /* The dish is called "Smiley" now — no "Plate" suffix. The row's text is
+         "SmileyR100,00+ Add", so only the leading word can be matched. */
+      const hit = inDialog('button', /^\s*Smiley/i)[0];
       if (hit) return hit;
       await sleep(100);
     }
-    throw new Error(`no "Smiley Plate" result inside the dialog. dialog text: ${dialogText().slice(0, 120)}`);
+    throw new Error(`no "Smiley" result inside the dialog. dialog text: ${dialogText().slice(0, 120)}`);
   })();
 
   s1.click(result);
@@ -457,7 +591,12 @@ await step('About Us contains vision, mission and story without separate nav lin
 await step('the kitchen archive reads like the menu but cannot be ordered', async () => {
   const blocks = [...arch.doc.querySelectorAll('[data-coming-soon]')];
   if (!blocks.length) throw new Error('the archive sections are missing');
-  if (blocks.length !== 3) throw new Error(`expected 3 archive sections (Heritage Pots is hidden), found ${blocks.length}`);
+  /*
+   * Two, not three: Sides & Relishes left the archive on 17 Nov 2026 when the
+   * sides became orderable products. What is left is genuinely not on sale —
+   * Kasi fast food and the morning kitchen.
+   */
+  if (blocks.length !== 2) throw new Error(`expected 2 archive sections (Heritage Pots is hidden, sides are sellable), found ${blocks.length}`);
   const block = blocks[0];
   const archiveSections = blocks.map((grid) => grid.closest('section'));
 
@@ -469,14 +608,9 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
     card grid may be a control, a link or a dish sheet.
   */
   for (const grid of blocks) {
-    /*
-     * Sides & Relishes is the exception to "every archive card shows a price":
-     * a vegetable side has no price of its own, because it is included inside
-     * the plate. Its cards say so instead ("Chosen inside a plate · included").
-     */
-    const isSides = /Sides & Relishes/i.test(grid.closest('section')?.textContent ?? '');
-    if (!isSides && !/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
-    if (isSides && /R\s?0[,.\s]?00/.test(grid.textContent ?? '')) throw new Error('a side is showing a R0,00 price');
+    /* Every card left in the archive is a dish the kitchen would sell, so every
+       one shows a guide price. */
+    if (!/R\s?\d/.test(grid.textContent ?? '')) throw new Error('an archive card is missing its guide price');
     if (!/Coming soon/i.test(grid.textContent ?? '')) throw new Error('archive cards are missing their "Coming soon" tag');
     const interactive = grid.querySelectorAll('a, button, input, select, textarea, [role="link"], [role="button"], [onclick]');
     if (interactive.length) throw new Error(`the archive must not be orderable, but a card grid holds ${interactive.length} control(s)`);
@@ -484,9 +618,11 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
   if (arch.doc.querySelectorAll('[data-coming-soon] a').length) throw new Error('an archive card contains a link');
 
   const body = archiveSections.map((section) => section?.textContent ?? '').join(' ');
-  for (const name of [/Kasi Fast Food/, /Morning Heritage/, /Sides & Relishes/]) {
+  for (const name of [/Kasi Fast Food/, /Morning Heritage/]) {
     if (!name.test(body)) throw new Error(`archive category missing: ${name}`);
   }
+  /* The sides are sellable now, so they must NOT be in the archive. */
+  if (/Sides & Relishes/i.test(body)) throw new Error('Sides & Relishes is still rendered as a coming-soon section');
   /* Hidden by the owner (14 Nov 2026), commented out in the seed, not deleted. */
   if (/Heritage Pots/i.test(body)) throw new Error('Heritage Pots is still rendered after being hidden');
   if (/Cold & Warm|Mageu|Rooibos/i.test(body)) throw new Error('unapproved drinks must stay commented out');
@@ -508,7 +644,7 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
     if (/coming soon/i.test(heading)) throw new Error('the category heading still carries a coming-soon badge');
   }
   const archiveChips = [...arch.doc.querySelectorAll('nav[aria-label="Meal categories"] button')]
-    .filter((chip) => /Heritage Pots|Kasi Fast Food|Morning Heritage|Sides & Relishes/.test(chip.textContent ?? ''));
+    .filter((chip) => /Heritage Pots|Kasi Fast Food|Morning Heritage/.test(chip.textContent ?? ''));
   for (const chip of archiveChips) {
     if (/soon/i.test(chip.textContent ?? '')) throw new Error(`an archive chip still says "soon": ${chip.textContent}`);
   }
@@ -516,19 +652,19 @@ await step('the kitchen archive reads like the menu but cannot be ordered', asyn
   const placeholders = [...block.querySelectorAll('img')].filter((img) => img.getAttribute('src')?.includes('placeholder'));
   if (placeholders.length) throw new Error('archive cards are showing placeholder images instead of photos');
 
-  return '3 categories, priced cards, 0 order controls';
+  return '2 categories, priced cards, 0 order controls';
 });
 
-await step('every vegetable side a plate offers is also on Sides & Relishes', async () => {
+await step('every vegetable side a plate offers is also sold on Sides & Relishes', async () => {
   /*
    * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
-   * Sides & Relishes".
+   * Sides & Relishes". Since 17 Nov 2026 they are not archive cards but products,
+   * so they live in the sellable section — and the rule is the same one it was:
+   * the two lists must agree.
    *
-   * The options are read out of the plate builder's own DOM — open the builder,
-   * collect the "Choose your vegetable side" checkboxes — and then matched
-   * against the cards in the Sides & Relishes section. Comparing the two rendered
-   * lists is the point: a hard-coded list here would pass even if the builder
-   * gained a side the section never showed.
+   * The options are read out of the plate builder's own DOM and matched against
+   * the rendered cards, because a hard-coded list here would pass even if the
+   * builder gained a side the section never showed.
    */
   const builderButton = [...arch.doc.querySelectorAll('section button')]
     .find((el) => /Build your plate/i.test(el.textContent ?? ''));
@@ -536,11 +672,6 @@ await step('every vegetable side a plate offers is also on Sides & Relishes', as
   arch.click(builderButton);
   await arch.waitFor(() => arch.dialogs().length > 0, 'plate builder to open', 8000);
 
-  /*
-   * The choices are buttons with role="checkbox", not real inputs — the group is
-   * a fieldset whose legend asks the question. Each row reads "Braised cabbage
-   * Included", so the price note is stripped before comparing.
-   */
   const group = [...arch.doc.querySelectorAll('[role="dialog"] fieldset')]
     .find((el) => /Choose your vegetable side/i.test(el.querySelector('legend')?.textContent ?? ''));
   if (!group) throw new Error('the plate builder has no vegetable-side group');
@@ -549,23 +680,20 @@ await step('every vegetable side a plate offers is also on Sides & Relishes', as
     .filter(Boolean);
   if (options.length < 5) throw new Error(`expected the vegetable sides, saw ${options.length}: ${options.slice(0, 6)}`);
 
-  /* Close it the way a customer does — the sheet's own close control — so the
-     menu is back to its sections for the comparison below. */
   const closeBuilder = [...arch.doc.querySelectorAll('[role="dialog"] button')]
     .find((el) => /close/i.test(el.getAttribute('aria-label') ?? ''));
   if (!closeBuilder) throw new Error('the plate builder has no close control');
   arch.click(closeBuilder);
   await arch.waitFor(() => arch.dialogs().length === 0, 'plate builder to close', 8000);
 
-  const sidesSection = [...arch.doc.querySelectorAll('section')]
-    .find((section) => /Sides & Relishes/i.test(section.querySelector('h2')?.textContent ?? ''));
+  const sidesSection = arch.doc.getElementById('menu-category-sides');
   if (!sidesSection) throw new Error('the Sides & Relishes section is missing');
-  const cards = [...sidesSection.querySelectorAll('[data-coming-soon] article h3')]
+  const cards = [...sidesSection.querySelectorAll('article h3')]
     .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase());
 
   const missing = options.filter((option) => !cards.some((card) => card === option.toLowerCase()));
-  if (missing.length) throw new Error(`sides in the plate builder but not on Sides & Relishes: ${missing.join(', ')}`);
-  return `${options.length} sides in the builder, all ${cards.length} cards on Sides & Relishes match`;
+  if (missing.length) throw new Error(`sides in the plate builder but not sold on Sides & Relishes: ${missing.join(', ')}`);
+  return `${options.length} sides in the builder, all ${cards.length} cards match`;
 });
 
 await step('no plate card carries a bare prep-time figure', async () => {
@@ -661,7 +789,13 @@ await step('clicking a dish opens its detail sheet with the heritage story', asy
   if (!card) throw new Error('no dish card found');
   s1.click(card);
   await s1.waitFor(() => /Every bite tells a story/i.test(s1.text()), 'dish story panel');
-  if (!/mogodu/i.test(s1.text()) || !/mo-GOH-doo/.test(s1.text())) throw new Error('pronunciation not shown');
+  /*
+   * Owner, 17 Nov 2026: "remove Setswana / Sepedi in all meals". The sheet used to
+   * print "/mo-GOH-doo/ · Setswana" under the name — the line the owner struck
+   * along with the local-name teaser on the card.
+   */
+  if (!/Mala-Mogodu/i.test(s1.text())) throw new Error('the dish name is not on its sheet');
+  if (/Setswana|Sepedi/ .test(s1.text())) throw new Error('the removed language label is back on the dish sheet');
   return 'story + pronunciation visible';
 });
 
@@ -700,7 +834,7 @@ await step('choosing required options then adding puts the line in the basket', 
   if (!openBasket) throw new Error('no basket control');
   s1.click(openBasket);
   await s1.waitFor(() => /Your basket/i.test(s1.text()), 'basket drawer');
-  if (!/Mogodu Plate/.test(s1.text())) throw new Error('added item not in basket');
+  if (!/Mala-Mogodu/.test(s1.text())) throw new Error('added item not in basket');
   if (!/Pap/.test(s1.text()) || !/Braised cabbage/.test(s1.text())) {
     throw new Error('chosen starch and side are not carried into the basket line');
   }
@@ -851,22 +985,29 @@ s7.w.fetch = async (input, init) => {
 
 await s7.waitFor(() => /Almost there/i.test(s7.text()), 'checkout page');
 
-await step('the checkout states where the record lives, and never promises an email receipt', async () => {
+await step('the checkout promises no receipt email, and no longer explains its bookkeeping', async () => {
   /*
-   * Email receipts need SMTP configured on the host before a single message can
-   * go out, and the order now finishes in a WhatsApp chat that is its own
-   * record — so the page stopped describing email machinery entirely. What it
-   * must still do is say plainly where the customer's record is, and never
-   * claim an email it cannot send.
+   * Owner, 17 Nov 2026, removing three paragraphs at once: the minimum-order
+   * line, the "No email receipts — your WhatsApp chat is the record" line, and
+   * the two minute estimates on Specials.
+   *
+   * The rule underneath is unchanged and still asserted: the page must never
+   * claim an email it cannot send. What went is the explanation — a customer
+   * mid-checkout does not need to be told about the host's SMTP configuration,
+   * and the minimum order is enforced at the button with its own sentence.
    */
   const text = s7.text();
-  if (/We email your receipt/i.test(s7.text())) {
+  if (/We email your receipt/i.test(text)) {
     throw new Error('the checkout promises a receipt email this server cannot send');
   }
-  if (!/your WhatsApp chat is the record/i.test(text)) {
-    throw new Error('the checkout does not tell the customer where their record actually is');
+  for (const gone of [
+    /No email receipts/i,
+    /your WhatsApp chat is the record/i,
+    /Minimum order R/i,
+  ]) {
+    if (gone.test(text)) throw new Error(`the removed checkout paragraph is back: ${gone}`);
   }
-  return 'no receipt email promised, and the WhatsApp record is stated';
+  return 'no receipt email promised, and the three removed paragraphs stay removed';
 });
 
 await step('the delivery address is one box again, typed the way an address is said', async () => {
@@ -3009,7 +3150,7 @@ const s8 = boot('/menu', {
   },
 });
 
-await s8.waitFor(() => /3 plates/.test(s8.text()), 'the pinned basket bar', 20000);
+await s8.waitFor(() => /3 items/.test(s8.text()), 'the pinned basket bar', 20000);
 
 await step('the basket bar states the one arrangement there is: delivery', async () => {
   /*
@@ -3018,7 +3159,7 @@ await step('the basket bar states the one arrangement there is: delivery', async
    * replaced by a single true sentence, and the check is that no collection
    * wording survives anywhere in the basket.
    */
-  if (!/3 plates · delivery/.test(s8.text())) throw new Error('the bar does not show the plate count and delivery');
+  if (!/3 items · delivery/.test(s8.text())) throw new Error('the bar does not show the item count and delivery');
   /*
    * "Collection" may only survive in the stamp counter ("Stamps collected"),
    * which is a different word doing a different job. What must be gone is the
@@ -3123,11 +3264,11 @@ const RELOAD_CART = {
 };
 
 const s9 = boot('/menu', { seedCart: RELOAD_CART });
-await s9.waitFor(() => /3 plates/.test(s9.text()), 'the basket bar after a reload', 20000);
+await s9.waitFor(() => /3 items/.test(s9.text()), 'the basket bar after a reload', 20000);
 
 await step('a page load still shows the plates that were already picked', async () => {
   /* The saved `collection` cart must read as delivery after the version-3 migration. */
-  if (!/3 plates · delivery/.test(s9.text())) throw new Error(`the bar lost the plates or kept the retired collection mode: ${s9.text().slice(0, 200)}`);
+  if (!/3 items · delivery/.test(s9.text())) throw new Error(`the bar lost the items or kept the retired collection mode: ${s9.text().slice(0, 200)}`);
   if (!/R330/.test(s9.text())) throw new Error(`the bar lost the running total: ${s9.text().slice(0, 200)}`);
 
   const open = [...s9.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));

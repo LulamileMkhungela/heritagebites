@@ -39,5 +39,6 @@ export const useCatalog = create<CatalogState>()((set, get) => ({
     }
   },
 
-  item: (id) => get().data?.menu.find((m) => m.id === id),
+  item: (id) =>
+    get().data?.menu.find((m) => m.id === id) ?? get().data?.sides?.find((m) => m.id === id),
 }));

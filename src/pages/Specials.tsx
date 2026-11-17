@@ -128,8 +128,15 @@ export default function Specials() {
                   ['Minimum order', `${zar(settings.minDeliveryOrder)} for plated meals`],
                   ['Delivery fee', `Included in ${settings.deliveryAreas.join(' and ')}`],
                   ['Furthest we deliver', `${settings.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen`],
-                  ['Preparation', `About ${settings.prepEstimateMins} minutes, cooked to order`],
-                  ['Delivery time', `About ${settings.deliveryEstimateMins} minutes inside the window`],
+                  /*
+                   * "Preparation — About 20 minutes, cooked to order" and "Delivery
+                   * time — About 30 minutes inside the window" were removed on
+                   * 17 Nov 2026. Both were guesses dressed as commitments: the
+                   * kitchen cooks in batches on two days a week, and a per-order
+                   * minute count is a promise it cannot keep on a Thursday run.
+                   * The service window on the same list is the honest answer to
+                   * "when", and it is the one the order is actually held to.
+                   */
                 ].map(([term, value]) => (
                   <div key={term} className="grid gap-1 border-b border-ink/10 pb-2 sm:grid-cols-[10rem_1fr] sm:gap-3">
                     <dt className="font-semibold text-ink">{term}</dt>

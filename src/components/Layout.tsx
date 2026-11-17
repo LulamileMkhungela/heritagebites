@@ -834,7 +834,7 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
                 ))}
               </div>
               <p className="mt-5 text-xs leading-relaxed text-ink/40">
-                Search matches dish names, Setswana and isiZulu names, and ingredients. Press ⏎ to open, or + to add straight to your basket.
+                Search matches dish names, ingredients and what a dish is made of. Press ⏎ to open, or + to add straight to your basket.
               </p>
             </div>
           )}

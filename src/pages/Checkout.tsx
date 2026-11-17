@@ -375,7 +375,6 @@ function LiveCheckout() {
   const measured = geo.status === 'ok' ? { lat: geo.lat, lng: geo.lng } : point;
   const zone = deliveryZoneFor(measured?.lat, measured?.lng, rules);
   const tooFar = zone.zone === 'refused';
-  const surcharge = zone.zone === 'surcharge' ? Number(zone.fee) : 0;
 
   const waBlockedBase = waValidationProblem(customer, fulfilment, settings, addressArea);
   /*
@@ -1001,28 +1000,6 @@ function LiveCheckout() {
                 checkout is off and the customer must be told a link is coming.
               */}
             </div>
-            {/*
-              The delivery facts survive the section they used to live in. The
-              "Delivery" fieldset is gone (owner, 16 Nov 2026 — the details are
-              all one form now), but the minimum order and the fee are money, so
-              they stay as one plain line rather than a heading of their own.
-            */}
-            <p className="mt-3 text-xs leading-relaxed text-ink/50">
-              Minimum order {zar(settings?.minDeliveryOrder ?? 100)}. Delivery included in{' '}
-              {settings?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}
-              {surcharge > 0 ? ` — ${zar(surcharge)} added for your address` : ''}; we deliver up to {rules.maxKm} km
-              from the kitchen.
-            </p>
-
-            {/*
-              One line. Email receipts needed SMTP configured on the host before
-              a single message could go out, and telling a customer about that
-              machinery was noise in the middle of a checkout. The order finishes
-              on WhatsApp, so the record they actually get is that chat.
-            */}
-            <p className="mt-3 text-xs leading-relaxed text-ink/50">
-              No email receipts — your WhatsApp chat is the record of this order, and we send updates there.
-            </p>
           </fieldset>
         </div>
 
