@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 import { zar } from '../lib/format';
-import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
+import { FALLBACK_WHATSAPP } from '../lib/whatsapp';
+import { Button, LoadError, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateGroup, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
@@ -58,6 +59,8 @@ export default function MenuPage() {
    */
   const catalog = useCatalog((s) => s.data);
   const loading = useCatalog((s) => s.loading);
+  const error = useCatalog((s) => s.error);
+  const load = useCatalog((s) => s.load);
   /*
    * The menu is the page most likely to be found from a search for a dish, so it
    * carries a schema.org Menu built from the same plates the customer sees —
@@ -256,6 +259,12 @@ export default function MenuPage() {
     return () => observer.disconnect();
   }, [sections]);
 
+  /*
+   * The failure branch comes first, and it is not a spinner: a request that has
+   * already failed will not finish on its own, so the only honest thing on
+   * screen is what went wrong and a way to try again.
+   */
+  if (error && !catalog) return <LoadError what="the menu" message={error} onRetry={() => void load({ force: true })} whatsapp={FALLBACK_WHATSAPP} />;
   if (loading || !catalog) return <Spinner label="Opening the menu…" />;
 
   /* Expanding a folded section changes the page height, so the scroll waits a

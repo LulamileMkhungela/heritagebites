@@ -52,7 +52,7 @@ const step = (label, fn) =>
     }
   })();
 
-function boot(path, { seedCart } = {}) {
+function boot(path, { seedCart, offline } = {}) {
   const errors = [];
   const vc = new VirtualConsole();
   /*
@@ -85,6 +85,23 @@ function boot(path, { seedCart } = {}) {
   const w = dom.window;
   w.fetch = (input, init) => {
     const url = typeof input === 'string' && input.startsWith('/') ? `${BASE}${input}` : input;
+    /*
+     * `offline: 'fail'` simulates a connection that drops, and `offline: 'hang'`
+     * one that opens and then never answers. Both are real states of a phone,
+     * and both used to leave three pages spinning for ever — the owner's report
+     * on 17 Nov 2026. Only the catalogue request is affected, so the page's own
+     * static assets still load and the assertion is about the API alone.
+     */
+    if (offline && String(url).includes('/api/')) {
+      if (offline === 'fail') return Promise.reject(new TypeError('Failed to fetch'));
+      return new Promise((_, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const e = new w.Error('aborted');
+          e.name = 'AbortError';
+          reject(e);
+        });
+      });
+    }
     return fetch(url, init);
   };
   w.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
@@ -381,6 +398,59 @@ await step('a lone bowl of chakalaka is blocked at checkout by the R100 minimum'
 
   bowl.close();
   return 'the R100 minimum is what stops a lone bowl, not a rule against sides';
+});
+
+await step('a menu that cannot load says so instead of spinning for ever', async () => {
+  /*
+   * Owner, 17 Nov 2026: "why loader loads forever".
+   *
+   * All three catalogue pages branched on `!catalog` with no branch for a failed
+   * request, so a dropped connection left a spinner turning for as long as the
+   * customer was willing to look at it. A spinner is a promise that something is
+   * coming; once the request has failed there is nothing coming.
+   *
+   * The bar to clear is three things: no spinner, a sentence that says what
+   * happened, and a way out that is not "reload the site".
+   */
+  const pages = [
+    ['/menu', /We could not load the menu/i],
+    ['/specials', /We could not load this week/i],
+    ['/policies', /We could not load our policies/i],
+  ];
+  for (const [path, headline] of pages) {
+    const dead = boot(path, { offline: 'fail' });
+    await dead.waitFor(() => headline.test(dead.text()), `an error on ${path} rather than a spinner`, 20000);
+    if (dead.doc.querySelector('.animate-spin')) throw new Error(`${path} still shows a spinner after the request failed`);
+    const retry = [...dead.doc.querySelectorAll('button')].find((b) => /Try again/i.test(b.textContent ?? ''));
+    if (!retry) throw new Error(`${path} offers no way to try again`);
+    const wa = [...dead.doc.querySelectorAll('a[href^="https://wa.me/"]')][0];
+    if (path === '/menu' && !wa) throw new Error('the failed menu has no WhatsApp door for a customer who still needs to order');
+    dead.close();
+  }
+  return 'menu, specials and policies all fail out loud, with a retry';
+});
+
+await step('trying again after a dropped connection actually reloads the catalogue', async () => {
+  /*
+   * A "Try again" that re-renders the same error is worse than none at all: it
+   * tells the customer their tap worked when nothing was asked. The first load is
+   * made to fail, the retry is a real second request, and the page has to end up
+   * rendering the real thing.
+   */
+  const revived = boot('/specials', { offline: 'fail' });
+  await revived.waitFor(() => /We could not load this week/i.test(revived.text()), 'the error state', 20000);
+
+  /* The wire comes back. */
+  revived.w.fetch = (input, init) => {
+    const url = typeof input === 'string' && input.startsWith('/') ? `${BASE}${input}` : input;
+    return fetch(url, init);
+  };
+  const retry = [...revived.doc.querySelectorAll('button')].find((b) => /Try again/i.test(b.textContent ?? ''));
+  revived.click(retry);
+  await revived.waitFor(() => /Cooked Thursdays/i.test(revived.text()), 'the page to load after the retry', 15000);
+  if (revived.doc.querySelector('.animate-spin')) throw new Error('the spinner came back instead of the page');
+  revived.close();
+  return 'one tap re-asks and the page loads';
 });
 
 await step('the checkout door is shut while the basket is under R100, and open once it is not', async () => {

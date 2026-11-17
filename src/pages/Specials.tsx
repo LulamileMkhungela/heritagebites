@@ -1,6 +1,6 @@
 import { useCatalog } from '../store/catalog';
 import { zar } from '../lib/format';
-import { LinkButton, Reveal, SectionLabel, Spinner } from '../components/ui';
+import { LinkButton, LoadError, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { usePageSeo } from '../lib/seo';
 import { waHref } from '../lib/whatsapp';
 import { asset } from '../lib/assets';
@@ -19,7 +19,11 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 export default function Specials() {
   usePageSeo('/specials');
   const catalog = useCatalog((s) => s.data);
+  const error = useCatalog((s) => s.error);
+  const load = useCatalog((s) => s.load);
 
+  /* A failed load is not "loading": say so, and offer the retry. */
+  if (error && !catalog) return <LoadError what="this week's menu" message={error} onRetry={() => void load({ force: true })} />;
   if (!catalog) return <Spinner label="Loading this week…" />;
 
   const { settings, service, plateMenus } = catalog;
