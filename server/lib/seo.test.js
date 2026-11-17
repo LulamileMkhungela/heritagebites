@@ -18,6 +18,7 @@ import {
   PRIVATE_TITLES,
   canonicalUrl,
   documentTitle,
+  faqJsonLd,
   headHtml,
   isPrivatePath,
   jsonLdScript,
@@ -176,9 +177,12 @@ describe('structured data', () => {
     assert.equal(node['@type'], 'Restaurant');
     assert.equal(node.name, 'Heritage Bites');
     assert.equal(node.telephone, '+27670137587');
-    assert.equal(node.servesCuisine, 'South African');
+    /* An array, so the schema can name the cuisine twice: the country and the
+       tradition a searcher actually types. */
+    assert.deepEqual(node.servesCuisine, ['South African', 'African', 'Traditional']);
     assert.equal(node.foundingDate, '2025');
-    assert.deepEqual(node.areaServed.map((a) => a.name), ['Rosebank', 'Sandton']);
+    /* Two suburbs plus the metro they both sit in — never a place we do not serve. */
+    assert.deepEqual(node.areaServed.map((a) => a.name), ['Rosebank', 'Sandton', 'Johannesburg']);
     assert.deepEqual(node.openingHoursSpecification[0].dayOfWeek, ['Thursday', 'Friday']);
     assert.equal(node.openingHoursSpecification[0].opens, '12:00');
     assert.equal(node.openingHoursSpecification[0].closes, '13:30');
@@ -194,8 +198,54 @@ describe('structured data', () => {
       serviceWindow: { open: '11:30', close: '14:00' },
     });
     assert.equal(node.telephone, '+27110001111');
-    assert.deepEqual(node.areaServed.map((a) => a.name), ['Rosebank']);
+    assert.deepEqual(node.areaServed.map((a) => a.name), ['Rosebank', 'Johannesburg']);
     assert.equal(node.openingHoursSpecification[0].opens, '11:30');
+  });
+
+  test('the FAQ answers speak for the kitchen in the customer\'s own questions', () => {
+    /*
+     * This is the one block that can win part of the search result itself, so
+     * the answers have to be the same facts the checkout enforces: the radius,
+     * the two cooking days, the plate prices and the payment methods.
+     */
+    const faq = faqJsonLd(SITE, { deliveryAreas: ['Rosebank', 'Sandton'], maxDeliveryKm: 15, minDeliveryOrder: 100, outsideFee: 30 });
+    assert.equal(faq['@type'], 'FAQPage');
+    const names = faq.mainEntity.map((q) => q.name);
+    assert.ok(names.some((n) => /deliver/i.test(n)), 'no delivery question');
+    assert.ok(names.some((n) => /days/i.test(n)), 'no cooking-day question');
+    assert.ok(names.some((n) => /pay/i.test(n)), 'no payment question');
+    const text = faq.mainEntity.map((q) => q.acceptedAnswer.text).join(' ');
+    assert.match(text, /15 km/);
+    assert.match(text, /Thursdays and Fridays/);
+    assert.match(text, /R100/);
+    /* No FAQ without an address: the node is built from it. */
+    assert.equal(faqJsonLd(null, {}), null);
+  });
+
+  test('the home head carries the FAQ; no other page repeats it', () => {
+    assert.match(headHtml('/', { siteUrl: SITE, settings: { minDeliveryOrder: 100 } }), /"@type":"FAQPage"/);
+    assert.doesNotMatch(headHtml('/menu', { siteUrl: SITE, settings: { minDeliveryOrder: 100 } }), /FAQPage/);
+  });
+
+  test('the restaurant names the metro as well as the suburbs, and nothing further', () => {
+    const node = restaurantJsonLd(SITE, { deliveryAreas: ['Rosebank', 'Sandton'] });
+    const names = node.areaServed.map((a) => a.name);
+    assert.ok(names.includes('Johannesburg'));
+    /* A shop configured elsewhere must not inherit Johannesburg. */
+    const pretoria = restaurantJsonLd(SITE, { deliveryAreas: ['Menlyn', 'Hatfield'] });
+    assert.ok(!pretoria.areaServed.map((a) => a.name).includes('Johannesburg'));
+  });
+
+  test('the offer catalog prices both plates and states the minimum order', () => {
+    const node = restaurantJsonLd(SITE, { minDeliveryOrder: 100 });
+    const offers = node.hasOfferCatalog.itemListElement;
+    assert.deepEqual(offers.map((o) => o.price), ['100.00', '130.00']);
+    assert.equal(offers[0].priceCurrency, 'ZAR');
+    assert.equal(offers[0].eligibleQuantity.minValue, 100);
+    assert.equal(node.potentialAction.target, `${SITE}/checkout`);
+    /* And the words a customer types are in there, without inventing a place. */
+    assert.match(node.keywords, /mogodu/);
+    assert.doesNotMatch(node.keywords, /Pretoria|Cape Town/);
   });
 
   test('the website node names the same publisher as the restaurant', () => {
@@ -248,7 +298,7 @@ describe('the head served for a route', () => {
   test('carries that route title, description, canonical and open graph', () => {
     const html = headHtml('/menu', { siteUrl: SITE });
     assert.match(html, /<title>The Menu &amp; Prices — Heritage Bites<\/title>/);
-    assert.match(html, /<meta name="description" content="Every plate on the Heritage Bites menu/);
+    assert.match(html, /<meta name="description" content="The full Heritage Bites menu and prices/);
     assert.match(html, new RegExp(`<link rel="canonical" href="${SITE}/menu" />`));
     assert.match(html, new RegExp(`<meta property="og:url" content="${SITE}/menu" />`));
     assert.match(html, new RegExp(`<meta property="og:image" content="${SITE}/img/social-card.jpg" />`));

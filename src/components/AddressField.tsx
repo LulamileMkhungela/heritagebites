@@ -7,25 +7,42 @@ import type { Settings } from '../lib/types';
 /**
  * The delivery address box.
  *
- * Two jobs, and they are related:
+ * Owner, 17 Nov 2026: "i think the enter address was fine because it pulls what
+ * you typed and street number, bring back the entering of location as it was."
  *
- *   1. Suggest addresses as the customer types (OpenStreetMap via Photon, see
- *      `src/lib/address.ts`), and autofill the suburb when the picked address
- *      belongs to one the kitchen delivers to.
- *   2. Check the address against the delivery area the customer chose. An
- *      address that names the *other* one of the two included suburbs is a hard
- *      error — the kitchen would be sent outside the boundary the customer
- *      believes they ordered inside. "Other — outside Sandton & Rosebank" is
- *      never a contradiction; the distance check prices that order instead. And
- *      an address that names no area at all only warrants a "check the suburb"
+ * That reverses the three separate boxes (house number / street / suburb) that
+ * shipped a day earlier. The owner's reason is worth recording, because the three
+ * boxes were not wrong about the data — they were wrong about the typing: one box
+ * lets a customer type "12 Oxford Road, Illovo" exactly as they would say it and
+ * get the street *and the number* back from the map in one tap, while three boxes
+ * made them split an address they think of as one thing and fill the number
+ * themselves. The single box is the one that was there before, brought back.
+ *
+ * It keeps every improvement made since, so nothing regresses:
+ *
+ *   - the house number is put back onto a result when the map only matched the
+ *     street (see `applyHouseHint` in `shared/address.js`), which is what "it
+ *     pulls what you typed and street number" asks for;
+ *   - results carry their suburb, so picking one moves the delivery area and the
+ *     order is priced from the map's coordinates, not from a guess at spelling;
+ *   - the free-text address is still what the order stores, the WhatsApp message
+ *     carries and the tracking page shows.
+ *
+ * Two checks live here, because they belong to the address rather than the form:
+ *
+ *   1. An address that names the *other* one of the two included suburbs is a hard
+ *      error — the kitchen would be sent outside the boundary the customer believes
+ *      they ordered inside. "Another area — within 15 km" is never a contradiction;
+ *      the distance check prices that order instead.
+ *   2. An address that names no area at all only warrants a "check the suburb"
  *      note, because plenty of real addresses are just a street and a number.
  *
- * The combobox is hand-built rather than a `<datalist>`: datalist gives no
- * control over the second line of each suggestion, cannot say which suburb a
- * result belongs to, and behaves differently in every browser.
+ * The combobox is hand-built rather than a `<datalist>`: datalist gives no control
+ * over the second line of each suggestion, cannot say which suburb a result
+ * belongs to, and behaves differently in every browser.
  *
- * Suggestions are an assist: with no network the input is a plain text box and
- * the checkout still works.
+ * Suggestions are an assist: with no network the input is a plain text box and the
+ * checkout still works.
  */
 export function AddressField({
   address,
@@ -36,8 +53,12 @@ export function AddressField({
   note,
   onChange,
   onPick,
+  /** True while the location button is filling this box, so it says so. */
+  locating = false,
 }: {
+  /** The whole address, exactly as the customer typed it. */
   address: string;
+  /** The delivery area the order is priced against — the select beside this box. */
   area: string;
   settings?: Settings | null;
   /** Area the picked suggestion belongs to, so the parent can validate with it. */
@@ -46,6 +67,7 @@ export function AddressField({
   note?: string;
   onChange: (value: string) => void;
   onPick: (suggestion: AddressSuggestion) => void;
+  locating?: boolean;
 }) {
   const listId = useId();
   /* The reach the suggestions are cut at, from the same settings the server prices with. */
@@ -67,6 +89,14 @@ export function AddressField({
    *     bandwidth.
    */
   useEffect(() => {
+    /*
+     * The whole line is sent — house number and all — because that is the point of
+     * one box: "173 Oxford Road" is what the customer typed, and `suggestAddresses`
+     * already retries without the number when the map answers that query badly,
+     * then puts the number back onto the result. Sending only the street (as the
+     * three-box version had to) threw away the number the customer had already
+     * given us.
+     */
     const q = address.trim();
     if (!open || q.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
@@ -82,7 +112,7 @@ export function AddressField({
       /*
        * Deliberately *not* narrowed to the selected area.
        *
-       * The checkout now opens with Rosebank already selected, and filtering the
+       * The checkout opens with Rosebank already selected, and filtering the
        * geocoder by that choice would leave a Sandton customer typing a real
        * Sandton street into an empty list — the one outcome worse than the
        * "Choose an area" select this replaced. The whole delivery radius is
@@ -147,7 +177,14 @@ export function AddressField({
 
   return (
     <div className="relative">
-      <Field label="Delivery address" error={shownError} hint="house number, street and suburb — then pick it from the list">
+      {/*
+        No hint under the label (owner, 17 Nov 2026: remove "pick it from the list
+        so we can check the distance"). The placeholder shows the shape of an
+        address, the list opens as soon as the box is focused, and the footer of
+        that list says what it is and how far it reaches — a sentence repeating all
+        three was noise above the first field a customer has to fill in.
+      */}
+      <Field label="Delivery address" error={shownError}>
         <input
           ref={inputRef}
           className={inputCls}
@@ -160,7 +197,7 @@ export function AddressField({
           /* A short delay lets a suggestion's mousedown land before the list closes. */
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
           onKeyDown={onKeyDown}
-          placeholder="12 Oxford Road, Illovo, Sandton"
+          placeholder={locating ? 'Finding your address…' : '12 Oxford Road, Illovo, Sandton'}
           autoComplete="off"
           role="combobox"
           aria-expanded={open && suggestions.length > 0}
@@ -199,6 +236,7 @@ export function AddressField({
                     <circle cx="12" cy="10" r="2.5" />
                   </svg>
                   <span className="min-w-0">
+                    {/* The whole line, with the house number the customer typed. */}
                     <span className="block truncate font-medium">{suggestion.line}</span>
                     <span className="block truncate text-[12px] text-ink/50">
                       {suggestion.detail}

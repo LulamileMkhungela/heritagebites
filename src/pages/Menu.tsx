@@ -3,10 +3,12 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useCatalog } from '../store/catalog';
 import { useCart } from '../store/cart';
 import { zar } from '../lib/format';
-import { Button, Reveal, SectionLabel, Spinner } from '../components/ui';
+import { FALLBACK_WHATSAPP } from '../lib/whatsapp';
+import { Button, LoadError, Reveal, SectionLabel, Spinner } from '../components/ui';
 import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateGroup, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
+import { DELIVERY_ZONES } from '../../shared/address.js';
 import { extraCost, maxPerExtra } from '../../shared/service.js';
 import { currentSiteUrl, usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
@@ -24,7 +26,14 @@ const SORTS = [
   { id: 'recommended', label: 'Recommended' },
   { id: 'price-asc', label: 'Price: low to high' },
   { id: 'price-desc', label: 'Price: high to low' },
-  { id: 'quickest', label: 'Quickest first' },
+  /*
+   * "Quickest first" sorted on a per-plate prep time the page no longer shows —
+   * the number behind it read "20′" on a card, which the owner called out as
+   * confusing, and the kitchen cooks in batches on two days a week, so a
+   * per-plate minute count was never a real answer about when food arrives.
+   * A sort option with no visible number behind it would be a control that
+   * silently reorders the menu for no reason the customer can see.
+   */
 ] as const;
 
 type SortId = (typeof SORTS)[number]['id'];
@@ -36,8 +45,6 @@ function sortItems(items: MenuItem[], sort: SortId): MenuItem[] {
       return copy.sort((a, b) => a.price - b.price || a.name.localeCompare(b.name));
     case 'price-desc':
       return copy.sort((a, b) => b.price - a.price || a.name.localeCompare(b.name));
-    case 'quickest':
-      return copy.sort((a, b) => a.prepMins - b.prepMins || a.price - b.price);
     default:
       /* The kitchen's own order: the plates it sells most sit first. */
       return copy.sort((a, b) => (b.orders ?? 0) - (a.orders ?? 0));
@@ -52,6 +59,8 @@ export default function MenuPage() {
    */
   const catalog = useCatalog((s) => s.data);
   const loading = useCatalog((s) => s.loading);
+  const error = useCatalog((s) => s.error);
+  const load = useCatalog((s) => s.load);
   /*
    * The menu is the page most likely to be found from a search for a dish, so it
    * carries a schema.org Menu built from the same plates the customer sees —
@@ -62,6 +71,33 @@ export default function MenuPage() {
   const [modal, setModal] = useState<MenuItem | null>(null);
   const [activeCategory, setActiveCategory] = useState('');
   const [sort, setSort] = useState<SortId>('recommended');
+  /*
+   * List or grid.
+   *
+   * Owner, 17 Nov 2026: "the meals listview must have a listview and gridview …
+   * next to sort to have the view which is listview/gridview". Grid is the
+   * default because it is what the page has always been; list is the mode for
+   * somebody comparing prices, where four cards across a desk phone is one word
+   * of description each and no way to read two dishes against each other.
+   *
+   * Remembered in localStorage so a customer who prefers list gets list next
+   * time. Keyed to the browser, not the account — there is no account.
+   */
+  const [view, setView] = useState<'grid' | 'list'>(() => {
+    try {
+      return window.localStorage.getItem('hb.menuView') === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+  const chooseView = (next: 'grid' | 'list') => {
+    setView(next);
+    try {
+      window.localStorage.setItem('hb.menuView', next);
+    } catch {
+      /* Private mode can refuse storage; the choice still holds for this visit. */
+    }
+  };
   const [q, setQ] = useState('');
   const [builder, setBuilder] = useState<PlateMenu | null>(null);
   /*
@@ -132,9 +168,19 @@ export default function MenuPage() {
     if (!catalog) return [];
     const term = q.trim().toLowerCase();
 
+    /*
+     * Which list a category's dishes come from.
+     *
+     * Sides are their own products (see `sides` in the seed) rather than cards
+     * inside `menu`, so a category id has to say where to look. Everything else
+     * is a plate.
+     */
+    const poolFor = (categoryId: string) =>
+      (categoryId === 'sides' ? catalog.sides ?? [] : catalog.menu);
+
     const live: Section[] = catalog.categories
       .map((category) => {
-        let items = catalog.menu.filter((item) => item.category === category.id);
+        let items = poolFor(category.id).filter((item) => item.category === category.id);
         if (term) {
           items = items.filter((item) =>
             `${item.name} ${item.localName} ${item.language} ${item.description}`.toLowerCase().includes(term),
@@ -213,6 +259,12 @@ export default function MenuPage() {
     return () => observer.disconnect();
   }, [sections]);
 
+  /*
+   * The failure branch comes first, and it is not a spinner: a request that has
+   * already failed will not finish on its own, so the only honest thing on
+   * screen is what went wrong and a way to try again.
+   */
+  if (error && !catalog) return <LoadError what="the menu" message={error} onRetry={() => void load({ force: true })} whatsapp={FALLBACK_WHATSAPP} />;
   if (loading || !catalog) return <Spinner label="Opening the menu…" />;
 
   /* Expanding a folded section changes the page height, so the scroll waits a
@@ -239,8 +291,8 @@ export default function MenuPage() {
             which stops being true as soon as one plate is priced differently.
           */}
           <p className="mt-4 max-w-2xl text-bone/70">
-            Two plate menus, each at a fixed price. Choose a protein, a starch and a vegetable side, and delivery is
-            included.
+            Two plate menus, each at a fixed price. Choose a protein, then as many starches and vegetable sides as you
+            like, and delivery is included.
             {catalog.plateMenus.length > 0 && (
               <>
                 {' '}
@@ -294,40 +346,56 @@ export default function MenuPage() {
       {/* Category navigation stays visible and follows the section being read. */}
       <div className="sticky top-[var(--hb-header)] z-30 border-b-2 border-ink/10 bg-bone/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 py-3">
-          <nav className="no-scrollbar flex gap-2 overflow-x-auto" aria-label="Meal categories">
-            {sections.map((section) => (
-              <CatChip
-                key={section.id}
-                active={activeCategory === section.id}
-                onClick={() => scrollToCategory(section.id)}
-                label={section.name}
-                count={section.items.length}
-                soon={section.archived}
-              />
-            ))}
-          </nav>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {/* Sort sits on this line beside the search box: it is the only
-                control left here now that the filter chips are gone. */}
-            <label className="flex min-h-11 items-center gap-2 text-xs text-ink/55">
-              <span className="sr-only">Sort meals</span>
-              <span aria-hidden="true" className="hidden uppercase tracking-wide sm:inline">Sort</span>
-              <select
-                value={sort}
-                onChange={(event) => setSort(event.target.value as SortId)}
-                className="min-h-11 rounded-full border-2 border-ink/12 bg-white px-3 py-1.5 text-xs font-semibold text-ink outline-none focus:border-ochre"
-                aria-label="Sort meals"
-              >
-                {SORTS.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-            </label>
+          {/*
+            One line, and the order on it is the owner's (17 Nov 2026): "the sort
+            must be far to the right whilst inline with food categories and next
+            to sort to have the view which is listview/gridview".
+
+            So the categories scroll on the left, and the two view controls are
+            pinned to the right end of the same row. They were on a second row
+            under the chips, which on a phone put the only two controls on the
+            page below the fold of the sticky bar.
+
+            On a phone the controls stay in the row and the chips keep their own
+            horizontal scroll, so neither pushes the other off screen.
+          */}
+          <div className="flex items-center gap-3">
+            <nav className="no-scrollbar -mx-1 flex min-w-0 flex-1 gap-2 overflow-x-auto px-1" aria-label="Meal categories">
+              {sections.map((section) => (
+                <CatChip
+                  key={section.id}
+                  active={activeCategory === section.id}
+                  onClick={() => scrollToCategory(section.id)}
+                  label={section.name}
+                  count={section.items.length}
+                  soon={section.archived}
+                />
+              ))}
+            </nav>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <label className="flex min-h-11 items-center gap-2 text-xs text-ink/55">
+                <span className="sr-only">Sort meals</span>
+                <span aria-hidden="true" className="hidden uppercase tracking-wide lg:inline">Sort</span>
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as SortId)}
+                  className="min-h-11 max-w-[9.5rem] rounded-full border-2 border-ink/12 bg-white px-3 py-1.5 text-xs font-semibold text-ink outline-none focus:border-ochre"
+                  aria-label="Sort meals"
+                >
+                  {SORTS.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <ViewToggle value={view} onChange={chooseView} />
+            </div>
+          </div>
+          <div className="mt-2">
             <input
               value={q}
               onChange={(event) => setQ(event.target.value)}
               placeholder="Search meals…"
-              className="min-h-11 w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre sm:w-auto"
+              className="min-h-11 w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre"
               aria-label="Search meals"
             />
           </div>
@@ -344,9 +412,15 @@ export default function MenuPage() {
         ) : sections.map((section) => {
           const open = !closed[section.id];
           const count = section.items.length;
+          /*
+           * The word follows the section. A bowl of salsa is not a plate, and
+           * "Sides & Relishes · 10 plates" would be the page miscounting itself.
+           */
           const countLabel = section.archived
             ? count === 1 ? 'dish' : 'dishes'
-            : count === 1 ? 'plate' : 'plates';
+            : section.id === 'sides'
+              ? count === 1 ? 'side' : 'sides'
+              : count === 1 ? 'plate' : 'plates';
           return (
           <section
             key={section.id}
@@ -421,10 +495,22 @@ export default function MenuPage() {
                   ))}
                 </ul>
               ) : (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                /*
+                 * One list, two shapes. `view` is the customer's choice and the
+                 * same card component renders either way, so a dish can never
+                 * show one price in the grid and another in the list.
+                 */
+                <div
+                  data-view={view}
+                  className={
+                    view === 'grid'
+                      ? 'grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                      : 'grid gap-4'
+                  }
+                >
                   {section.items.map((item, index) => (
                     <Reveal key={item.id} delay={Math.min(index, 5) * 50}>
-                      <MealCard item={item} onOpen={() => setModal(item)} />
+                      <MealCard item={item} onOpen={() => setModal(item)} layout={view} />
                     </Reveal>
                   ))}
                 </div>
@@ -456,10 +542,9 @@ export default function MenuPage() {
         <section className="mx-auto mt-14 max-w-7xl px-4 pb-4">
           <div className="rounded-3xl border-2 border-ink/10 bg-white p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
             <p className="max-w-2xl text-sm leading-relaxed text-ink/70">
-              Every plate is cooked on a Thursday or a Friday between{' '}
-              {catalog?.settings?.serviceWindow.open ?? '12:00'} and{' '}
-              {catalog?.settings?.serviceWindow.close ?? '13:30'}. Collect and you pay the plate price; we deliver in{' '}
-              {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} for a flat fee.{' '}
+              Every plate is cooked on a Thursday or a Friday, and any cooking day ahead can be booked. Delivery is
+              included in {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} and up to{' '}
+              {catalog?.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen.{' '}
               <Link to="/specials" className="font-semibold text-ochre-deep underline">
                 How delivery and collection work
               </Link>
@@ -478,6 +563,57 @@ export default function MenuPage() {
       {modal && <ItemModal item={modal} onClose={closeDish} />}
       {builder && <PlateBuilder plate={builder} onClose={closeBuilder} />}
     </>
+  );
+}
+
+/**
+ * Grid or list.
+ *
+ * Two icon buttons in a pill, not a select: there are two states, both are
+ * always visible, and the pressed one is filled — so what the page is currently
+ * doing is legible without opening anything. `aria-pressed` carries the state for
+ * a screen reader, and each button names the view it switches *to*, which is what
+ * a customer is choosing.
+ *
+ * Owner, 17 Nov 2026: "next to sort to have the view which is listview/gridview".
+ */
+function ViewToggle({ value, onChange }: { value: 'grid' | 'list'; onChange: (next: 'grid' | 'list') => void }) {
+  const icon = (kind: 'grid' | 'list') =>
+    kind === 'grid' ? (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+        <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+        <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+        <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+        <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+      </svg>
+    ) : (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+        <rect x="3" y="4" width="4.5" height="4.5" rx="1" />
+        <rect x="9.5" y="4" width="11.5" height="4.5" rx="1" />
+        <rect x="3" y="11" width="4.5" height="4.5" rx="1" />
+        <rect x="9.5" y="11" width="11.5" height="4.5" rx="1" />
+        <rect x="3" y="18" width="4.5" height="3" rx="1" />
+        <rect x="9.5" y="18" width="11.5" height="3" rx="1" />
+      </svg>
+    );
+
+  return (
+    <div className="inline-flex items-center rounded-full border-2 border-ink/12 bg-white p-0.5" role="group" aria-label="View meals as">
+      {(['grid', 'list'] as const).map((kind) => (
+        <button
+          key={kind}
+          type="button"
+          onClick={() => onChange(kind)}
+          aria-pressed={value === kind}
+          aria-label={kind === 'grid' ? 'Show meals as a grid' : 'Show meals as a list'}
+          /* 44px, not 40: this is a thumb control on a phone, and the mobile
+             audit treats anything under 44 as a miss. */
+          className={`grid h-11 w-11 place-items-center rounded-full transition-colors ${value === kind ? 'bg-ink text-bone' : 'text-ink/50 hover:text-ink'}`}
+        >
+          {icon(kind)}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -528,12 +664,22 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
         <span className="absolute left-3 top-3 rounded-full bg-ink/85 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-bone">
           Coming soon
         </span>
-        <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">{zar(item.price)}</span>
+        {/*
+          Only when there is a price. A vegetable side has none of its own — it
+          is included *inside* the plate — and "R0,00" would be a price, wrongly
+          stated. The line under the description says where it comes from
+          instead, as a short uppercase label so it reads at a glance.
+        */}
+        {item.price > 0 && (
+          <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">{zar(item.price)}</span>
+        )}
       </div>
       <div className="flex flex-1 flex-col p-4">
         <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
         <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>
-        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-ink/40">Not on sale yet</p>
+        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-ink/40">
+          {item.price > 0 ? 'Not on sale yet' : 'Included in a plate'}
+        </p>
       </div>
     </article>
   );
@@ -681,6 +827,19 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
               <fieldset key={g.id}>
                 <legend className="mb-2 text-sm font-semibold">
                   {g.label} {g.required ? <span className="text-ochre-deep">*</span> : null}
+                  {/*
+                    Say that more than one is allowed. The rule has always been
+                    there — `max` is 3 for starch and vegetable side — but a group
+                    of rows that look like radio buttons is read as "pick one"
+                    whatever the code does, so the owner reasonably reported that
+                    multi-select could not be seen. This is the label that makes
+                    the rule visible before anything is tapped.
+                  */}
+                  {!g.priced && Number(g.max) > 1 && (
+                    <span className="ml-2 text-xs font-normal text-ink/45">
+                      pick up to {Number(g.max)}
+                    </span>
+                  )}
                 </legend>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {g.items.map((it) => {

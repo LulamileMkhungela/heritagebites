@@ -10,6 +10,7 @@ import {
   breadcrumbJsonLd,
   canonicalUrl,
   documentTitle,
+  faqJsonLd,
   jsonLdScript,
   normaliseSiteUrl,
   pageMeta,
@@ -201,6 +202,9 @@ export function usePageSeo(path: string, options: PageSeoOptions = {}) {
     if (siteUrl) {
       nodes.push(restaurantJsonLd(siteUrl, settings ?? {}), websiteJsonLd(siteUrl));
       if (path !== '/') nodes.push(breadcrumbJsonLd(siteUrl, path, ownTitle));
+      /* The same five answers the server writes into the home page's head, so a
+         crawler that runs the app sees what one that does not already saw. */
+      if (pageMeta(path).path === '/') nodes.push(faqJsonLd(siteUrl, settings ?? {}));
     }
     for (const extra of Array.isArray(jsonLd) ? jsonLd : [jsonLd]) if (extra) nodes.push(extra);
 

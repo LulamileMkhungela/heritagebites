@@ -134,8 +134,25 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
    * plates and names the address; the kitchen adds any out-of-area fee on the
    * quote it confirms in this same chat.
    */
-  parts.push(`Plates: ${zar(subtotal)} (${count} plate${count === 1 ? '' : 's'})`);
-  parts.push(`I would like it delivered${opts.customer?.suburb ? ` in ${opts.customer.suburb}` : ''}.`);
+  /*
+   * "Items", not "plates": a basket can hold a bowl of chakalaka on its own now
+   * (owner, 17 Nov 2026 — the sides are sold by the portion), and a WhatsApp
+   * message that calls one bowl "1 plate" is the order misdescribed to the kitchen
+   * that has to pack it.
+   */
+  parts.push(`Items: ${zar(subtotal)} (${count} item${count === 1 ? '' : 's'})`);
+  /*
+   * The suburb, when it is a real one.
+   *
+   * The select's third option is the label "Another area — within 15 km", which
+   * is a rule, not a place: "I would like it delivered in Another area — within
+   * 15 km" is nonsense in a chat, and the full address is on its own line
+   * directly below anyway. So the option is skipped and the sentence stays a
+   * sentence.
+   */
+  const area = String(opts.customer?.suburb ?? '').trim();
+  const outsideChoice = /^another area/i.test(area) || /^other\b/i.test(area);
+  parts.push(`I would like it delivered${area && !outsideChoice ? ` in ${area}` : ''}.`);
 
   const name = opts.customer?.name?.trim();
   const phone = opts.customer?.phone?.trim();

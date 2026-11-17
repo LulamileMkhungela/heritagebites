@@ -13,7 +13,7 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 10;
+export const SEED_VERSION = 12;
 
 const img = (name) => `/img/${name}.jpg`;
 const PLACEHOLDER = '/img/plate-placeholder.svg';
@@ -247,11 +247,128 @@ export const categories = [
     blurb: 'Mash, savoury rice, baby potatoes, cous cous or garlic bread with wings, short rib or lamb stew.',
     accent: 'clay',
   },
+  /*
+   * Sides and relishes, sold by the portion.
+   *
+   * A category of their own, not a shelf inside a plate category: they are the
+   * one thing on the menu that is not a plate, and somebody looking for "just
+   * some chakalaka" should not have to open a plate builder to find it.
+   */
+  {
+    id: 'sides',
+    name: 'Sides & Relishes',
+    tagline: 'The things that make the plate',
+    blurb: 'Every vegetable side you can choose inside a plate, now sold by the bowl as well — braised cabbage, spinach, morogo, salsa, chakalaka, atchaar and green salad, plus corn ribs and glazed carrots.',
+    accent: 'sky',
+  },
 ];
 
 /* --------------------------------------------------------------------- */
 /* Coming soon — the kitchen archive                                      */
 /* --------------------------------------------------------------------- */
+
+/**
+ * Every vegetable side either kitchen offers, once each, in menu order.
+ *
+ * The traditional list first, then anything only the contemporary kitchen has —
+ * corn ribs and glazed carrots. Order matters for the card, not for the rule:
+ * the first occurrence wins, so a side shared by both plates keeps its
+ * traditional position and does not appear twice.
+ */
+function uniqueSides() {
+  const seen = new Set();
+  return [...traditionalSides, ...contemporarySides].filter((side) => {
+    if (seen.has(side.id)) return false;
+    seen.add(side.id);
+    return true;
+  });
+}
+
+/*
+ * What a vegetable side card shows, and the photograph behind it.
+ *
+ * Owner, 17 Nov 2026: "on Sides & Relishes use correct real images". Until now
+ * this borrowed whatever picture was nearest — spinach showed samp and beans,
+ * salsa showed chakalaka, glazed carrots showed pap — because the sides had never
+ * been sold on their own. Now that each is a card a customer taps and adds, the
+ * picture has to be the food in the name, so every side has its own file.
+ *
+ * Every name here must exist in `public/img/`. A side pointing at a photograph
+ * the site does not ship is a 404 on the published page (the static-pages test
+ * catches it), so the map is kept to files that are actually there rather than
+ * to the name of the side.
+ */
+function sideImage(id) {
+  return img(
+    {
+      chakalaka: 'chakalaka',
+      atchaar: 'atchaar',
+      'braised-cabbage': 'side-braised-cabbage',
+      spinach: 'side-spinach',
+      morogo: 'side-morogo',
+      salsa: 'side-salsa',
+      'green-salad': 'side-green-salad',
+      'corn-ribs': 'side-corn-ribs',
+      'glazed-carrots': 'side-glazed-carrots',
+    }[id] ?? 'chakalaka',
+  );
+}
+
+/**
+ * The sides, sold on their own.
+ *
+ * Owner, 17 Nov 2026: "some sides & relishes must have prices and details when
+ * clicked" and, when asked whether a side can actually be bought: "they can add
+ * to cart but be unable to checkout if items are less than 100".
+ *
+ * So a side is a real product: its own price, its own portion sentence, its own
+ * photograph, addable to the basket. The R100 minimum is what stops somebody
+ * ordering one R30 bowl of chakalaka on its own — the same gate a small order
+ * already meets, not a special rule for sides.
+ *
+ * PRICE IS A GUESS — the owner has the number. R30 a portion is the placeholder,
+ * and every surface reads this one constant, so one edit moves the menu, the
+ * basket and the till together.
+ *
+ * "Inside a plate" is a different thing and stays true: every side here is also
+ * chosen *within* the R100/R130 plate, where it costs nothing extra. The card
+ * says both, in that order, because the price is for the bowl.
+ */
+const SIDE_PORTION_PRICE = 30;
+
+/** How much one portion is, in the words a customer would ask for it. */
+function sidePortion(id) {
+  return (
+    {
+      'braised-cabbage': 'One bowl, enough for two beside a plate.',
+      spinach: 'One bowl, enough for two beside a plate.',
+      morogo: 'One bowl, enough for two beside a plate.',
+      salsa: 'One small bowl, served cold.',
+      chakalaka: 'One bowl, enough for two beside a plate.',
+      atchaar: 'One small bowl — a spoonful goes a long way.',
+      'green-salad': 'One bowl, enough for two beside a plate.',
+      'corn-ribs': 'Four ribs, grilled to order.',
+      'glazed-carrots': 'One bowl, enough for two beside a plate.',
+    }[id] ?? 'One bowl, to share beside a plate.'
+  );
+}
+
+/** One honest line per side — what it is, not a marketing claim. */
+function sideBlurb(id) {
+  return (
+    {
+      'braised-cabbage': 'Cabbage braised slowly with onion until it is sweet and soft.',
+      spinach: 'Spinach wilted down with a little onion and seasoning.',
+      morogo: 'Wild African greens, cooked the traditional way.',
+      salsa: 'Fresh tomato and onion salsa, chopped and served cold.',
+      chakalaka: 'Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.',
+      atchaar: 'Tangy mango atchaar, made in the kitchen and spooned over the plate.',
+      'green-salad': 'Crisp lettuce, cucumber and tomato with a light dressing.',
+      'corn-ribs': 'Sweetcorn ribs, cut and grilled until the kernels caramelise.',
+      'glazed-carrots': 'Carrots roasted and glazed until they shine.',
+    }[id] ?? 'One of the vegetable sides you can choose inside a plate.'
+  );
+}
 
 /*
  * The categories the site carried before the owner signed off the two-tier
@@ -367,32 +484,12 @@ export const comingSoon = [
       // { id: 'archive-breakfast-plate', name: 'Heritage Breakfast Plate', image: img('magwinya'), status: 'coming-soon' },
     ],
   },
-  {
-    id: 'sides-relishes',
-    name: 'Sides & Relishes',
-    tagline: 'The things that make the plate',
-    blurb: 'Chakalaka, atchaar and stywe pap — the supporting cast that steals the show.',
-    accent: 'sky',
-    items: [
-      {
-        id: 'archive-chakalaka', name: 'Chakalaka', price: 35, image: img('chakalaka'),
-        description: 'Spicy carrot, bean and pepper relish, cooked down until it is sweet and hot.',
-        status: 'coming-soon',
-      },
-      {
-        id: 'archive-atchaar', name: 'Atchaar', price: 30, image: img('atchaar'),
-        description: 'Tangy mango atchaar, made in the kitchen and spooned over the plate.',
-        status: 'coming-soon',
-      },
-      {
-        id: 'archive-stywe-pap', name: 'Stywe Pap', price: 30, image: img('pap-cabbage'),
-        description: 'Stiff maize pap, the traditional partner to a braai or a pot of mogodu.',
-        status: 'coming-soon',
-      },
-      // Braised cabbage was photographed as chakalaka, so it waits for a photo.
-      // { id: 'archive-braised-cabbage', name: 'Braised Cabbage', image: img('chakalaka'), status: 'coming-soon' },
-    ],
-  },
+  /*
+   * Sides & Relishes used to be a coming-soon section here — cards with no price
+   * and borrowed photographs. It is a sellable category now (see `sides` below),
+   * because a customer can add a bowl to the basket, and nothing in a
+   * coming-soon section can be sold.
+   */
   /*
    * Cold & Warm (mageu, amasi, rooibos, ginger beer) is left out entirely.
    *
@@ -439,10 +536,10 @@ export const menu = [
   {
     id: 'mogodu-plate',
     plateId: 'traditional',
-    name: 'Mogodu Plate',
-    localName: 'Mogodu',
-    language: 'Setswana / Sepedi',
-    pronunciation: 'mo-GOH-doo',
+    name: 'Mala-Mogodu',
+    localName: '',
+    language: '',
+    pronunciation: '',
     category: 'traditional',
     price: 100,
     image: img('plate-mogodu'),
@@ -461,10 +558,10 @@ export const menu = [
   {
     id: 'tshotlo-plate',
     plateId: 'traditional',
-    name: 'Tshotlo Plate',
-    localName: 'Tshotlo',
-    language: 'Setswana',
-    pronunciation: 'CHOH-tloh',
+    name: 'Tshotlo',
+    localName: '',
+    language: '',
+    pronunciation: '',
     category: 'traditional',
     price: 100,
     image: img('plate-tshotlo'),
@@ -483,8 +580,8 @@ export const menu = [
   {
     id: 'chicken-hardbody-plate',
     plateId: 'traditional',
-    name: 'Chicken Hardbody Plate',
-    localName: 'Hardbody',
+    name: 'Chicken Hardbody',
+    localName: '',
     language: '',
     pronunciation: '',
     category: 'traditional',
@@ -504,10 +601,10 @@ export const menu = [
   {
     id: 'tlhakwana-plate',
     plateId: 'traditional',
-    name: 'Tlhakwana Plate',
-    localName: 'Tlhakwana',
-    language: 'Setswana',
-    pronunciation: 'tla-KWAH-na',
+    name: 'Tlhakwana',
+    localName: '',
+    language: '',
+    pronunciation: '',
     category: 'traditional',
     price: 100,
     image: PLACEHOLDER,
@@ -526,8 +623,8 @@ export const menu = [
   {
     id: 'smiley-plate',
     plateId: 'traditional',
-    name: 'Smiley Plate',
-    localName: 'Smiley',
+    name: 'Smiley',
+    localName: '',
     language: '',
     pronunciation: '',
     category: 'traditional',
@@ -613,6 +710,77 @@ export const menu = [
 ];
 
 /* --------------------------------------------------------------------- */
+/* Sides, sold by the portion                                             */
+/* --------------------------------------------------------------------- */
+
+/**
+ * The sides, as products.
+ *
+ * Same ids as the choices inside a plate (`braised-cabbage`, `chakalaka` …), on
+ * purpose: the bowl of chakalaka added here and the chakalaka ticked inside a
+ * plate are the same food, so matching ids mean the menu, the basket, the kitchen
+ * printout and any test can prove they agree instead of guessing.
+ *
+ * `options: []` — a side has nothing to configure. A plate does, which is why the
+ * plate builders exist; "which starch with your salsa" would be absurd.
+ *
+ * `story` is empty on purpose. A bowl of cabbage does not need a heritage
+ * paragraph, and inventing one would be filler on a page whose claim is that the
+ * words are true.
+ */
+export const sides = uniqueSides().map((side) => ({
+  id: `side-${side.id}`,
+  name: side.label,
+  localName: '',
+  language: '',
+  pronunciation: '',
+  category: 'sides',
+  price: SIDE_PORTION_PRICE,
+  image: sideImage(side.id),
+  description: sideBlurb(side.id),
+  story: '',
+  tags: ['side', 'vegetable'],
+  spice: side.id === 'chakalaka' || side.id === 'atchaar' ? 2 : 0,
+  prepMins: 5,
+  serves: 2,
+  rating: 4.8,
+  orders: 0,
+  available: true,
+  /* Sold by the portion: what one bowl is, in the customer's own terms. */
+  portion: sidePortion(side.id),
+  options: [],
+}));
+
+/**
+ * Stywe Pap, on its own.
+ *
+ * The one card in the old Sides & Relishes list that carried a price, and a
+ * starch rather than a relish — so it is written out here rather than generated
+ * from the plate choices, and its id is its own.
+ */
+sides.push({
+  id: 'side-stywe-pap',
+  name: 'Stywe Pap',
+  localName: '',
+  language: '',
+  pronunciation: '',
+  category: 'sides',
+  price: SIDE_PORTION_PRICE,
+  image: img('side-stywe-pap'),
+  description: 'Stiff maize pap, the traditional partner to a braai or a pot of mogodu.',
+  story: '',
+  tags: ['side', 'starch'],
+  spice: 0,
+  prepMins: 10,
+  serves: 2,
+  rating: 4.8,
+  orders: 0,
+  available: true,
+  portion: 'One bowl, enough for two beside a plate.',
+  options: [],
+});
+
+/* --------------------------------------------------------------------- */
 /* Weekly service                                                         */
 /* --------------------------------------------------------------------- */
 
@@ -673,7 +841,7 @@ export const settings = {
    * this one value updates the entire site.
    */
   outsideFee: 30,
-  outsideFeeNote: 'Outside Sandton and Rosebank we add a delivery fee, confirmed on WhatsApp before you pay.',
+  outsideFeeNote: 'Farther than the included run we add a small delivery fee, confirmed on WhatsApp before you pay.',
   /*
    * Owner, 15 Nov 2026: 15 km, not 50.
    *

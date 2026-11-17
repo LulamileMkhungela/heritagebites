@@ -171,8 +171,23 @@ describe('catalogue + search', () => {
   test('catalogue exposes the approved plates, prices and rules', async () => {
     const c = await fetch(`${base}/api/catalog`).then(json);
 
-    assert.equal(c.categories.length, 2, 'traditional and contemporary plates only');
+    /*
+     * Three categories: the two plate kitchens, and Sides & Relishes — which
+     * became a category of products on 17 Nov 2026 when the owner asked for the
+     * sides to carry prices and be addable to the basket.
+     */
+    assert.equal(c.categories.length, 3, 'traditional and contemporary plates, plus the sides');
     assert.equal(c.menu.length, 8, 'five traditional plates and three contemporary plates');
+    assert.equal(c.sides.length, 10, 'nine vegetable sides by the portion, plus stywe pap');
+    /* Every side is a product: a price, a portion, a photo of itself. */
+    for (const side of c.sides) {
+      assert.ok(side.id.startsWith('side-'), `${side.id} is not a side id`);
+      assert.ok(side.price > 0, `${side.id} is sold by the portion, so it needs a price`);
+      assert.ok(side.portion && side.portion.length > 10, `${side.id} needs a portion sentence`);
+      assert.ok(side.image.startsWith('/img/side-') || side.image === '/img/chakalaka.jpg' || side.image === '/img/atchaar.jpg',
+        `${side.id} borrows another dish's photograph: ${side.image}`);
+      assert.equal(side.category, 'sides');
+    }
     assert.equal(c.plateMenus.length, 2);
 
     const traditional = c.plateMenus.find((p) => p.id === 'traditional');
@@ -245,7 +260,7 @@ describe('catalogue + search', () => {
     const c = await fetch(`${base}/api/catalog`).then(json);
 
     assert.ok(Array.isArray(c.comingSoon), 'the archive categories are published for the view-only section');
-    assert.ok(c.comingSoon.length >= 3, 'the categories the site carried before the two-tier menu are back');
+    assert.ok(c.comingSoon.length >= 2, 'the categories the site carried before the two-tier menu are back');
     /*
      * Modern Favourites is gone on purpose: every dish in it is now a
      * Contemporary plate, and "coming soon" on food that is already on sale was
@@ -255,18 +270,35 @@ describe('catalogue + search', () => {
      * Heritage Pots was hidden on 14 Nov 2026 at the owner's request, so the
      * archive is three categories, not four.
      */
+    /*
+     * Sides & Relishes was the third archive category until 17 Nov 2026, when the
+     * owner made the sides sellable by the portion: a bowl can now go in the
+     * basket, and nothing in a coming-soon section can be sold. It is a real
+     * category in `categories` now, with its products in `sides`.
+     */
     assert.deepEqual(c.comingSoon.map((cat) => cat.id), [
       'kasi-fast-food',
       'morning-heritage',
-      'sides-relishes',
     ]);
 
     const archived = c.comingSoon.flatMap((cat) => cat.items);
-    /* Eight, because Heritage Pots (three cards) was hidden on 14 Nov 2026. */
-    assert.ok(archived.length >= 8);
+
+    /*
+     * Owner, 16 Nov 2026: "all Choose your vegetable side items put them also on
+     * Sides & Relishes". Every side a plate offers is a product of its own now
+     * (17 Nov 2026), and it must still be the same list the plate builder reads —
+     * same ids, so the two cannot drift.
+     */
+    assert.ok(Array.isArray(c.sides) && c.sides.length > 0, 'the sides are published for sale');
+    const sideIds = new Set(c.sides.map((item) => item.id));
+    for (const side of [...new Set(c.plateMenus.flatMap((p) => p.groups.filter((g) => g.id === 'veg').flatMap((g) => g.items.map((i) => i.id))))]) {
+      assert.ok(sideIds.has(`side-${side}`), `the vegetable side "${side}" is missing from the sides`);
+    }
+    /* Five, because Heritage Pots (three cards) was hidden on 14 Nov 2026. */
+    assert.ok(archived.length >= 5);
 
     /* Nothing that can already be ordered belongs in the archive. */
-    const sellableNames = c.menu.map((m) => m.name.toLowerCase());
+    const sellableNames = [...c.menu, ...(c.sides ?? [])].map((m) => m.name.toLowerCase());
     for (const item of archived) {
       const clashes = sellableNames.filter((name) => name.startsWith(item.name.toLowerCase().split(' — ')[0]));
       assert.deepEqual(clashes, [], `${item.id} duplicates a dish that is already on sale`);
@@ -278,6 +310,8 @@ describe('catalogue + search', () => {
         /* The owner asked for archive cards to read like menu cards: name,
            guide price and a line of description. */
         assert.equal(typeof item.price, 'number', `${item.id} needs a guide price to show`);
+        /* Every archive card is a dish the kitchen would sell on its own, so a
+           guide price of zero would be a broken card. */
         assert.ok(item.price > 0, `${item.id} has a nonsense price`);
         assert.ok(item.description && item.description.length > 20, `${item.id} needs a description`);
         assert.equal(item.status, 'coming-soon');
@@ -287,7 +321,7 @@ describe('catalogue + search', () => {
 
     // The archive is never part of the sellable menu, so it cannot be priced,
     // searched, added to a basket or checked out.
-    const sellable = new Set(c.menu.map((m) => m.id));
+    const sellable = new Set([...c.menu, ...(c.sides ?? [])].map((m) => m.id));
     for (const item of archived) assert.equal(sellable.has(item.id), false, `${item.id} leaked into the menu`);
 
     const search = await fetch(`${base}/api/search?q=Kota`).then(json);
@@ -1139,6 +1173,38 @@ describe('checkout', () => {
     assert.ok(body.order.totals.delivery > 0, 'and it is priced by distance, not by suburb name');
   });
 
+  test('an unlocated address outside the included suburbs is asked for coordinates instead of being priced as free', async () => {
+    /*
+     * "Is it calculating valid distance, or only showing addresses within 15 km?"
+     * was the owner's question, and the honest answer before this test was
+     * "only the second". A hand-typed Bryanston address with no map coordinates
+     * and the area select still on "another area" used to price as included —
+     * no distance was ever measured, so nothing could refuse it.
+     */
+    const { res, body } = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '1 Bryanston Drive, Bryanston', suburb: 'Another area — within 15 km',
+      },
+    });
+    assert.equal(res.status, 422, 'an unmeasurable address cannot be priced');
+    assert.equal(body.needsLocation, true);
+    assert.match(body.errors[0], /Pick it from the list/i);
+  });
+
+  test('an unlocated address that names an included suburb is still accepted', async () => {
+    /* The customer said Sandton in the address and in the select: inside by
+       their own words, priced at the plate price, no location demand. */
+    const { res, body } = await placeOrder({
+      customer: {
+        email: 't@e.co.za', name: 'T', phone: '+27820009999',
+        address: '12 Rivonia Road, Sandton', suburb: 'Sandton',
+      },
+    });
+    assert.equal(res.status, 201);
+    assert.equal(body.order.totals.delivery, 0);
+  });
+
   test('an address that names the area is trusted even when the select was skipped', async () => {
     const { res, body } = await placeOrder({
       fulfilment: 'delivery',
@@ -1344,6 +1410,59 @@ describe('loyalty card and contact', () => {
     assert.equal(card.cardsCompleted, 1);
   });
 
+  test('the loyalty card lists past orders without publishing anything private', async () => {
+    /*
+     * "Order it again" needs the customer's own past orders, and the only key the
+     * card has is a cell number. So this payload is a receipt and nothing more:
+     * it must never carry the tracking token (the key to /api/orders/:code) or the
+     * delivery address (where the customer lives), because anyone who knows a
+     * number could read them.
+     */
+    const phone = '+27 72 314 1592';
+    const placed = await placeOrder({
+      customer: { email: 't@e.co.za', name: 'Reorder Test', phone, ...ADDRESS },
+      items: [{ itemId: 'tshotlo-plate', qty: 2, options: { starch: 'pap', veg: 'chakalaka' } }],
+    });
+    assert.equal(placed.res.status, 201, `order should be accepted: ${JSON.stringify(placed.body)}`);
+
+    const card = await fetch(`${base}/api/passport`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    }).then(json);
+
+    assert.ok(Array.isArray(card.recent), 'the card publishes a recent-orders list');
+    assert.ok(card.recent.length >= 1, 'the order just placed is on it');
+    const [latest] = card.recent;
+    assert.equal(latest.code, placed.body.order.code, 'newest first');
+    assert.equal(latest.total, placed.body.order.totals.total);
+    assert.equal(latest.status, 'pending');
+    assert.ok(latest.items.length >= 1);
+    /* The lines keep the choices, because a reorder without them is a different order. */
+    const item = latest.items[0];
+    assert.equal(item.qty, 2);
+    assert.ok(item.options.some((o) => o.label === 'Pap'));
+    assert.ok(item.options.some((o) => o.label === 'Chakalaka'));
+
+    /* Nothing that would let a stranger read, cancel or find the order. */
+    const serialised = JSON.stringify(card.recent);
+    assert.equal(/trackingToken|token/i.test(serialised), false, 'no tracking token may be published');
+    assert.equal(serialised.includes(ADDRESS.address), false, 'the delivery address must stay private');
+    assert.equal(/address|suburb/i.test(serialised), false, 'no address fields at all');
+    assert.equal(/Oxford|Illovo/i.test(serialised), false, 'not even inside a string');
+  });
+
+  test('a number with no orders gets an empty list, not a missing one', async () => {
+    const fresh = `+27 84 ${String(Date.now()).slice(-7)}`;
+    const card = await fetch(`${base}/api/passport`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: fresh }),
+    }).then(json);
+    assert.equal(card.found, false);
+    assert.deepEqual(card.recent, [], 'the page can render without a special case');
+  });
+
   test('the contact form validates and records submitted messages', async () => {
     const bad = await fetch(`${base}/api/contact`, {
       method: 'POST',
@@ -1520,6 +1639,66 @@ describe('static hosting', () => {
   });
 });
 
+describe('the app on a home screen', () => {
+  /*
+   * Owner, 18 Nov 2026, looking at the installed app on their phone: "it must be
+   * HeritageBites full or one word and the logo used there its wrong".
+   *
+   * Both halves are checked here because both are easy to regress: the name lives
+   * in a JSON file nobody reads, and the icon is a generated bitmap that a future
+   * brand-asset run can quietly put back to a pot on a black square.
+   */
+  const manifest = async () => {
+    const res = await fetch(`${base}/manifest.webmanifest`);
+    assert.equal(res.status, 200, 'the manifest must be served');
+    return res.json();
+  };
+
+  test('the installed name is HeritageBites, on every platform', async () => {
+    const m = await manifest();
+    assert.equal(m.short_name, 'HeritageBites');
+    assert.match(m.name, /^HeritageBites\b/);
+    /* No stray space, which is what an Android launcher would show. */
+    assert.doesNotMatch(m.short_name, /\s/, 'the home-screen label must be one word');
+
+    /*
+     * iOS ignores short_name entirely and reads the meta tag instead, so a site
+     * that only fixes the manifest still shows the old title under an iPhone
+     * icon. The head has to carry both.
+     */
+    const { body } = await (async () => {
+      const res = await fetch(`${base}/`, { headers: { Accept: 'text/html' } });
+      return { body: await res.text() };
+    })();
+    assert.match(body, /<meta name="apple-mobile-web-app-title" content="HeritageBites"/);
+    assert.match(body, /<meta name="application-name" content="HeritageBites"/);
+  });
+
+  test('the home-screen icon is the whole badge, opaque, at every size', async () => {
+    const m = await manifest();
+    const tile = m.icons.filter((i) => /icon-(192|512|maskable-512)\.png/.test(i.src));
+    assert.equal(tile.length, 3, 'the manifest must still declare the three home-screen sizes');
+
+    for (const icon of tile) {
+      const res = await fetch(`${base}/${icon.src}`);
+      assert.equal(res.status, 200, `${icon.src} must be served`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      /* PNG header, then the IHDR width/height. */
+      assert.equal(buf.subarray(1, 4).toString(), 'PNG', `${icon.src} is not a PNG`);
+      const width = buf.readUInt32BE(16);
+      const height = buf.readUInt32BE(20);
+      assert.equal(`${width}x${height}`, icon.sizes, `${icon.src} is not the size it claims`);
+      /*
+       * Opaque: the old icon was the pot on a transparent-backed tile, and a
+       * transparent home-screen icon composites onto black on some launchers.
+       * A PNG with no alpha channel at all is the safest proof.
+       */
+      const colourType = buf[25];
+      assert.ok(colourType !== 6 && colourType !== 4, `${icon.src} still has an alpha channel`);
+    }
+  });
+});
+
 describe('the head served to a crawler', () => {
   /*
    * The React app sets these itself, but only after it has run. A crawler that
@@ -1538,8 +1717,9 @@ describe('the head served to a crawler', () => {
   test('the home page declares its own title, description and canonical', async () => {
     const { res, body } = await html('/');
     assert.equal(res.status, 200);
-    assert.match(body, /<title>South African Plates in Rosebank &amp; Sandton — Heritage Bites<\/title>/);
-    assert.match(body, /<meta name="description" content="South African plates from R100/);
+    assert.match(body, /<title>South African Food Delivery in Sandton &amp; Rosebank — Heritage Bites<\/title>/);
+    /* The words a customer types come first: traditional food, delivered, Sandton. */
+    assert.match(body, /<meta name="description" content="Traditional South African plates from R100/);
     assert.match(body, /<link rel="canonical" href="https:\/\/heritagebites\.test\/" \/>/);
     assert.match(body, /<meta name="robots" content="index,follow/);
   });
@@ -1549,7 +1729,7 @@ describe('the head served to a crawler', () => {
       '/menu': /<title>The Menu &amp; Prices — Heritage Bites<\/title>/,
       '/specials': /<title>This Week&#39;s Cooking &amp; Delivery — Heritage Bites<\/title>/,
       '/about': /<title>Our Story, Vision &amp; Mission — Heritage Bites<\/title>/,
-      '/contact': /<title>Contact &amp; WhatsApp — Heritage Bites<\/title>/,
+      '/contact': /<title>Contact, WhatsApp &amp; Directions — Heritage Bites<\/title>/,
       '/policies': /<title>Policies &amp; Terms — Heritage Bites<\/title>/,
       '/passport': /<title>Loyalty Card — Heritage Bites<\/title>/,
       '/quest': /<title>Ask Us to Cook It — Heritage Bites<\/title>/,
@@ -1589,7 +1769,8 @@ describe('the head served to a crawler', () => {
     const restaurant = nodes.find((node) => node['@type'] === 'Restaurant');
     assert.ok(restaurant, 'no Restaurant node');
     assert.equal(restaurant.name, 'Heritage Bites');
-    assert.deepEqual(restaurant.areaServed.map((a) => a.name), ['Rosebank', 'Sandton']);
+    /* The suburbs, plus the metro they sit in — and nothing the shop cannot reach. */
+    assert.deepEqual(restaurant.areaServed.map((a) => a.name), ['Rosebank', 'Sandton', 'Johannesburg']);
     assert.equal(restaurant.telephone, '+27670137587');
     assert.equal(restaurant.address, undefined, 'the business has no public street address to claim');
   });
@@ -1627,5 +1808,28 @@ describe('the head served to a crawler', () => {
     } else {
       assert.equal(sitemap.status, 404, 'a missing sitemap must 404, not answer with the shell');
     }
+  });
+});
+
+/*
+ * The bug that made "Use my current location" impossible on the live site.
+ *
+ * A Permissions-Policy of `geolocation=()` is a denial lock on *our own origin*:
+ * the browser refuses every geolocation call, never shows the permission prompt,
+ * and reports PERMISSION_DENIED — so the customer was told they had blocked
+ * something they had not, and no amount of allowing it in site settings helped.
+ * `geolocation=(self)` is what lets the origin that asks, and it is asserted here
+ * rather than trusted to a comment, because the failure is invisible until a real
+ * customer taps the button.
+ */
+describe('geolocation is allowed to ask', () => {
+  test('the API permits geolocation for this origin, and denies the camera and microphone', async () => {
+    const res = await fetch(`${base}/api/catalog`);
+    const policy = res.headers.get('permissions-policy') ?? '';
+    assert.match(policy, /geolocation=\(self\)/, 'geolocation must not be denied to this origin');
+    assert.doesNotMatch(policy, /geolocation=\(\)/, 'an empty allowlist blocks the prompt entirely');
+    /* Nothing on this site uses these, so they stay fully off. */
+    assert.match(policy, /camera=\(\)/);
+    assert.match(policy, /microphone=\(\)/);
   });
 });

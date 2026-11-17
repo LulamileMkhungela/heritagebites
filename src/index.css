@@ -100,7 +100,7 @@
 }
 
 @layer utilities {
-  /* Ndebele / Setswana-inspired geometric band used as section dividers */
+  /* Ndebele-inspired geometric band used as section dividers */
   .hb-pattern {
     background-image:
       repeating-linear-gradient(

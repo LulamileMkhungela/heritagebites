@@ -68,8 +68,24 @@ import { HEAD_END, HEAD_START, headHtml, normaliseSiteUrl } from '../shared/seo.
  * a Friday?". Production never sets HB_CLOCK_LABEL, so this is simply now; the
  * test suites pin it so they can run the shop both open and shut without
  * depending on when CI happens to start.
+ *
+ * An unreadable value falls back to the real clock instead of producing an
+ * Invalid Date. `Intl.DateTimeFormat.formatToParts(new Date(NaN))` throws a
+ * RangeError, and that throw happened inside a request handler — so a typo in
+ * the variable ("Thu 12:30" instead of a full date-time) took the entire server
+ * down on the first request rather than being ignored. A bad test setting must
+ * not be able to kill the shop.
  */
-const clockNow = () => (process.env.HB_CLOCK_LABEL ? new Date(process.env.HB_CLOCK_LABEL) : new Date());
+function clockNow() {
+  const pinned = process.env.HB_CLOCK_LABEL;
+  if (!pinned) return new Date();
+  const parsed = new Date(pinned);
+  if (Number.isNaN(parsed.getTime())) {
+    console.warn(`[clock] HB_CLOCK_LABEL="${pinned}" is not a date-time — using the real clock.`);
+    return new Date();
+  }
+  return parsed;
+}
 
 const PORT = Number(process.env.PORT || 4000);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -86,7 +102,7 @@ const here = dirname(fileURLToPath(import.meta.url));
  * opening hours. Orders, messages, loyalty stamps and the order outbox are
  * customer data and are never touched.
  */
-const CATALOG_STORES = ['menu', 'plateMenus', 'categories', 'comingSoon', 'settings', 'discountCodes', 'specials', 'policies'];
+const CATALOG_STORES = ['menu', 'sides', 'plateMenus', 'categories', 'comingSoon', 'settings', 'discountCodes', 'specials', 'policies'];
 
 const storedSeedVersion = store.load('seedVersion', 0);
 if (storedSeedVersion !== seed.SEED_VERSION || !has('menu') || !has('plateMenus')) {
@@ -171,16 +187,26 @@ app.use(compression({ threshold: 1024 }));
  * and frame-ancestors/X-Frame-Options (a login-free order page inside someone
  * else's frame is a clickjacking surface).
  *
- * There is no CSP yet. The built index.html carries an inline JSON-LD block and
- * the app uses inline styles, so a real policy needs nonces threaded through the
- * build. Doing that badly is worse than not doing it; it is listed as follow-up.
+ * `geolocation` MUST stay allowed — `geolocation=(self)`, not `geolocation=()`.
+ *
+ * This header used to read `geolocation=()`, which is a Permissions Policy
+ * *denial lock on our own origin*: the browser refuses every
+ * `navigator.geolocation` call this site makes, never shows the permission
+ * prompt, and reports PERMISSION_DENIED. That is precisely the bug the owner
+ * reported ("why Location is blocked for this site… u must ask for location
+ * permission") — the customer had blocked nothing, and the advice to allow it in
+ * site settings led them to a switch that was already on. `self` allows the
+ * origin that is asking, which is the only one that needs it; no third-party
+ * origin is granted anything.
+ *
+ * Camera and microphone remain fully denied: nothing on this site uses them.
  */
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
   /*
    * Only over HTTPS, and only for a year at a time: HSTS on a domain that is
    * later served over plain HTTP locks customers out with no way to click past it.
@@ -272,8 +298,16 @@ const LIMITS = {
 
 const todayDay = () => new Date().getDay();
 
+/**
+ * One orderable thing, by id.
+ *
+ * Plates and sides both live in the basket and both arrive here by id, so the
+ * lookup is over both lists rather than over `menu` alone. A side that could be
+ * added in the browser and then refused by the server would be a basket the
+ * customer can build and not buy.
+ */
 function findMenu(id) {
-  return get('menu')?.find((m) => m.id === id);
+  return get('menu')?.find((m) => m.id === id) ?? get('sides')?.find((m) => m.id === id);
 }
 
 /**
@@ -295,20 +329,25 @@ function deliveryRules(settings = {}) {
 }
 
 /**
- * Coordinates for a delivery address.
+ * Coordinates for a delivery address — and whether they were actually measured.
  *
- * The checkout sends the map coordinates of the address the customer picked
- * from the suggestion list, which is the only address form the map has already
- * resolved. A hand-typed address has none, so the server falls back to the
- * centre of the area the customer selected — deliberately generous to nobody:
- * an unlocated address in Sandton is treated as Sandton, which is the same
- * answer the old area rule gave. `null` means "cannot measure", never "far".
+ * The checkout sends the map coordinates of the address the customer picked from
+ * the suggestion list, or the device's own fix. That is the only address form
+ * whose distance is *known*. A hand-typed address has none, and the honest answer
+ * then is "cannot measure", never "inside the ring": `null` is what
+ * `deliveryZoneFor` turns into `{ zone: 'unknown' }`.
+ *
+ * This used to fall back to the middle of the suburb the customer selected, which
+ * quietly turned "I typed 40 km away and picked Sandton" into a free delivery.
+ * The order route below now refuses an unmeasured address on a delivery order
+ * unless the address itself names an included area, so the radius is a rule the
+ * site actually applies rather than one it only prints.
  */
 function coordinatesFor(customer = {}) {
   const lat = Number(customer.lat);
   const lng = Number(customer.lng);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
-  return { lat: null, lng: null };
+  if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng, measured: true };
+  return { lat: null, lng: null, measured: false };
 }
 
 /**
@@ -783,6 +822,14 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
      */
     comingSoon: get('comingSoon') ?? seed.comingSoon,
     menu: get('menu'),
+    /**
+     * The sides, sold by the portion alongside the plates.
+     *
+     * A list of their own rather than cards appended to `menu`, because a side has
+     * no options to configure and the menu page shows it in a section of its own —
+     * but the server prices it exactly like a plate, through `findMenu`.
+     */
+    sides: get('sides') ?? seed.sides,
     plateMenus: get('plateMenus') ?? seed.plateMenus,
     policies: get('policies') ?? seed.policies,
     settings,
@@ -816,10 +863,16 @@ app.get('/api/catalog', LIMITS.catalogue, (_req, res) => {
   });
 });
 
-/** Search backs the command-palette: name, local name, language, tags, story. */
+/** Search backs the command-palette: name, tags, description and category. */
 app.get('/api/search', LIMITS.search, (req, res) => {
   const q = String(req.query.q ?? '').trim().toLowerCase();
-  const menu = get('menu');
+  /*
+   * Sides are searched with the plates. Somebody typing "chakalaka" is looking
+   * for the bowl they can now order on its own, and a search that answers with
+   * nothing while the card sits three sections down is the palette lying about
+   * what the shop sells.
+   */
+  const menu = [...(get('menu') ?? []), ...(get('sides') ?? [])];
   if (!q) return res.json({ results: [], q });
 
   const score = (m) => {
@@ -982,6 +1035,42 @@ app.post('/api/orders', LIMITS.order, async (req, res) => {
         distanceKm: zone.distanceKm,
         maxDeliveryKm: rules.maxKm,
       });
+    }
+    /*
+     * An address nobody located cannot be priced, and must not default to
+     * "free".
+     *
+     * The radius is the rule the customer is shown, so an order is only
+     * accepted once the distance is known: pick the address from the list (that
+     * carries the map's coordinates) or share a location. The one exception is
+     * an address that *names* one of the included areas — "12 Rivonia Road,
+     * Sandton" with no map hit is inside the run by the customer's own words,
+     * and refusing that would send a real Sandton customer to WhatsApp for no
+     * reason. Anything else is asked for a located address, in the same words the
+     * checkout uses, rather than being quietly under-charged.
+     */
+    if (!points.measured) {
+      const included = getSettings()?.deliveryAreas ?? [];
+      const isIncluded = (area) => included.some((name) => name.toLowerCase() === String(area).toLowerCase());
+      /*
+       * Two pieces of evidence are accepted, and neither is a guess: the address
+       * line names an included area, or the customer's own area choice is one of
+       * them and the address contradicts nothing. An "Another area" order has
+       * neither — its distance is the only thing that can price it — so it is
+       * asked for a located address instead of being given the included price.
+       */
+      const named = areasNamedIn(customer.address, getSettings());
+      const chosen = String(customer.suburb ?? '').trim();
+      const insideByWord = named.some(isIncluded) || (isIncluded(chosen) && (named.length === 0 || named.some(isIncluded)));
+      if (!insideByWord) {
+        return res.status(422).json({
+          errors: [
+            'We could not work out where that address is, so we cannot check the delivery. Pick it from the list as you type, or share your location, and order again.',
+          ],
+          needsLocation: true,
+          maxDeliveryKm: rules.maxKm,
+        });
+      }
     }
     /*
      * The suburb named in the typed address still has to match the one chosen —
@@ -1302,11 +1391,58 @@ app.post('/api/orders/:code/cancel', LIMITS.cancel, (req, res) => {
 
 /* ----------------------------- Loyalty card -------------------------- */
 
+/**
+ * A past order, as the loyalty card may show it.
+ *
+ * The loyalty card is looked up by cell number alone — no password, no token —
+ * so a page built on it must never hand out anything that would let a stranger
+ * read, cancel or track somebody else's order. That rules out the tracking token
+ * (it is the key to `/api/orders/:code`) and the delivery address (where the
+ * customer lives). What is left is what a paper receipt in a wallet would show:
+ * the code, when it was, what was in it, what it cost and where it got to.
+ *
+ * `code` is published because it is not a secret on its own: reading an order
+ * still needs the token, and the customer needs the code to quote it on the
+ * phone. Someone who guesses a code learns only that an order exists.
+ */
+function receiptSummary(order) {
+  return {
+    code: order.code,
+    createdAt: order.createdAt,
+    status: order.status,
+    statusLabel: STATUS_META[order.status]?.label ?? order.status,
+    items: (order.items ?? []).map((item) => ({
+      itemId: item.itemId,
+      name: item.name,
+      qty: item.qty,
+      unitPrice: item.unitPrice,
+      options: (item.options ?? []).map((o) => ({ id: o.id, label: o.label, qty: o.qty ?? 1 })),
+    })),
+    total: order.totals?.total ?? 0,
+    paymentMethod: order.payment?.method ?? 'cash',
+    paymentStatus: order.payment?.status ?? 'pending',
+  };
+}
+
 app.post('/api/passport', LIMITS.loyalty, (req, res) => {
   const key = String(req.body?.phone ?? '').replace(/\D/g, '');
   if (key.length < 9) return res.status(422).json({ error: 'Please enter a valid South African cell number.' });
   const record = get('stamps')[key];
-  if (!record) return res.json({ found: false, phone: key, stamps: 0, orders: 0, lifetime: 0 });
+  if (!record) return res.json({ found: false, phone: key, stamps: 0, orders: 0, lifetime: 0, recent: [] });
+
+  /*
+   * The last few orders, newest first — the "order it again" list.
+   *
+   * Matched on the same normalised number the stamp record is keyed by, so the
+   * card and the list can never disagree about whose orders these are. Five is
+   * enough to cover a household's usual rotation and short enough that the list
+   * is a shortcut rather than a second order-history page.
+   */
+  const recent = get('orders')
+    .filter((order) => String(order.customer?.phone ?? '').replace(/\D/g, '') === key)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 5)
+    .map(receiptSummary);
   /*
    * A completed card is due, not empty.
    *
@@ -1325,6 +1461,7 @@ app.post('/api/passport', LIMITS.loyalty, (req, res) => {
     lifetime: fromCents(record.lifetimeCents),
     untilFree: full ? 0 : 10 - (record.stamps % 10),
     cardsCompleted: Math.floor(record.stamps / 10),
+    recent,
   });
 });
 

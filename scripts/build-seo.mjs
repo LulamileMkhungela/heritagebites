@@ -80,8 +80,22 @@ const catalogPath = flag('catalog', null);
  * It is a *default*, not a guess baked into output: every environment variable
  * above it still wins, so moving to a real domain is `HB_SITE_URL=... npm run
  * build:pages` and nothing here needs editing.
+ *
+ * It includes the `/web/` segment the folder is actually published at, because a
+ * canonical is a claim about a URL that has to *resolve to this page*. Google
+ * Pages here publishes the repository root, and the root serves a one-line
+ * redirect to `./web/` — so the previous value (`…/heritagebites/`) pointed
+ * every indexed page at a redirect, and `/heritagebites/menu` did not exist at
+ * all: the sitemap listed eight addresses that answered with a redirect, a 404,
+ * or the home page while claiming to be the menu. A canonical that lands
+ * somewhere else is exactly the duplicate-content signal this module exists to
+ * prevent.
+ *
+ * `HB_SITE_URL` still wins, so pointing Pages at the `web/` folder — which gives
+ * the clean `…/heritagebites/` address — is one environment variable and no
+ * editing here.
  */
-const PUBLISHED_SITE_URL = 'https://lulamilemkhungela.github.io/heritagebites/';
+const PUBLISHED_SITE_URL = 'https://lulamilemkhungela.github.io/heritagebites/web/';
 const configured =
   flag('site-url', null) ||
   process.env.HB_SITE_URL ||

@@ -58,6 +58,11 @@ export interface MenuItem {
   rating: number;
   orders: number;
   available: boolean;
+  /**
+   * How much one portion is, in the customer's words — "One bowl, enough for two
+   * beside a plate." Only a side sold on its own carries one; a plate is a plate.
+   */
+  portion?: string;
   options: MenuOption[];
 }
 
@@ -257,6 +262,14 @@ export interface Catalog {
   /** Categories from before the two-tier menu, shown view only. */
   comingSoon: ComingSoonCategory[];
   menu: MenuItem[];
+  /**
+   * Sides and relishes, sold by the portion.
+   *
+   * A list of their own rather than cards appended to `menu`: a side has no
+   * options to configure, and the menu page shows it under its own heading. The
+   * server prices it exactly like a plate, through the same lookup.
+   */
+  sides?: MenuItem[];
   plateMenus: PlateMenu[];
   policies: Policy[];
   settings: Settings;
@@ -359,6 +372,32 @@ export interface ServiceWindow {
   plannedFor: string | null;
   isPreOrder: boolean;
   label: string;
+}
+
+/**
+ * One past order, as the loyalty card may show it.
+ *
+ * Its shape is decided by what the lookup is allowed to publish: a receipt a
+ * customer could hold in their hand — the code, the date, the food, the money and
+ * where the order got to. No tracking token (that is the key to the order page)
+ * and no address (that is where they live), because the card is opened with a
+ * cell number alone.
+ */
+export interface PastOrder {
+  code: string;
+  createdAt: string;
+  status: OrderStatus;
+  statusLabel: string;
+  items: {
+    itemId: string;
+    name: string;
+    qty: number;
+    unitPrice: number;
+    options: { id: string; label: string; qty: number }[];
+  }[];
+  total: number;
+  paymentMethod: string;
+  paymentStatus: string;
 }
 
 export interface Order {
