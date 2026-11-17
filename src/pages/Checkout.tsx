@@ -10,8 +10,8 @@ import { asset } from '../lib/assets';
 import { usePageSeo } from '../lib/seo';
 import { basketHref } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
-import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem } from '../../shared/service.js';
-import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, type AddressSuggestion } from '../lib/address';
+import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaOptions } from '../../shared/service.js';
+import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, describePoint, type AddressSuggestion } from '../lib/address';
 import { deniedMessage, requestLocation, type LocationResult } from '../lib/geolocation';
 import type { BookableDate, PastOrder, Settings } from '../lib/types';
 
@@ -47,25 +47,6 @@ type CheckoutCustomer = { name: string; phone: string; email: string; address: s
  * Kept outside the component because it is pure: same input, same answer, which
  * is what makes it testable and what stops the two buttons drifting apart.
  */
-/**
- * One address, written the way a driver reads it.
- *
- * The checkout asks for the house number, the street and the suburb separately —
- * "delivery address (house number, street and suburb)", as the owner put it — but
- * everything downstream (the server's stored order, the WhatsApp message, the
- * tracking page, the area check) wants a single line. This is the only place the
- * two shapes meet, so the sentence and the boxes can never disagree.
- *
- * Empty parts are dropped rather than leaving "12 , Sandton": a customer who has
- * typed a house number but not yet a street should see a shorter sentence, not a
- * broken one.
- */
-export function composeAddress(house: string, street: string, suburb: string): string {
-  return [house, street, suburb]
-    .map((part) => String(part ?? '').trim())
-    .filter(Boolean)
-    .join(', ');
-}
 
 export function waValidationProblem(
   customer: CheckoutCustomer,
@@ -242,13 +223,14 @@ function LiveCheckout() {
   const planned = bookable.find((d) => d.date === plannedDate) ?? null;
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
   /*
-   * The address in the three boxes the owner asked for. `customer.address` stays
-   * the one-line version — it is what the server stores, what the WhatsApp
-   * message carries and what the tracking page shows — and this is the form the
-   * customer edits. They are written together, so the sentence and the parts can
-   * never say different things.
+   * One address, typed the way a customer says it.
+   *
+   * This replaces the three boxes (house number / street / suburb) of 16 Nov. The
+   * owner's correction a day later was about the typing, not the data: one box lets
+   * "12 Oxford Road, Illovo" be entered as one thought, and the map returns the
+   * street and the number together. See `AddressField`.
    */
-  const [address, setAddress] = useState({ house: '', street: '', suburb: '' });
+  const [address, setAddress] = useState({ text: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   /*
    * Rosebank is where most orders go, so it is the area the checkout opens on.
@@ -412,9 +394,7 @@ function LiveCheckout() {
     else if (normalisePhone(customer.phone).length < 11) e.phone = 'Please enter a valid South African cell number.';
     if (customer.email.trim() && !/^\S+@\S+\.\S+$/.test(customer.email.trim())) e.email = 'That email does not look right.';
     if (fulfilment === 'delivery') {
-      if (!address.house.trim()) e.house = 'Which house number?';
-      if (!address.street.trim()) e.address = 'Which street?';
-      if (!address.suburb.trim()) e.suburb = 'Which suburb are you in?';
+      if (!address.text.trim()) e.address = 'Where should we deliver?';
     }
     return e;
   })();
@@ -505,16 +485,11 @@ function LiveCheckout() {
     if (emailGiven && !/^\S+@\S+\.\S+$/.test(emailGiven)) e.email = 'That email does not look right.';
     if (fulfilment === 'delivery') {
       /*
-       * The three boxes, answered one at a time, in the customer's words.
-       *
-       * "Where should we deliver?" over an empty address box was one question
-       * asking for three facts. Asking for the house number and the street
-       * separately is also the only way a driver can be given a complete
-       * address: an order with "Oxford Road" and no number is not deliverable.
+       * One question, in the customer's words. The box takes the address the way
+       * it is said out loud — number and street together — and the map fills in
+       * the rest when they pick a suggestion.
        */
-      if (!address.house.trim()) e.house = 'Which house number?';
-      if (!address.street.trim()) e.address = 'Which street?';
-      if (!address.suburb.trim()) e.suburb = 'Which suburb are you in?';
+      if (!address.text.trim()) e.address = 'Where should we deliver?';
       /*
        * The address has to belong to the area the customer chose. A hard
        * mismatch is refused here as well as on the server, so the customer is
@@ -769,49 +744,52 @@ function LiveCheckout() {
               <Field label="Cell number" hint="so we can contact you" error={errors.phone}>
                 <input className={inputCls} value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="tel" placeholder="+27 82 000 0000" />
               </Field>
-              <Field label="Email" hint="optional — for a written reply" error={errors.email}>
+              <Field label="Email" error={errors.email}>
                 <input className={inputCls} value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="email" type="email" placeholder="you@example.co.za" />
               </Field>
-              {/*
-                One address, in three boxes, in the order a driver reads it:
-                house number, street, suburb. The suburb select used to be a
-                separate "Delivery area" field above the address, which asked the
-                customer for the same decision twice; it is the third box now.
-
-                Suggestions come from OpenStreetMap (free, keyless) and fill the
-                street line; picking one also knows its suburb, which is what
-                makes the area check trustworthy rather than a guess at the
-                spelling of a street name.
-              */}
+              {fulfilment === 'delivery' && (
+                /*
+                 * The delivery area, still a field of its own.
+                 *
+                 * The three-box version folded it into a "Suburb" box. With the
+                 * address back to one line there is nowhere for it to live, and
+                 * leaving it invisible would be worse than leaving it out: a
+                 * customer who types a street and never picks a suggestion keeps
+                 * whatever area the checkout opened on, and the fee follows that
+                 * guess. So it is asked, quietly — no hint under the label (the
+                 * owner struck "decides the fee"), because the two names and
+                 * "another area" explain themselves.
+                 */
+                <Field label="Delivery area" error={errors.suburb}>
+                  <select
+                    className={inputCls}
+                    value={customer.suburb}
+                    onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}
+                  >
+                    {deliveryAreaOptions(settings).map((area) => (
+                      <option key={area} value={area}>{area}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               {fulfilment === 'delivery' && (
                 <AddressField
-                  house={address.house}
-                  street={address.street}
-                  suburb={address.suburb}
+                  address={address.text}
                   area={customer.suburb}
                   settings={settings}
                   hintArea={addressArea}
-                  errors={{ house: errors.house, street: errors.address, suburb: errors.suburb, area: errors.suburb }}
-                  onHouseChange={(value) => {
-                    setAddress({ ...address, house: value });
-                    /* The one-line address is what the order carries, so it is
-                       rewritten on every keystroke — the parts and the sentence
-                       are never allowed to disagree. */
-                    setCustomer({ ...customer, address: composeAddress(value, address.street, address.suburb) });
-                    setAddressArea(null);
-                    setPoint(null);
-                    setErrors((e) => ({ ...e, house: '' }));
-                  }}
-                  onStreetChange={(value) => {
+                  error={errors.address}
+                  locating={geo.status === 'asking'}
+                  onChange={(value) => {
                     /*
-                     * The area follows the street when the street names one.
+                     * The area follows the address when the address names one.
                      *
                      * With Rosebank preselected, a Sandton customer who types
                      * "Oxford Road, Sandton" would otherwise be told they picked
                      * the wrong area — a decision they never made. Moving the
                      * select to the area the address actually names is the honest
                      * reading of it: the address decides where the food goes, and
-                     * the suburb box is there to break a tie.
+                     * the select is there to break a tie.
                      *
                      * Only one unambiguous name moves it. "Corner Rosebank Road
                      * and Sandton Drive" leaves the choice alone, and the
@@ -820,36 +798,19 @@ function LiveCheckout() {
                      */
                     const named = areasNamedIn(value, settings);
                     const followed = named.length === 1 ? named[0] : customer.suburb;
-                    setAddress({ ...address, street: value, suburb: named.length === 1 ? named[0] : address.suburb });
-                    setCustomer({ ...customer, suburb: followed, address: composeAddress(address.house, value, named.length === 1 ? named[0] : address.suburb) });
-                    /* Typing over a picked street drops its map evidence. */
+                    setAddress({ text: value });
+                    setCustomer({ ...customer, address: value, suburb: followed });
+                    /* Typing over a picked address drops its map evidence — the
+                       distance can no longer be attributed to this text. */
                     setAddressArea(null);
                     setPoint(null);
                     setErrors((e) => ({ ...e, address: '', suburb: '' }));
                   }}
-                  onSuburbChange={(value) => {
-                    setAddress({ ...address, suburb: value });
-                    setCustomer({ ...customer, address: composeAddress(address.house, address.street, value) });
-                    setAddressArea(null);
-                    setPoint(null);
-                    setErrors((e) => ({ ...e, suburb: '' }));
-                  }}
-                  onAreaChange={(value) => {
-                    setCustomer({ ...customer, suburb: value });
-                    setErrors((e) => ({ ...e, suburb: '', address: '' }));
-                  }}
                   onPick={(suggestion: AddressSuggestion) => {
-                    const picked = {
-                      house: address.house || suggestion.house || '',
-                      street: suggestion.street || suggestion.line.replace(/^\d+[A-Za-z]?\s+/, ''),
-                      /* The map's own suburb, so the box matches the address the
-                         customer just chose rather than their earlier typing. */
-                      suburb: suggestion.suburb || address.suburb,
-                    };
-                    setAddress(picked);
+                    setAddress({ text: suggestion.line });
                     setCustomer({
                       ...customer,
-                      address: composeAddress(picked.house, picked.street, picked.suburb),
+                      address: suggestion.line,
                       /*
                        * Autofill the area the kitchen actually delivers to — or
                        * "Other" when the picked address is outside the two
@@ -876,7 +837,7 @@ function LiveCheckout() {
                 />
               )}
               <div className="sm:col-span-2">
-                <Field label="Notes for the kitchen" hint="optional">
+                <Field label="Notes for the kitchen">
                   <input className={inputCls} value={customer.notes} onChange={(e) => setCustomer({ ...customer, notes: e.target.value })} placeholder="Extra hot, no salsa, ring on arrival…" />
                 </Field>
               </div>
@@ -884,9 +845,9 @@ function LiveCheckout() {
             {/*
               The customer's own location, offered rather than demanded.
               The browser only reveals it with permission, so the button is the
-              whole prompt — and the address they pick is still what the food
-              goes to. This only answers "how far is it", which is the question
-              that decides the fee and whether we can serve them at all.
+              whole prompt. It answers "how far is it" — and, since 17 Nov 2026,
+              it also writes the street it found into the address box, so the
+              order is priced from the same spot it is delivered to.
             */}
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button
@@ -898,11 +859,34 @@ function LiveCheckout() {
                   setGeo({ status: 'asking' });
                   /* Precise first, then a fallback — see lib/geolocation.ts for
                      why a coarse fix cannot decide a distance boundary honestly. */
-                  requestLocation().then((r) => setGeo(r));
+                  void requestLocation().then(async (r) => {
+                    setGeo(r);
+                    if (r.status !== 'ok') return;
+                    /*
+                     * Put the address in the box, not just a distance on screen.
+                     *
+                     * Owner, 17 Nov 2026: "if i select use my current location does
+                     * it fill the address inputfield- if not it must be". It used to
+                     * leave the box empty, so the order was priced from one place and
+                     * delivered to a blank instruction. Filling it means the fix and
+                     * the address always describe the same spot, and the customer can
+                     * read and correct what the map guessed.
+                     *
+                     * A lookup that fails leaves whatever they had typed untouched —
+                     * the coordinates still price the order, and nothing is invented.
+                     */
+                    const found = await describePoint(r.lat, r.lng, { settings });
+                    if (!found?.line) return;
+                    setAddress({ text: found.line });
+                    setCustomer({ ...customer, address: found.line, suburb: found.area ?? OUTSIDE_AREA });
+                    setAddressArea(found.area);
+                    setPoint({ lat: r.lat, lng: r.lng });
+                    setErrors((e) => ({ ...e, address: '', suburb: '' }));
+                  });
                 }}
                 disabled={geo.status === 'asking'}
               >
-                {geo.status === 'asking' ? 'Checking…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
+                {geo.status === 'asking' ? 'Finding your address…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
               </Button>
               {zone.zone !== 'unknown' && (
                 <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-ochre-deep' : 'text-emerald-700'}`} role="status">
@@ -1415,8 +1399,15 @@ function PreviewCheckout() {
   const settings = catalog?.settings;
 
   const [customer, setCustomer] = useState({ name: '', phone: '', address: '', suburb: '', notes: '' });
-  /* The same three-part address as the live checkout: house, street, suburb. */
-  const [address, setAddress] = useState({ house: '', street: '', suburb: '' });
+  /*
+   * One address, typed the way a customer says it.
+   *
+   * This replaces the three boxes (house number / street / suburb) of 16 Nov. The
+   * owner's correction a day later was about the typing, not the data: one box lets
+   * "12 Oxford Road, Illovo" be entered as one thought, and the map returns the
+   * street and the number together. See `AddressField`.
+   */
+  const [address, setAddress] = useState({ text: '' });
   const [method, setMethod] = useState<'link' | 'cash'>('link');
   /*
    * The same day choice the live checkout offers. On the static build the
@@ -1532,48 +1523,37 @@ function PreviewCheckout() {
                 <input className={inputCls} value={customer.phone} autoComplete="tel" placeholder="+27 82 000 0000" onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} />
               </Field>
               {/*
-                The same three boxes as the live checkout, on purpose — house
-                number, street, suburb. The published site used to take the
-                address as one plain line, so no address carried coordinates and
-                the radius could not be checked at all; picking a street here
-                fetches the map's own coordinates, which is what makes the
-                delivery check below mean something.
+                The same pair as the live checkout, on purpose: the delivery area
+                and one address box. The published site used to take the address as
+                a plain line with nothing behind it, so no address carried
+                coordinates and the radius could not be checked at all; picking a
+                suggestion here fetches the map's own coordinates, which is what
+                makes the delivery check below mean something.
               */}
+              <Field label="Delivery area">
+                <select className={inputCls} value={customer.suburb} onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}>
+                  <option value="">Choose an area</option>
+                  {deliveryAreaOptions(settings).map((area) => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                </select>
+              </Field>
               <AddressField
-                house={address.house}
-                street={address.street}
-                suburb={address.suburb}
+                address={address.text}
                 area={customer.suburb}
                 settings={settings}
                 hintArea={addressArea}
-                onHouseChange={(value) => {
-                  setAddress({ ...address, house: value });
+                locating={geo.status === 'asking'}
+                onChange={(value) => {
+                  const named = areasNamedIn(value, settings);
+                  setAddress({ text: value });
+                  setCustomer({ ...customer, address: value, suburb: named.length === 1 ? named[0] : customer.suburb });
                   setAddressArea(null);
                   setPoint(null);
-                }}
-                onStreetChange={(value) => {
-                  setAddress({ ...address, street: value });
-                  setCustomer({ ...customer, address: composeAddress(address.house, value, address.suburb) });
-                  setAddressArea(null);
-                  setPoint(null);
-                }}
-                onSuburbChange={(value) => {
-                  setAddress({ ...address, suburb: value });
-                  setCustomer({ ...customer, address: composeAddress(address.house, address.street, value) });
-                  setAddressArea(null);
-                  setPoint(null);
-                }}
-                onAreaChange={(value) => {
-                  setCustomer({ ...customer, suburb: value });
                 }}
                 onPick={(suggestion: AddressSuggestion) => {
-                  const picked = {
-                    house: address.house || suggestion.house || '',
-                    street: suggestion.street || suggestion.line.replace(/^\d+[A-Za-z]?\s+/, ''),
-                    suburb: suggestion.suburb || address.suburb,
-                  };
-                  setAddress(picked);
-                  setCustomer({ ...customer, address: composeAddress(picked.house, picked.street, picked.suburb), suburb: suggestion.area ?? OUTSIDE_AREA });
+                  setAddress({ text: suggestion.line });
+                  setCustomer({ ...customer, address: suggestion.line, suburb: suggestion.area ?? OUTSIDE_AREA });
                   setAddressArea(suggestion.area);
                   setPoint(
                     Number.isFinite(suggestion.lat) && Number.isFinite(suggestion.lng)
@@ -1583,7 +1563,7 @@ function PreviewCheckout() {
                 }}
               />
               <div className="sm:col-span-2">
-                <Field label="Notes for the kitchen" hint="optional">
+                <Field label="Notes for the kitchen">
                   <input className={inputCls} value={customer.notes} placeholder="Extra hot, no salsa, ring on arrival…" onChange={(e) => setCustomer({ ...customer, notes: e.target.value })} />
                 </Field>
               </div>
@@ -1598,7 +1578,17 @@ function PreviewCheckout() {
                 disabled={geo.status === 'asking'}
                 onClick={() => {
                   setGeo({ status: 'asking' });
-                  requestLocation().then((r) => setGeo(r));
+                  void requestLocation().then(async (r) => {
+                    setGeo(r);
+                    if (r.status !== 'ok') return;
+                    /* Same rule as the live checkout: the fix fills the address box. */
+                    const found = await describePoint(r.lat, r.lng, { settings });
+                    if (!found?.line) return;
+                    setAddress({ text: found.line });
+                    setCustomer({ ...customer, address: found.line, suburb: found.area ?? OUTSIDE_AREA });
+                    setAddressArea(found.area);
+                    setPoint({ lat: r.lat, lng: r.lng });
+                  });
                 }}
               >
                 {geo.status === 'asking' ? 'Checking…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
