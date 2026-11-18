@@ -758,15 +758,31 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   /**
    * Tap an item: add it if it is not there, remove it if it is.
    *
-   * The difference between a group that holds several and one that holds a
-   * single answer is the group's own `max`:
+   * **Anything selected can be deselected, in every group** (owner, 19 Nov
+   * 2026: "if a user click customise and select pap they must be able to
+   * deselect that applies to everything they select").
    *
-   *   - `max > 1` (starch, vegetable side) — ticking a second adds it. Tapping a
-   *     ticked one removes it, unless it is the last one in a required group,
-   *     where removing it would leave the plate incomplete.
-   *   - `max === 1` (protein, the drink) — a new choice REPLACES the old one,
-   *     and tapping the chosen one clears it, which is how an optional single is
-   *     declined.
+   * That was not true before. Two guards used to refuse the tap and do nothing
+   * at all, which is indistinguishable from a broken button:
+   *
+   *   - unticking the last item of a required group was refused, to keep the
+   *     plate from being incomplete;
+   *   - a required single-choice group (the protein) could not be cleared once
+   *     chosen, because picking was the only way out of "nothing chosen".
+   *
+   * Both were protecting an invariant that is already protected in the right
+   * place: `missing` below counts required groups with nothing picked, and the
+   * Add-plate button is disabled and reads "Pick a starch" until they are filled.
+   * So the plate can never be added half-built — the customer is simply allowed
+   * to change their mind on the way there, which is what a tap means.
+   *
+   * The difference between a group that holds several and one that holds a
+   * single answer is still the group's own `max`:
+   *
+   *   - `max > 1` (starch, vegetable side) — ticking a second adds it; ticking a
+   *     ticked one removes just that one.
+   *   - `max === 1` (protein) — a new choice REPLACES the old one, and tapping
+   *     the chosen one clears it.
    */
   const toggle = (group: PlateGroup, itemId: string) =>
     setPicked((prev) => {
@@ -775,15 +791,11 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       const several = Number(group.max) > 1;
 
       if (!several) {
-        if (on) return { ...prev, [group.id]: group.required ? current : [] };
+        if (on) return { ...prev, [group.id]: [] };
         return { ...prev, [group.id]: [itemId] };
       }
 
-      if (on) {
-        /* Never leave a required group empty by unticking its last item. */
-        if (group.required && current.length === 1) return prev;
-        return { ...prev, [group.id]: current.filter((id) => id !== itemId) };
-      }
+      if (on) return { ...prev, [group.id]: current.filter((id) => id !== itemId) };
       if (current.length >= Number(group.max)) return prev;
       return { ...prev, [group.id]: [...current, itemId] };
     });
@@ -934,10 +946,14 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                     const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
                     const setCount = (next: number) =>
                       setCounts((prev) => ({ ...prev, [`${g.id}:${it.id}`]: Math.min(cap, Math.max(1, next)) }));
-                    /* Removing the last choice from a required group would leave
-                       the plate incomplete, so the minus button sits dead at 1
-                       instead of quietly doing nothing when pressed. */
-                    const canRemove = !g.required || (picked[g.id] ?? []).length > 1;
+                    /*
+                     * At one portion the minus removes the choice outright, even
+                     * in a required group — anything selected can be deselected.
+                     * An incomplete plate is caught by `missing`, which keeps the
+                     * Add-plate button disabled and says what is still needed, so
+                     * disabling this button only strands the customer with a
+                     * choice they cannot take back.
+                     */
                     const delta = g.priced ? extraCost(Number(it.price) || 0, count) : portionCost(it, count);
 
                     if (cap > 1 && on) {
@@ -967,8 +983,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                             <button
                               type="button"
                               onClick={() => (count <= 1 ? toggle(g, it.id) : setCount(count - 1))}
-                              disabled={count <= 1 && !canRemove}
-                              className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-inherit"
+                              className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
                               aria-label={count <= 1 ? `Remove ${it.label}` : `One fewer ${it.label}`}
                             >
                               −

@@ -249,7 +249,16 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
   const extraPortionPrice = (o: MenuOption) =>
     Math.max(0, ...o.choices.map((c) => Number(c.extraPrice) || 0));
 
-  const missing = item.options.filter((o) => o.required && !picked[o.id]);
+  /*
+   * A required option with nothing chosen.
+   *
+   * An array with nothing in it is still truthy, so `!picked[o.id]` alone said
+   * "answered" for a multiple group the customer had just emptied — and the Add
+   * button stayed enabled, offering to sell a plate with no starch. Empty means
+   * empty, in both the single and the multiple shape.
+   */
+  const answered = (v?: string | string[]) => (Array.isArray(v) ? v.length > 0 : Boolean(v));
+  const missing = item.options.filter((o) => o.required && !answered(picked[o.id]));
 
   const submit = () => {
     if (missing.length) {
@@ -261,13 +270,28 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
     onClose();
   };
 
-  const toggle = (optionId: string, choiceId: string, multiple?: boolean, required = true, max?: number) => {
+  /**
+   * Tap a choice: select it, or deselect it if it is already selected.
+   *
+   * **Anything selected can be deselected, in every option** (owner, 19 Nov
+   * 2026: "if a user click customise and select pap they must be able to
+   * deselect that applies to everything they select"). Tapping Pap by mistake
+   * has to be undoable, and a required group is no exception.
+   *
+   * Deselecting used to be refused in two places — the last tick of a required
+   * multiple group, and any required single-choice group such as the protein.
+   * Both were guarding the "nothing chosen" case, which is already guarded where
+   * it belongs: `missing` disables the Add button and names what is still needed,
+   * so a half-built dish can never be added. Refusing the tap instead left the
+   * customer holding a choice they could not take back.
+   */
+  const toggle = (optionId: string, choiceId: string, multiple?: boolean, _required = true, max?: number) => {
     setPicked((prev) => {
       if (!multiple) {
-        /* Tapping the chosen answer of an optional option clears it — that is
-           the only way to say "no drink", and a drink nobody wanted is money
-           taken for nothing. */
-        if (!required && prev[optionId] === choiceId) {
+        /* Tapping the chosen answer clears it — for the optional drink that is
+           how "no drink" is said, and for a required group it simply empties the
+           group, which `missing` then reports. */
+        if (prev[optionId] === choiceId) {
           const next = { ...prev };
           delete next[optionId];
           return next;
@@ -276,10 +300,6 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
       }
       const current = (Array.isArray(prev[optionId]) ? prev[optionId] : []) as string[];
       if (current.includes(choiceId)) {
-        /* A required group keeps at least one answer; unticking the last one
-           would leave the dish incomplete and the error would arrive at the
-           basket instead of here. */
-        if (required && current.length === 1) return prev;
         return { ...prev, [optionId]: current.filter((c) => c !== choiceId) };
       }
       /* The catalogue's own cap, so the button cannot add a fourth starch the
@@ -387,10 +407,10 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                     setCounts((prev) => ({ ...prev, [`${o.id}:${c.id}`]: Math.min(cap, Math.max(1, next)) }));
                   /* Removing the only tick in a required group would leave the
                      plate incomplete, so the minus is disabled rather than dead. */
-                  const canRemove =
-                    !o.required ||
-                    !o.multiple ||
-                    ((Array.isArray(picked[o.id]) ? picked[o.id] : []) as string[]).length > 1;
+                  /*
+                   * The minus at one portion removes the choice outright, even
+                   * in a required group: anything selected can be deselected.
+                   */
                   const delta = o.priced ? extraCost(c.priceDelta, count) : portionCost(c, count);
                   const eachPrice = o.priced ? c.priceDelta : Number(c.extraPrice) || 0;
 
@@ -423,8 +443,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                           <button
                             type="button"
                             onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max) : setCount(count - 1))}
-                            disabled={count <= 1 && !canRemove}
-                            className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-inherit"
+                            className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
                             aria-label={count <= 1 ? `Remove ${c.label}` : `One fewer ${c.label}`}
                           >
                             −

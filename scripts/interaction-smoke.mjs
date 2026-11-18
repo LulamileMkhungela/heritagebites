@@ -3013,6 +3013,113 @@ await step('a second portion of pap costs money, the first does not', async () =
   return `first portion included, each one after it +R30 — starch and side both`;
 });
 
+await step('anything selected can be deselected, in every group', async () => {
+  /*
+   * Owner, 19 Nov 2026: "if a user click customise and select pap they must be
+   * able to deselect that applies to everything they select."
+   *
+   * Two guards used to refuse the tap and do nothing at all — unticking the last
+   * item of a required group, and clearing a required single choice such as the
+   * protein. A tap that does nothing is indistinguishable from a broken button,
+   * and it left the customer holding a choice they could not take back.
+   *
+   * The safety that those guards were protecting is asserted here too: an
+   * incomplete plate still cannot be added, because the Add button is disabled
+   * and names what is missing.
+   */
+  const dlg = () => builderDialog();
+  const tickedRows = () =>
+    [...(dlg()?.querySelectorAll('fieldset') ?? [])].map((fs) => ({
+      legend: (fs.querySelector('legend')?.textContent ?? '').slice(0, 24),
+      ticked: [...fs.querySelectorAll('[aria-checked="true"]')].length,
+      steppers: [...fs.querySelectorAll('button[aria-label^="One more "]')].length,
+    }));
+  const minus = (name) =>
+    [...(dlg()?.querySelectorAll('button') ?? [])].find((b) =>
+      new RegExp(`^(Remove|One fewer) ${name}`, 'i').test(b.getAttribute('aria-label') ?? ''),
+    );
+
+  /* --- the protein: chosen, replaced, then cleared entirely --- */
+  const proteinName = (tickedRows().find((r) => /protein/i.test(r.legend)) && 'Tshotlo') || 'Mogodu';
+  const proteinRow = [...(dlg()?.querySelectorAll('fieldset') ?? [])]
+    .find((fs) => /protein/i.test(fs.querySelector('legend')?.textContent ?? ''))
+    ?.querySelectorAll('button[aria-checked]');
+  if (!proteinRow?.length) throw new Error('the protein group has no rows');
+
+  /* Pick one that is not already chosen, so the click is a selection. */
+  const fresh = [...proteinRow].find((b) => b.getAttribute('aria-checked') !== 'true');
+  if (!fresh) throw new Error('every protein is already chosen');
+  s5.click(fresh);
+  await sleep(150);
+  s5.click(fresh);
+  await sleep(150);
+  const proteinAfter = tickedRows().find((r) => /protein/i.test(r.legend));
+  if (proteinAfter.ticked !== 0) {
+    throw new Error(`a required single choice cannot be deselected: ${proteinAfter.ticked} still ticked`);
+  }
+
+  /*
+   * With the protein cleared, the plate is incomplete and the Add button must
+   * refuse — the guard the deselect used to perform, done where it belongs.
+   */
+  const addAfterClear = builderAdd();
+  if (!addAfterClear?.disabled) throw new Error('an incomplete plate can still be added');
+  if (!/pick a/i.test(addAfterClear.textContent ?? '')) {
+    throw new Error(`the Add button does not say what is missing: "${addAfterClear.textContent}"`);
+  }
+
+  /* Put it back so the following steps have a complete plate. */
+  s5.click([...proteinRow].find((b) => b.getAttribute('aria-checked') !== 'true'));
+  await sleep(200);
+
+  /* --- the last starch in a required group --- */
+  const starchFs = () =>
+    [...(dlg()?.querySelectorAll('fieldset') ?? [])].find((fs) => /starch/i.test(fs.querySelector('legend')?.textContent ?? ''));
+  const anyRemove = () =>
+    [...(starchFs()?.querySelectorAll('button') ?? [])].find((b) => /^(Remove|One fewer) /i.test(b.getAttribute('aria-label') ?? ''));
+
+  const steppersBefore = [...(starchFs()?.querySelectorAll('button[aria-label^="One more "]') ?? [])];
+  if (!steppersBefore.length) throw new Error('no starch is ticked to deselect');
+  const name = steppersBefore[0].getAttribute('aria-label').replace(/^One more /i, '');
+
+  /* Walk it down: two portions -> one -> gone. */
+  s5.click(anyRemove());
+  await sleep(200);
+  s5.click(anyRemove());
+  await sleep(250);
+  const stillTicked = [...(starchFs()?.querySelectorAll('button[aria-label^="One more "]') ?? [])].some(
+    (b) => b.getAttribute('aria-label') === `One more ${name}`,
+  );
+  if (stillTicked) throw new Error(`the last portion did not deselect ${name}`);
+
+  /* And the vegetable side, the other required multiple group. */
+  const vegFs = () =>
+    [...(dlg()?.querySelectorAll('fieldset') ?? [])].find((fs) => /vegetable side/i.test(fs.querySelector('legend')?.textContent ?? ''));
+  const vegRemove = [...(vegFs()?.querySelectorAll('button') ?? [])].find((b) =>
+    /^(Remove|One fewer) /i.test(b.getAttribute('aria-label') ?? ''),
+  );
+  if (!vegRemove) throw new Error('no vegetable side is ticked to deselect');
+  const vegName = vegRemove.getAttribute('aria-label').replace(/^(Remove|One fewer) /i, '');
+  s5.click(vegRemove);
+  await sleep(250);
+  const vegStillOn = [...(vegFs()?.querySelectorAll('button[aria-label^="One more "]') ?? [])].some(
+    (b) => b.getAttribute('aria-label') === `One more ${vegName}`,
+  );
+  if (vegStillOn) throw new Error(`the vegetable side ${vegName} could not be deselected`);
+
+  /* Restore one of each so the next step can add the plate. */
+  for (const [fs, label] of [[starchFs(), 'starch'], [vegFs(), 'vegetable side']]) {
+    if (![...fs.querySelectorAll('button[aria-label^="One more "]')].length) {
+      const row = [...fs.querySelectorAll('button[aria-checked]')][0];
+      if (!row) throw new Error(`no ${label} row to re-select`);
+      s5.click(row);
+      await sleep(200);
+    }
+  }
+
+  return 'protein, starch and vegetable side all deselect; an incomplete plate cannot be added';
+});
+
 await step('a configured plate lands in the basket at the fixed plate price', async () => {
   const addBtn = builderAdd();
   if (!addBtn) throw new Error('no add-plate control after configuring the plate');
