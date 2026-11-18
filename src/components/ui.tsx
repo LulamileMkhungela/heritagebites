@@ -26,12 +26,13 @@ const variants: Record<Variant, string> = {
    * leaves `:hover` stuck after a tap shows a dark pill with a navy label.
    */
   primary: 'hb-gold',
-  dark: 'bg-ink text-bone hover:bg-ink-3 border border-ink',
-  outline: 'border-2 border-ink text-ink hover:bg-ink hover:text-bone',
+  /* Surfaces and labels all live in the .hb-* utilities — see index.css. */
+  dark: 'hb-dark border border-ink',
+  outline: 'hb-outline border-2 border-ink',
   ghost: 'text-ink hover:bg-ink/5',
   /* For heroes and cards that are already ink — never for a light background. */
-  onDark: 'border border-bone/30 text-bone hover:bg-bone/10',
-  danger: 'border-2 border-chili text-chili hover:bg-chili hover:text-bone',
+  onDark: 'hb-on-dark border border-bone/30',
+  danger: 'hb-danger border-2',
   whatsapp: 'hb-gold',
 };
 

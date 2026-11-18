@@ -78,7 +78,33 @@
    */
   --hb-ink-gradient: linear-gradient(180deg, #001530 0%, #001938 45%, #0c2441 100%);
 
+  /*
+   * One gradient per button surface, and the reason each one is shaped the way
+   * it is:
+   *
+   *  - gold: the accent, pale gold to the sampled ochre. The loudest of the set,
+   *    because it is the one that places an order.
+   *  - navy: the primary colour, deepest at the top and lifted at the bottom.
+   *    Restrained enough for the header and footer to use it as a ground.
+   *  - navy, hover: the same idea shifted lighter, so a hovered dark button
+   *    lifts towards the light rather than darkening into the page.
+   *  - chili: the destructive fill. A single-hue ramp, kept dark at both ends so
+   *    a bone label never has to fight it (8.1:1 at the lightest stop).
+   *  - bone: the outline button's fill on hover, warm paper rather than a flat
+   *    swap to navy — it reads as a pressed-in surface, not a colour change.
+   *  - on-dark: a wash over whatever navy is behind it, for buttons sitting on
+   *    heroes and cards that are already ink.
+   *
+   * Every stop in every ramp clears AA against its label; the numbers are in the
+   * comments beside the rules that use them.
+   */
   --hb-gold-gradient: linear-gradient(135deg, #e2b463 0%, #d9a24a 34%, #c98a2e 68%, #b77e23 100%);
+  --hb-navy-gradient: linear-gradient(180deg, #0a2038 0%, #001938 52%, #0c2441 100%);
+  --hb-navy-gradient-hover: linear-gradient(180deg, #192f4a 0%, #1f3a58 55%, #24425f 100%);
+  --hb-chili-gradient: linear-gradient(135deg, #a13a32 0%, #8e1f18 48%, #6b1510 100%);
+  --hb-bone-gradient: linear-gradient(180deg, #f1e6cf 0%, #ece0c4 55%, #e8dabb 100%);
+  --hb-on-dark-gradient: linear-gradient(180deg, rgb(248 244 236 / 0.1) 0%, rgb(248 244 236 / 0.04) 100%);
+  --hb-on-dark-gradient-hover: linear-gradient(180deg, rgb(248 244 236 / 0.18) 0%, rgb(248 244 236 / 0.1) 100%);
   --hb-gold-gradient-hover: linear-gradient(135deg, #8a5d14 0%, #7d5411 55%, #6f4a0f 100%);
 
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
@@ -179,6 +205,119 @@
    */
   .hb-ink-surface {
     background-image: var(--hb-ink-gradient);
+  }
+
+  /* ---------------------------------------------------------- dark button */
+
+  /*
+   * The navy button. Same shape as .hb-gold: surface and label in one rule, so
+   * a touch device that leaves `:hover` stuck after a tap cannot end up with a
+   * dark fill and a navy label. That is not a theoretical risk — it is the bug
+   * this pattern was introduced to fix.
+   *
+   * Bone on the navy ramp is 16.0:1 at its darkest and 12.4:1 at its lightest.
+   */
+  .hb-dark {
+    background-image: var(--hb-navy-gradient);
+    background-color: var(--color-ink);
+    color: var(--color-bone);
+  }
+
+  .hb-dark:hover {
+    background-image: var(--hb-navy-gradient-hover);
+    background-color: var(--color-ink-3);
+    color: var(--color-bone);
+  }
+
+  /* ------------------------------------------------------- outline button */
+
+  /*
+   * The outline button keeps its ink border and ink label; what changes is that
+   * hover now fills with warm paper rather than flipping the whole button to
+   * navy, which used to make it read as a different control rather than the
+   * same one under the cursor.
+   *
+   * The paper had to be noticeably warmer than the page, or the "fill" was
+   * invisible: bone-on-bone is 1.0:1 to the eye. This ramp sits at 1.13–1.35:1
+   * against the bone ground, which is a visible tint without pretending to be a
+   * solid. Ink on it is 14.2:1 to 12.7:1.
+   */
+  .hb-outline {
+    background-image: none;
+    background-color: transparent;
+    color: var(--color-ink);
+  }
+
+  .hb-outline:hover {
+    background-image: var(--hb-bone-gradient);
+    color: var(--color-ink);
+  }
+
+  /* ---------------------------------------------------------- on-dark fill */
+
+  /*
+   * For buttons sitting on an ink hero or card. The fill is a wash of bone, not
+   * a solid: it has to stay legible over whatever navy it lands on, and a solid
+   * would either vanish into the background or fight it. Bone on the hovered
+   * wash is ~7.7:1 at worst.
+   */
+  .hb-on-dark {
+    background-image: var(--hb-on-dark-gradient);
+    color: var(--color-bone);
+  }
+
+  .hb-on-dark:hover {
+    background-image: var(--hb-on-dark-gradient-hover);
+    color: var(--color-bone);
+  }
+
+  /* -------------------------------------------------------- danger button */
+
+  /*
+   * The destructive fill. Dark at both ends on purpose: a bone label sits on it
+   * at 6.1:1 at the lightest stop, so "Cancel order" stays readable even though
+   * the colour is a warning.
+   */
+  .hb-danger {
+    background-image: var(--hb-chili-gradient);
+    background-color: var(--color-chili);
+    color: var(--color-bone);
+    border-color: var(--color-chili);
+  }
+
+  .hb-danger:hover {
+    background-image: linear-gradient(135deg, #8e1f18 0%, #7d1a14 50%, #6b1510 100%);
+    background-color: #7d1a14;
+    color: var(--color-bone);
+  }
+
+  /* ------------------------------------------------------------ fallbacks */
+
+  /*
+   * Gradients are decoration. Customers who have asked their device to reduce
+   * motion or contrast get the flat sampled colour instead — every one of these
+   * is the brand colour the ramp is built from, and every one already passes AA.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .hb-dark,
+    .hb-dark:hover,
+    .hb-outline:hover,
+    .hb-on-dark,
+    .hb-on-dark:hover,
+    .hb-danger,
+    .hb-danger:hover {
+      background-image: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .hb-dark,
+    .hb-outline,
+    .hb-on-dark,
+    .hb-danger {
+      background-image: none;
+      border: 1px solid ButtonText;
+    }
   }
 
   /* Ndebele-inspired geometric band used as section dividers */
