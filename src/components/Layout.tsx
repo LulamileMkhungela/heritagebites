@@ -162,7 +162,7 @@ export default function Layout() {
                 so a screen reader hears how full the basket is, not just that
                 one exists.
               */
-              aria-label={count > 0 ? `Basket, ${count} item${count === 1 ? '' : 's'}` : 'Basket'}
+              aria-label={count > 0 ? `Cart, ${count} item${count === 1 ? '' : 's'}` : 'Cart'}
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M6 6h15l-1.5 9h-12z" />
@@ -170,7 +170,7 @@ export default function Layout() {
                 <circle cx="18" cy="20" r="1.4" />
                 <path d="M6 6 5 3H2" />
               </svg>
-              <span className="hidden sm:inline">Basket</span>
+              <span className="hidden sm:inline">Cart</span>
               {count > 0 && (
                 <span className="animate-pop absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-ochre px-1 font-mono text-xs font-bold text-[#001938] sm:static">{count}</span>
               )}
@@ -479,7 +479,7 @@ function Footer() {
                 <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-accent-on-ink">Loyalty card</Link></li>
                 {/*
                   With a basket this is the checkout; with nothing in it, it is
-                  the menu. Landing a customer on "Your basket is empty" is a
+                  the menu. Landing a customer on "Your cart is empty" is a
                   dead end they did not ask for (owner, 18 Nov 2026: "when i
                   click order online it takes me to checkout and on checkout its
                   empty").
@@ -606,12 +606,12 @@ function CartDrawerPanel() {
   const belowMinimum = subtotal < (settings?.minDeliveryOrder ?? 100);
 
   return (
-    <div ref={dialogRef} className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Your basket">
-      <button type="button" className="absolute inset-0 bg-ink/60 backdrop-blur-sm" onClick={() => setOpen(false)} aria-label="Close basket" />
+    <div ref={dialogRef} className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Your cart">
+      <button type="button" className="absolute inset-0 bg-ink/60 backdrop-blur-sm" onClick={() => setOpen(false)} aria-label="Close cart" />
       <aside className="animate-rise absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-canvas shadow-2xl">
         <header className="flex items-center justify-between border-b-2 border-theme/10 px-5 py-4">
           <div>
-            <h2 className="font-display text-xl font-semibold">Your basket</h2>
+            <h2 className="font-display text-xl font-semibold">Your cart</h2>
             <p className="text-xs text-theme-soft">{lines.length} line{lines.length === 1 ? '' : 's'}</p>
           </div>
           <button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-full border-2 border-theme/12 hover:bg-ink hover:text-bone" aria-label="Close">
@@ -759,7 +759,7 @@ function CartDrawerPanel() {
                   confirmClear ? 'bg-chili text-bone hover:bg-chili/90' : 'text-theme-soft underline hover:text-chili'
                 }`}
               >
-                {confirmClear ? `Tap again to clear ${lines.reduce((n, l) => n + l.qty, 0)} plates` : 'Clear basket'}
+                {confirmClear ? `Tap again to clear ${lines.reduce((n, l) => n + l.qty, 0)} plates` : 'Clear cart'}
               </button>
             </footer>
           </>
@@ -873,7 +873,7 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
                 ))}
               </div>
               <p className="mt-5 text-xs leading-relaxed text-theme-muted">
-                Search matches dish names, ingredients and what a dish is made of. Press ⏎ to open, or + to add straight to your basket.
+                Search matches dish names, ingredients and what a dish is made of. Press ⏎ to open, or + to add straight to your cart.
               </p>
             </div>
           )}

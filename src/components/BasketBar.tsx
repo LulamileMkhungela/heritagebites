@@ -54,7 +54,7 @@ export function BasketBar() {
     const added = count - previous.current;
     previous.current = count;
     if (added <= 0) return;
-    setFlash(added === 1 ? 'Added to basket' : `${added} added to basket`);
+    setFlash(added === 1 ? 'Added to cart' : `${added} added to basket`);
     const timer = setTimeout(() => setFlash(''), 2200);
     return () => clearTimeout(timer);
   }, [count]);
@@ -92,7 +92,7 @@ export function BasketBar() {
             type="button"
             onClick={() => setOpen(true)}
             className="min-h-11 min-w-0 flex-1 text-left"
-            aria-label={`Open your basket, ${count} item${count === 1 ? '' : 's'}, ${zar(subtotal)}`}
+            aria-label={`Open your cart, ${count} item${count === 1 ? '' : 's'}, ${zar(subtotal)}`}
           >
             <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-theme-soft">
               {flash ? (
@@ -135,7 +135,7 @@ export function BasketBar() {
             type="button"
             onClick={clear}
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-2 border-theme/15 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-theme-soft transition-colors hover:border-chili hover:text-chili sm:px-4"
-            aria-label={`Clear the basket, ${count} item${count === 1 ? '' : 's'}`}
+            aria-label={`Clear the cart, ${count} item${count === 1 ? '' : 's'}`}
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6" />

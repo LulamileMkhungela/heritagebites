@@ -33,7 +33,7 @@ export function OrderAgain({
   /** Where the customer lands after their basket is rebuilt. */
   to = '/checkout',
   heading = 'Order it again',
-  intro = 'One tap puts the same plates, starches and sides back in your basket at today’s prices.',
+  intro = 'One tap puts the same plates, starches and sides back in your cart at today’s prices.',
 }: {
   orders: PastOrder[];
   to?: string;
@@ -83,12 +83,12 @@ export function OrderAgain({
          before they pay for a partly-different order. */
       setNotice({
         kind: 'error',
-        text: `Most of ${order.code} is back in your basket, but we could not add: ${missing.join('; ')}.`,
+        text: `Most of ${order.code} is back in your cart, but we could not add: ${missing.join('; ')}.`,
       });
       return;
     }
 
-    setNotice({ kind: 'ok', text: `${order.code} is back in your basket at today’s prices.` });
+    setNotice({ kind: 'ok', text: `${order.code} is back in your cart at today’s prices.` });
     nav(to);
   };
 
@@ -143,7 +143,7 @@ export function OrderAgain({
                     {busy === order.code
                       ? 'Putting it back…'
                       : basketCount > 0
-                        ? 'Replace my basket with this'
+                        ? 'Replace my cart with this'
                         : 'Order this again'}
                   </Button>
                 </div>

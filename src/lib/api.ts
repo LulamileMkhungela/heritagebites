@@ -117,7 +117,7 @@ const STATIC_CATALOG = `${BASE_URL.replace(/\/$/, '')}/api/catalog.json`;
  */
 export const PREVIEW_NOTICE =
   'We take orders on WhatsApp or by phone on +27 67 013 7587. ' +
-  'Send us your basket there and the kitchen will confirm it with you.';
+  'Send us your cart there and the kitchen will confirm it with you.';
 
 /**
  * What an enquiry says when there is nowhere to send it.

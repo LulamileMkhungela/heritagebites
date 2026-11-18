@@ -75,22 +75,40 @@ describe('service window', () => {
     assert.equal(wednesday.open, false);
     assert.equal(wednesday.isServiceDay, false);
     assert.equal(wednesday.headline, 'Wednesday is a rest day');
-    // Warm and professional, but it still says when the food will be cooked and
-    // that daily trading is the plan — without inventing a launch date.
-    assert.match(wednesday.message, /pots are resting/i);
+    /*
+     * Owner, 19 Nov 2026: the rest-day copy must say we are not cooking, that
+     * the customer can still schedule any cooking day ahead, and that the
+     * kitchen needs a day or two — 24 hours at the floor — plus catering on
+     * WhatsApp.
+     *
+     * The assertions are on those commitments rather than on the previous
+     * sentence, so the wording can be rewritten without the test having to pin
+     * it word for word. What must not drift is the substance.
+     */
+    assert.match(wednesday.message, /not cooking today/i);
     assert.match(wednesday.message, /Thursdays and Fridays/);
-    // The strip prints the headline first, so the one-liner must add to it
-    // rather than repeat the word "Rest day" back to the reader.
-    assert.match(wednesday.shortMessage, /^We cook/, 'the strip gets a one-liner without the full speech');
-    assert.doesNotMatch(wednesday.shortMessage, /^Rest day/);
-    assert.match(wednesday.message, /every day/i);
+    assert.match(wednesday.message, /still order|nothing is blocked/i, 'it must say ordering is not blocked');
+    assert.match(wednesday.message, /24 hours/i, 'the 24-hour floor must be stated');
+    assert.match(wednesday.message, /day or two/i, 'the ask for notice must be stated');
+    assert.match(wednesday.message, /catering/i, 'catering is offered');
+    assert.match(wednesday.message, /WhatsApp/i);
     assert.match(wednesday.message, /Thursday 12:00–13:30/);
     assert.doesNotMatch(wednesday.message, /closed right now/i);
+
+    /*
+     * The strip prints the headline first, so the one-liner must add to it
+     * rather than repeat "Rest day" back to the reader — and it must still
+     * carry the three things a customer needs without opening anything.
+     */
+    assert.match(wednesday.shortMessage, /^Not cooking today/, 'the strip gets a one-liner without the full speech');
+    assert.doesNotMatch(wednesday.shortMessage, /^Rest day/);
+    assert.match(wednesday.shortMessage, /24 hours/);
+    assert.match(wednesday.shortMessage, /catering/i);
 
     // Same behaviour for the other closed days, with that day's own name.
     const monday = serviceStatus(settings, sast('2026-10-26', '09:00'));
     assert.equal(monday.headline, 'Monday is a rest day');
-    assert.match(monday.message, /^The pots are resting today/);
+    assert.match(monday.message, /^We are not cooking today/);
   });
 
   test('a cooking day outside the window reads differently from a rest day', () => {

@@ -276,14 +276,33 @@ export function serviceStatus(settings, now = new Date()) {
       : 'Please message us to arrange the next one.';
   } else {
     headline = `${at.dayLabel} is a rest day`;
+    /*
+     * What a rest day actually means for the customer, in their terms.
+     *
+     * The old copy said "the pots are resting" and left the practical question
+     * unanswered: can I order at all today? The answer is yes — you are never
+     * blocked, you choose the cooking day you want — but the kitchen needs the
+     * order before it starts, so it can buy and prep. Hence the ask for a day
+     * or two's notice, with 24 hours as the hard floor.
+     *
+     * Catering is offered here too: it is the one thing people ask about that
+     * cannot be handled in a normal slot, and putting it beside the schedule is
+     * where someone planning an event will look.
+     */
     message = [
-      `The pots are resting today — and honestly, so are we.`,
-      dayList ? `We cook on ${dayList}, ${window},` : 'We cook on selected days,',
-      `and we are working towards being open every day.`,
-      nextWindowLabel ? `We are back ${nextWindowLabel}.` : '',
+      `We are not cooking today.`,
+      dayList ? `The kitchen cooks on ${dayList}, ${window}.` : 'The kitchen cooks on selected days.',
+      nextWindowLabel ? `The next one is ${nextWindowLabel}.` : '',
+      `You can still order — nothing is blocked. Pick any cooking day ahead when you check out, and schedule as far forward as you like.`,
+      `Please order a day or two before the day you want, and at least 24 hours ahead, so the kitchen has time to buy and prep.`,
+      `Catering for an event? Ask us on WhatsApp.`,
     ].filter(Boolean).join(' ');
-    const nextDay = next ? next.dayLabel : null;
-    shortMessage = `We cook ${dayList}, ${window}. ${nextDay ? `Your order goes in first on ${nextDay}.` : 'Please message us to arrange a day.'}`;
+    /*
+     * The strip is one line on a phone. It carries the three things a customer
+     * standing on this page needs: we are shut, when we are open, and that they
+     * can still schedule. The full speech is in the panel below.
+     */
+    shortMessage = `Not cooking today — the kitchen cooks ${dayList}, ${window}. You can still schedule any cooking day ahead; please order at least 24 hours before it. Catering? Ask us on WhatsApp.`;
   }
 
   return {

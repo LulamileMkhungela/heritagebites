@@ -305,7 +305,12 @@ export default function Quest() {
                     </Field>
                   </div>
 
-                  <Field label="Anything else?" hint="optional">
+                  {/*
+                    The parenthesised form the owner asked for: a bare
+                    "optional" floating to the right reads as a separate
+                    word, where "(optional)" attaches to the question.
+                  */}
+                  <Field label="Anything else?" hint="(optional)">
                     <textarea
                       className={`${inputCls} min-h-20 resize-y`}
                       value={form.notes}

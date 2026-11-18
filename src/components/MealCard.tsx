@@ -70,7 +70,7 @@ export function MealCard({
         {/* "basket", everywhere: the sheet footer, the bar and the drawer all
             call it the basket, and one card calling it a cart is a second word
             for the same thing. */}
-        {needsChoice ? 'Choose' : 'Add to basket'}
+        {needsChoice ? 'Customise' : 'Add to cart'}
       </Button>
       <Button size="sm" variant="outline" onClick={onOpen} aria-label={`Details for ${item.name}`}>
         ⓘ
@@ -82,7 +82,20 @@ export function MealCard({
     <button
       type="button"
       onClick={onOpen}
-      className={`relative block overflow-hidden bg-ink/5 text-left ${isList ? 'h-full w-32 shrink-0 sm:w-44' : 'aspect-[4/3] w-full'}`}
+      /*
+       * In list view the photo is a fixed-width column with a LOCKED aspect
+       * ratio, not `h-full`.
+       *
+       * `h-full` made the image column as tall as whatever the text beside it
+       * happened to need, so a two-line description gave a 136px row and a
+       * three-line one gave 190px — the pictures ran from a letterbox to a
+       * portrait down the same list, and the price never sat on the same line
+       * twice. A 4:3 column at a fixed width gives every row the same height, so
+       * the eye can run down the prices and the buttons line up.
+       */
+      className={`relative block shrink-0 overflow-hidden bg-ink/5 text-left ${
+        isList ? 'aspect-[4/3] w-28 self-start rounded-l-2xl sm:w-40' : 'aspect-[4/3] w-full'
+      }`}
       aria-label={`View ${item.name}`}
     >
       <img
@@ -108,9 +121,9 @@ export function MealCard({
   /* ------------------------------- list -------------------------------- */
   if (isList) {
     return (
-      <article className="group flex overflow-hidden rounded-2xl border-2 border-theme/10 bg-surface transition-colors hover:border-theme/25">
+      <article className="group flex items-start overflow-hidden rounded-2xl border-2 border-theme/10 bg-surface transition-colors hover:border-theme/25">
         {photo}
-        <div className="flex min-w-0 flex-1 flex-col gap-1 p-4 sm:flex-row sm:items-center sm:gap-5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1 p-4 sm:min-h-24 sm:flex-row sm:items-center sm:gap-5">
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
             {item.localName && (
@@ -445,7 +458,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
               ? 'Sold out'
               : missing.length
                 ? `Pick a ${missing[0].label.toLowerCase().replace(/^choose your\s+/, '')}`
-                : `Add to basket · ${zar(unitPrice * qty)}`}
+                : `Add to cart · ${zar(unitPrice * qty)}`}
           </Button>
         </footer>
 

@@ -349,13 +349,13 @@ await step('the sides are priced, open their details, and go in the basket', asy
   const chakalaka = cards.find((c) => /Chakalaka/i.test(c.textContent ?? ''));
   if (!chakalaka) throw new Error('no chakalaka card to tap');
   s1.click([...chakalaka.querySelectorAll('button')].find((b) => /Details/i.test(b.getAttribute('aria-label') ?? '')));
-  await s1.waitFor(() => /Add to basket/i.test(s1.text()), 'the side details sheet', 6000);
+  await s1.waitFor(() => /Add to cart/i.test(s1.text()), 'the side details sheet', 6000);
   const sheet = s1.doc.querySelector('[role="dialog"]')?.textContent ?? '';
   if (!/Spicy carrot, bean and pepper relish/i.test(sheet)) throw new Error('the side details do not describe the dish');
   if (!/R\d/.test(sheet)) throw new Error('the side details do not show a price');
 
   /* Add it, and it lands in the basket at its own price. */
-  const addBtn = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to basket/i.test(b.textContent ?? ''));
+  const addBtn = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to cart/i.test(b.textContent ?? ''));
   s1.click(addBtn);
   await sleep(400);
   if (!/Chakalaka/i.test(s1.text())) throw new Error('the side never reached the basket');
@@ -478,7 +478,7 @@ await step('with a basket, "Order online" opens the basket instead of a page', a
   await shopper.waitFor(() => /A taste of South African heritage/i.test(shopper.text()), 'the home page', 20000);
   const btn = [...shopper.doc.querySelectorAll('button')].find((b) => /^Order online$/i.test((b.textContent ?? '').trim()));
   shopper.click(btn);
-  await shopper.waitFor(() => shopper.doc.querySelector('[role="dialog"][aria-label="Your basket"]'), 'the basket drawer', 8000);
+  await shopper.waitFor(() => shopper.doc.querySelector('[role="dialog"][aria-label="Your cart"]'), 'the basket drawer', 8000);
   if (!/Traditional Plate/.test(shopper.doc.querySelector('[role="dialog"]')?.textContent ?? '')) {
     throw new Error('the drawer opened without the plate in it');
   }
@@ -580,8 +580,8 @@ await step('the checkout door is shut while the basket is under R100, and open o
   }
 
   /* The drawer is the same door, so it is shut the same way. */
-  short.click([...short.doc.querySelectorAll('button')].find((b) => /basket/i.test(b.getAttribute('aria-label') ?? '')));
-  await short.waitFor(() => short.doc.querySelector('[role="dialog"][aria-label="Your basket"]'), 'the basket drawer', 6000);
+  short.click([...short.doc.querySelectorAll('button')].find((b) => /cart/i.test(b.getAttribute('aria-label') ?? '')));
+  await short.waitFor(() => short.doc.querySelector('[role="dialog"][aria-label="Your cart"]'), 'the basket drawer', 6000);
   const drawerShut = [...short.doc.querySelectorAll('[role="dialog"] button')].find((b) => /^Checkout$/i.test((b.textContent ?? '').trim()));
   if (!drawerShut) throw new Error('the drawer lost its checkout button');
   if (!drawerShut.disabled) throw new Error('the drawer lets a R30 basket through while the bar does not');
@@ -624,7 +624,7 @@ await step('nothing selected cannot be added: the order and add buttons say what
   if (!cardBtn) throw new Error('no Mala-Mogodu card');
   s1.click(cardBtn);
   await s1.waitFor(() => s1.dialogs().length > 0, 'the dish sheet', 8000);
-  const addDish = [...s1.doc.querySelectorAll('[role="dialog"] footer button')].find((el) => /Add to basket|Pick a/i.test(el.textContent ?? ''));
+  const addDish = [...s1.doc.querySelectorAll('[role="dialog"] footer button')].find((el) => /Add to cart|Pick a/i.test(el.textContent ?? ''));
   if (!addDish) throw new Error('the dish sheet has no add button');
   if (!addDish.disabled) throw new Error('a dish with nothing chosen can still be added');
   if (!/Pick a/i.test(addDish.textContent ?? '')) throw new Error(`the sheet's add button does not name the missing choice: ${addDish.textContent}`);
@@ -789,7 +789,7 @@ await step('picking a search result opens that dish on the menu', async () => {
   s1.click(result);
   await s1.waitFor(() => s1.w.location.pathname === '/menu', 'navigation to /menu', 10000);
   // The deep link opens the dish sheet; assert the sheet actually opened.
-  await s1.waitFor(() => /Add to basket|Choose|Serves/i.test(s1.text()), 'dish sheet to open', 10000);
+  await s1.waitFor(() => /Add to cart|Customise|Serves/i.test(s1.text()), 'dish sheet to open', 10000);
   return s1.w.location.pathname + s1.w.location.search;
 });
 
@@ -813,11 +813,11 @@ await step('overlays trap focus and close on Escape', async () => {
 
   // 2. basket drawer
   const basket = [...s1.doc.querySelectorAll('button, a')].find((e) =>
-    /Basket/i.test(e.getAttribute('aria-label') ?? ''),
+    /\bCart\b/i.test(e.getAttribute('aria-label') ?? ''),
   );
   if (!basket) throw new Error('no basket control');
   s1.click(basket);
-  await s1.waitFor(() => s1.dialogs().some((d) => d.getAttribute('aria-label') === 'Your basket'), 'basket to open', 8000);
+  await s1.waitFor(() => s1.dialogs().some((d) => d.getAttribute('aria-label') === 'Your cart'), 'basket to open', 8000);
   await s1.waitFor(() => s1.focusInsideDialog(), 'focus to move into the basket', 8000);
   s1.press('Escape');
   await s1.waitFor(() => s1.dialogs().length === 0, 'basket to close on Escape', 8000);
@@ -1093,7 +1093,7 @@ await step('choosing required options then adding puts the line in the basket', 
    * also the label on every side card behind the dialog, and an unscoped match
    * clicks the menu instead of the sheet.
    */
-  const sheetAdd = () => [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to basket/i.test(b.textContent ?? ''));
+  const sheetAdd = () => [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to cart/i.test(b.textContent ?? ''));
   await s1.waitFor(sheetAdd, 'the add button to mount', 15000);
   s1.click(sheetAdd());
   /*
@@ -1101,13 +1101,13 @@ await step('choosing required options then adding puts the line in the basket', 
    * ordering several plates was interrupted between each one. The pinned basket
    * bar is the feedback now, and the drawer opens when it is asked for.
    */
-  await s1.waitFor(() => /added to basket/i.test(s1.text()), 'the basket bar to confirm the add', 8000);
+  await s1.waitFor(() => /added to cart/i.test(s1.text()), 'the basket bar to confirm the add', 8000);
   const openBasket = [...s1.doc.querySelectorAll('button, a')].find((e) =>
-    /Your basket|Open your basket|^Basket/i.test(`${e.getAttribute('aria-label') ?? ''} ${e.textContent ?? ''}`),
+    /Your cart|Open your cart|^Cart/i.test(`${e.getAttribute('aria-label') ?? ''} ${e.textContent ?? ''}`),
   );
   if (!openBasket) throw new Error('no basket control');
   s1.click(openBasket);
-  await s1.waitFor(() => /Your basket/i.test(s1.text()), 'basket drawer');
+  await s1.waitFor(() => /Your cart/i.test(s1.text()), 'basket drawer');
   if (!/Mala-Mogodu/.test(s1.text())) throw new Error('added item not in basket');
   if (!/Pap/.test(s1.text()) || !/Braised cabbage/.test(s1.text())) {
     throw new Error('chosen starch and side are not carried into the basket line');
@@ -3451,9 +3451,9 @@ await step('the basket bar states the one arrangement there is: delivery', async
     throw new Error('the old collection price line is still in the basket bar');
   }
 
-  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your cart/i.test(b.getAttribute('aria-label') ?? ''));
   s8.click(open);
-  await s8.waitFor(() => /Your basket/i.test(s8.text()), 'the basket drawer', 15000);
+  await s8.waitFor(() => /Your cart/i.test(s8.text()), 'the basket drawer', 15000);
 
   /* There is no switch left to click: one option is not a choice. */
   const switchBtn = [...s8.doc.querySelectorAll('button')].find((b) => /^collection$/i.test((b.textContent ?? '').trim()));
@@ -3472,12 +3472,12 @@ await step('the basket bar states the one arrangement there is: delivery', async
 
 await step('the basket can be cleared from the bottom of the drawer', async () => {
   /* Open the drawer from the bar. */
-  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your cart/i.test(b.getAttribute('aria-label') ?? ''));
   if (!open) throw new Error('no basket bar to open');
   s8.click(open);
-  await s8.waitFor(() => /Your basket/i.test(s8.text()), 'the basket drawer', 15000);
+  await s8.waitFor(() => /Your cart/i.test(s8.text()), 'the basket drawer', 15000);
 
-  const clearButton = () => [...s8.doc.querySelectorAll('button')].find((b) => /Clear basket|Tap again to clear/i.test(b.textContent ?? ''));
+  const clearButton = () => [...s8.doc.querySelectorAll('button')].find((b) => /Clear cart|Tap again to clear/i.test(b.textContent ?? ''));
   if (!clearButton()) throw new Error('the drawer has no way to clear the basket');
 
   /*
@@ -3494,7 +3494,7 @@ await step('the basket can be cleared from the bottom of the drawer', async () =
   s8.click(clearButton());
   await s8.waitFor(() => /Nothing in the pot yet/i.test(s8.text()), 'the empty basket', 15000);
   await sleep(200);
-  if (/Open your basket/i.test(s8.text())) throw new Error('the bar is still showing for an empty basket');
+  if (/Open your cart/i.test(s8.text())) throw new Error('the bar is still showing for an empty basket');
   return 'two taps, and the basket is empty';
 });
 
@@ -3550,9 +3550,9 @@ await step('a page load still shows the plates that were already picked', async 
   if (!/3 items · delivery/.test(s9.text())) throw new Error(`the bar lost the items or kept the retired collection mode: ${s9.text().slice(0, 200)}`);
   if (!/R330/.test(s9.text())) throw new Error(`the bar lost the running total: ${s9.text().slice(0, 200)}`);
 
-  const open = [...s9.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  const open = [...s9.doc.querySelectorAll('button')].find((b) => /Open your cart/i.test(b.getAttribute('aria-label') ?? ''));
   s9.click(open);
-  await s9.waitFor(() => /Your basket/i.test(s9.text()), 'the basket drawer after a reload', 15000);
+  await s9.waitFor(() => /Your cart/i.test(s9.text()), 'the basket drawer after a reload', 15000);
   if (!/Mogodu/.test(s9.text()) || !/Short Rib/i.test(s9.text())) {
     throw new Error('the drawer does not list both plates that were picked before the reload');
   }
@@ -3563,12 +3563,12 @@ await step('a page load still shows the plates that were already picked', async 
 });
 
 await step('the bar can empty the whole basket without opening it', async () => {
-  const clearOnBar = () => [...s9.doc.querySelectorAll('button')].find((b) => /^Clear the basket/i.test(b.getAttribute('aria-label') ?? ''));
+  const clearOnBar = () => [...s9.doc.querySelectorAll('button')].find((b) => /^Clear the cart/i.test(b.getAttribute('aria-label') ?? ''));
   if (!clearOnBar()) throw new Error('the basket bar has no clear button');
   s9.click(clearOnBar());
   await sleep(400);
 
-  if (/Open your basket/i.test(s9.text())) throw new Error('the bar is still showing after clearing');
+  if (/Open your cart/i.test(s9.text())) throw new Error('the bar is still showing after clearing');
   const stored = JSON.parse(s9.w.localStorage.getItem('hb.cart') ?? '{}');
   const lines = stored?.state?.lines ?? [];
   if (lines.length) throw new Error(`${lines.length} line(s) survived the clear button`);

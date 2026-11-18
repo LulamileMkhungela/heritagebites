@@ -384,7 +384,7 @@ function LiveCheckout() {
    * rule is now one flag both paths read, so neither can be pressed while the
    * basket is short, and neither explains it differently.
    *
-   * An empty basket never gets this far (the page shows "Your basket is empty"),
+   * An empty basket never gets this far (the page shows "Your cart is empty"),
    * so this really is only about a basket that holds too little.
    */
   const belowMinimum = localSubtotal < Number(settings?.minDeliveryOrder ?? 100);
@@ -475,7 +475,7 @@ function LiveCheckout() {
         setQuote({ subtotal: r.totals.subtotal, delivery: r.totals.delivery, total: r.totals.total });
         setFatal(null);
       } catch (e) {
-        setFatal(e instanceof ApiError ? e.errors.join(' ') : 'Could not price your basket.');
+        setFatal(e instanceof ApiError ? e.errors.join(' ') : 'Could not price your cart.');
       } finally {
         setState('idle');
       }
@@ -643,7 +643,7 @@ function LiveCheckout() {
           height={96}
           className="mx-auto h-24 w-24 object-contain opacity-85"
         />
-        <h1 className="mt-4 font-display text-4xl font-semibold">Your basket is empty</h1>
+        <h1 className="mt-4 font-display text-4xl font-semibold">Your cart is empty</h1>
         {/*
           Say what a checkout needs, not just that this one is empty.
 
@@ -1158,7 +1158,7 @@ function LiveCheckout() {
 
               <p className={`mt-3 text-xs leading-relaxed ${waReady ? 'text-theme-soft' : 'font-medium text-chili'}`}>
                 {closed
-                  ? 'The window has closed, so this sends your basket as a question rather than an order. If the kitchen can still prepare it, someone will reply and arrange payment with you.'
+                  ? 'The window has closed, so this sends your cart as a question rather than an order. If the kitchen can still prepare it, someone will reply and arrange payment with you.'
                   : waReady
                     ? `Your order goes to WhatsApp with every detail already filled in — name, number, the basket, the delivery address, and your notes. Send it and we confirm, then pay ${method2 === 'cash' ? 'cash to the driver' : 'by secure Yoco link or card'}.`
                     : `${waBlocked}. Fill that in above and this button opens WhatsApp with the whole order.`}
@@ -1474,7 +1474,7 @@ function PreviewCheckout() {
    */
   const problem =
     !lines.length
-      ? 'Your basket is empty.'
+      ? 'Your cart is empty.'
       : !customer.name.trim()
         ? 'Add your full name first'
         : !customer.phone.trim()
@@ -1683,9 +1683,9 @@ function PreviewCheckout() {
         {/* Basket */}
         <aside className="lg:sticky lg:top-28 lg:self-start">
           <div className="rounded-3xl border-2 border-theme/10 bg-surface p-6">
-            <h2 className="font-display text-2xl font-semibold">Your basket</h2>
+            <h2 className="font-display text-2xl font-semibold">Your cart</h2>
             {lines.length === 0 ? (
-              <p className="mt-3 text-sm text-theme-soft">Nothing in the basket yet.</p>
+              <p className="mt-3 text-sm text-theme-soft">Nothing in the cart yet.</p>
             ) : (
               <ul className="mt-4 divide-y divide-ink/10">
                 {lines.map((l) => (

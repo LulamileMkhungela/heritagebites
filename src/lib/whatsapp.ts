@@ -246,7 +246,7 @@ export const CHANNEL_ENQUIRY =
   'Hi Heritage Bites! I would like to order. Please tell me what is available and how to pay.';
 
 /**
- * A basket link, or an order enquiry when the basket is empty: a WhatsApp
+ * A basket link, or an order enquiry when the cart is empty: a WhatsApp
  * button must never open a blank message box.
  */
 export function basketHref(number: string | undefined, lines: CartLine[], opts: OrderMessageOptions = {}): string {
