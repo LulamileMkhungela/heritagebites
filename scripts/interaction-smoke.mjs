@@ -3715,6 +3715,41 @@ await step('the back-to-top button appears only after scrolling, and returns the
   return 'hidden at the top, appears after scrolling, clears the basket bar, returns to the top, absent from the checkout';
 });
 
+await step('the heritage band carries white as one of its painted pigments', async () => {
+  /*
+   * Owner, 19 Nov 2026: "the heritage vector must also have a white color".
+   *
+   * The band's ground is chalk (#f7f2e6), so white has to be a *painted* chevron
+   * rather than the surface showing through — otherwise the register reads as
+   * four colours on a cream stripe instead of a five-shape cloth repeat.
+   *
+   * Asserted against the rendered SVG so it catches the pigment being dropped
+   * from the cycle, which is a one-word edit that leaves everything else intact.
+   */
+  const page = boot('/menu');
+  await page.waitFor(() => /The full menu/i.test(page.text()), 'menu', 20000);
+  await sleep(300);
+
+  const band = [...page.doc.querySelectorAll('svg')].find((svg) => svg.querySelector('pattern'));
+  if (!band) throw new Error('no heritage band on the page');
+
+  const fills = [...band.querySelectorAll('path')].map((p) => p.getAttribute('fill'));
+  if (!fills.length) throw new Error('the band has no painted shapes');
+
+  const unique = [...new Set(fills)];
+  if (!unique.includes('#ffffff')) {
+    throw new Error(`white is not in the band: ${unique.join(', ')}`);
+  }
+  /* One shape per pigment in the tile, or the cycle is not whole. */
+  const cycle = ['var(--color-ochre)', '#ffffff', '#a33b26', '#1f4e79', '#2f6b4f'];
+  for (const pigment of cycle) {
+    if (!unique.includes(pigment)) throw new Error(`the band is missing ${pigment}`);
+  }
+
+  page.close();
+  return `${fills.length} chevrons in ${unique.length} pigments, white included`;
+});
+
 await step('the appearance control cycles light, dark and back to the device', async () => {
   /*
    * Owner, 19 Nov 2026: "can i have dark and light mode".

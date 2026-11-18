@@ -297,14 +297,30 @@ export const MHALANGU = {
   blue: '#1f4e79',             /* sky blue, darker than the navy contour */
   green: '#2f6b4f',            /* leaf green */
   chalk: '#f7f2e6',            /* the lime-plaster white the paint sits on */
+  /*
+   * A true white, not the chalk ground.
+   *
+   * Chalk (#f7f2e6) is warm plaster and reads as the surface the paint sits on.
+   * The band carries white as one of its pigments, which is how the Ndebele
+   * registers actually work — the white triangles are painted, not gaps — and it
+   * is what keeps the sequence from reading as four colours on a cream stripe.
+   */
+  white: '#ffffff',
   ink: 'var(--color-ink)',     /* #001938 — every contour */
 } as const;
 
 type Pigment = keyof typeof MHALANGU;
 const P = MHALANGU;
 
-/** The repeating sequence. Four pigments, so a four-unit tile loops cleanly. */
-const CYCLE: Pigment[] = ['ochre', 'red', 'blue', 'green'];
+/**
+ * The repeating sequence.
+ *
+ * Five pigments, so the tile is five units wide and still loops cleanly. White
+ * is in the cycle rather than only on the ground: on a chalk band a chalk
+ * ground with four colours looks like a stripe of four motifs, whereas a white
+ * chevron between them is a fifth painted shape and the band reads as cloth.
+ */
+const CYCLE: Pigment[] = ['ochre', 'white', 'red', 'blue', 'green'];
 
 /* ---------------------------------------------------------------------- */
 /* Repetition helpers                                                      */
@@ -402,7 +418,7 @@ export function HeritageBand({
   const id = usePatternId('hb-band');
   const dark = on === 'ink';
   const height = 16;
-  const step = tileSize / 4;
+  const step = tileSize / CYCLE.length;
   const base = height - 4.4;
   const apex = 5.2;
   const kerb = dark ? P.chalk : P.ink;
@@ -418,7 +434,7 @@ export function HeritageBand({
       <defs>
         <pattern id={id} width={tileSize} height={height} patternUnits="userSpaceOnUse">
           <rect width={tileSize} height={height} fill={P.chalk} />
-          {Array.from({ length: 4 }, (_, k) => {
+          {Array.from({ length: CYCLE.length }, (_, k) => {
             const cx = k * step + step / 2;
             return (
               <path
@@ -491,6 +507,8 @@ export function ShweshwePanel({ className = '', style }: { className?: string; s
       <rect width="96" height="24" fill={P.chalk} />
       {CYCLE.map((pig, r) => (
         <g key={r}>
+          {/* 12 tiles of 8 = the 96-unit viewBox; the shapes inside are 8 wide
+              so the register stays a clean repeat at any pigment count. */}
           {tile(12, 8, (i) => (
             <path
               d={
