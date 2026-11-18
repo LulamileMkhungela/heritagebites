@@ -2,7 +2,7 @@
  * Service-window and delivery-area rules.
  *
  * The business cooks on Thursdays and Fridays only, serving delivery and
- * delivery between 12:00 and 13:30, in Sandton and Rosebank and up to 15 km out.
+ * delivery between 12:00 and 13:30, in Sandton and Rosebank and up to 10 km out.
  * These helpers decide what the storefront may promise, in one place, so the
  * API and the page copy can never drift apart.
  *
@@ -469,11 +469,11 @@ export function deliveryAddressProblem(address, area, settings, hintArea = null)
  * The wording is "Another area" and not "Other — outside Sandton & Rosebank"
  * (owner, 16 Nov 2026: "remove Outside Sandton & Rosebank"). That phrase
  * restated the two-suburb boundary as a wall, one line after the site had
- * explained there is one 15 km radius — so the customer read a closed list and a
+ * explained there is one radius — so the customer read a closed list and a
  * fee they could not see the reason for. The option is simply the third answer to
  * "where are you": somewhere else, priced by its distance.
  */
-export const OUTSIDE_AREA = 'Another area — within 15 km';
+export const OUTSIDE_AREA = 'Another area — within 10 km';
 
 /**
  * Is this select value the "somewhere else" option?

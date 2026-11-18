@@ -144,9 +144,9 @@ export function basketMessage(lines: CartLine[], opts: OrderMessageOptions = {})
   /*
    * The suburb, when it is a real one.
    *
-   * The select's third option is the label "Another area — within 15 km", which
+   * The select's third option is the label "Another area — within 10 km", which
    * is a rule, not a place: "I would like it delivered in Another area — within
-   * 15 km" is nonsense in a chat, and the full address is on its own line
+   * 10 km" is nonsense in a chat, and the full address is on its own line
    * directly below anyway. So the option is skipped and the sentence stays a
    * sentence.
    */

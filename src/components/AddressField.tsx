@@ -32,7 +32,7 @@ import type { Settings } from '../lib/types';
  *
  *   1. An address that names the *other* one of the two included suburbs is a hard
  *      error — the kitchen would be sent outside the boundary the customer believes
- *      they ordered inside. "Another area — within 15 km" is never a contradiction;
+ *      they ordered inside. The "Another area" choice is never a contradiction;
  *      the distance check prices that order instead.
  *   2. An address that names no area at all only warrants a "check the suburb"
  *      note, because plenty of real addresses are just a street and a number.

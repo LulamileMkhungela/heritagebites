@@ -73,8 +73,18 @@ rule('has no prep-time or delivery-estimate row', () => where(/prep time|estimat
 rule('has no minimum-order paragraph', () => where(/minimum order of R|R100 minimum.*spend/i));
 rule('has no "no email receipts" line', () => where(/no email receipts/i));
 
-/* 5. no language / native-name labels on meals */
-rule('shows no language labels on meals', () => where(/\b(Sepedi|Setswana|isiZulu|Zulu|Sotho)\b/));
+/*
+ * 5. no language / native-name labels on meals.
+ *
+ * Scoped to the *meal surfaces*. The owner's rule (round 15) was about the menu
+ * UI: a dish card used to carry "Setswana · seTswana" under the name, which is a
+ * label on a meal the customer is trying to read. The About page is a different
+ * thing entirely — it is their own story, and it says "traditional Setswana food"
+ * because that is what the food is. The rule was flagging the owner's own words
+ * as a violation of a rule about card layouts.
+ */
+rule('shows no language labels on meals', () =>
+  where(/\b(Sepedi|Setswana|isiZulu|Zulu|Sotho)\b/).filter((r) => /^\/menu|^\/specials|^\/checkout/.test(r)));
 
 /* 6. plate names drop the word "Plate" (except two) */
 rule('plate names drop the word Plate', () =>

@@ -21,9 +21,11 @@
  * store have no `extraPrice`, and a second pap would quietly cost nothing. The
  * version is what makes the stored catalogue be replaced.
  *
- * 15 — starches and vegetable sides carry `extraAfter` / `extraPrice` / `max`.
+ * 16 — the kitchen's real rate card: starches R20, sides R15, protein R30
+ *      (was a flat R30 placeholder for all three), and delivery at a flat R50
+ *      out to 10 km (was R30 out to 15 km).
  */
-export const SEED_VERSION = 15;
+export const SEED_VERSION = 16;
 
 const img = (name) => `/img/${name}.jpg`;
 /*
@@ -52,21 +54,37 @@ const img = (name) => `/img/${name}.jpg`;
  *
  * So a side is a real product: its own price, its own portion sentence, its own
  * photograph, addable to the basket. The R100 minimum is what stops somebody
- * ordering one R30 bowl of chakalaka on its own — the same gate a small order
+ * ordering one bowl of chakalaka on its own — the same gate a small order
  * already meets, not a special rule for sides.
  *
- * PRICE IS A GUESS — the owner has the number. R30 a portion is the placeholder,
- * and every surface reads this one constant, so one edit moves the menu, the
- * basket and the till together.
+ * THE PRICES ARE CONFIRMED (19 Nov 2026), not a guess any more.
+ *
+ * The kitchen sent the rate card the site had been estimating:
+ *
+ *   Starches (pap, samp & beans, mabele, dumpling, garlic bread)  R20
+ *   Vegetable sides (chakalaka, braised cabbage, braised spinach,
+ *                    morogo, green salad)                          R15
+ *   Protein (tshotlo, beef short rib, mogodu, tlhakwana,
+ *            chicken hardbody)                                     R30
+ *
+ * R30 was the placeholder for all three, so the site was overcharging a bowl of
+ * pap by R10 and a bowl of chakalaka by R15 — the two cheapest things on it.
+ *
+ * The three constants below are the only copy of those numbers. The menu, the
+ * basket, the till and the plate builder's extra-portion rule all read them, so
+ * the next price change is one edit in one file.
  *
  * "Inside a plate" is a different thing and stays true: every side here is also
  * chosen *within* the R100/R130 plate, where it costs nothing extra. The card
  * says both, in that order, because the price is for the bowl.
  */
-const SIDE_PORTION_PRICE = 30;
+export const STARCH_PORTION_PRICE = 20;
+export const SIDE_PORTION_PRICE = 15;
+export const PROTEIN_EXTRA_PRICE = 30;
 
 /*
- * What a SECOND portion of a starch or a vegetable side costs.
+ * What a SECOND portion of a starch or a vegetable side costs — and it is not one
+ * number any more.
  *
  * Owner, 19 Nov 2026: "on choose a starch, choose vegetables, can we have
  * similar functionality like we have on add soft drink so the user can set if
@@ -76,20 +94,13 @@ const SIDE_PORTION_PRICE = 30;
  * The first portion of each is included in the plate price — that is what the
  * plate price buys, and it is why these choices carry a zero delta. A further
  * portion is food the kitchen has to cook and pack separately, so it is charged
- * at the same amount as a side sold on its own: R30.
+ * at exactly what that bowl costs on its own: a starch R20, a vegetable side R15.
  *
- * It is deliberately tied to SIDE_PORTION_PRICE rather than being its own
- * number. A customer can buy a bowl of pap for R30 in the sides section; being
- * charged a different amount for the identical second bowl inside a plate would
- * be a price the menu contradicts.
- *
- * PRICE IS A GUESS — the owner has the number.
- *
- * Declared with `SIDE_PORTION_PRICE`, above the lists that use it — a `const` is
- * not hoisted, so reading it from a list further up the file throws before the
- * menu ever loads.
+ * One number for both was the placeholder. Now that the kitchen has a rate card,
+ * a plate with a second pap and a second chakalaka is +R35, not +R60. The rule is
+ * unchanged; only the rate follows the group — which is why `portioned` takes it
+ * as an argument rather than reading one shared constant.
  */
-const EXTRA_PORTION_PRICE = SIDE_PORTION_PRICE;
 
 /**
  * A starch or side choice, with the quantity rule both kinds share.
@@ -97,11 +108,15 @@ const EXTRA_PORTION_PRICE = SIDE_PORTION_PRICE;
  * `extraAfter: 1` is the whole rule in one word: the first portion is free, and
  * anything after it is priced at `extraPrice`. The server and the builder both
  * read these two fields, so the stepper cannot offer something the till refuses.
+ *
+ * `portionPrice` defaults to the starch rate because a caller that forgets it
+ * should charge the dearer of the two, never the cheaper — an error that quotes
+ * R15 for a second pap is money the kitchen does not collect.
  */
-const portioned = (choice) => ({
+const portioned = (choice, portionPrice = STARCH_PORTION_PRICE) => ({
   ...choice,
   extraAfter: 1,
-  extraPrice: EXTRA_PORTION_PRICE,
+  extraPrice: portionPrice,
   max: 4,
 });
 
@@ -135,14 +150,14 @@ const traditionalStarches = [
 ];
 
 const traditionalSides = [
-  portioned({ id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 }),
-  portioned({ id: 'spinach', label: 'Spinach', priceDelta: 0 }),
-  portioned({ id: 'morogo', label: 'Morogo', priceDelta: 0 }),
-  portioned({ id: 'salsa', label: 'Salsa', priceDelta: 0 }),
+  portioned({ id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'spinach', label: 'Spinach', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'morogo', label: 'Morogo', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'salsa', label: 'Salsa', priceDelta: 0 }, SIDE_PORTION_PRICE),
   /* Added on the owner's instruction (14 Nov 2026). Included in the plate price. */
-  portioned({ id: 'chakalaka', label: 'Chakalaka', priceDelta: 0 }),
-  portioned({ id: 'atchaar', label: 'Atchaar', priceDelta: 0 }),
-  portioned({ id: 'green-salad', label: 'Green salad', priceDelta: 0 }),
+  portioned({ id: 'chakalaka', label: 'Chakalaka', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'atchaar', label: 'Atchaar', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'green-salad', label: 'Green salad', priceDelta: 0 }, SIDE_PORTION_PRICE),
 ];
 
 const contemporaryStarches = [
@@ -154,12 +169,12 @@ const contemporaryStarches = [
 ];
 
 const contemporarySides = [
-  portioned({ id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 }),
-  portioned({ id: 'spinach', label: 'Spinach', priceDelta: 0 }),
-  portioned({ id: 'salsa', label: 'Salsa', priceDelta: 0 }),
-  portioned({ id: 'green-salad', label: 'Green salad', priceDelta: 0 }),
-  portioned({ id: 'corn-ribs', label: 'Corn ribs', priceDelta: 0 }),
-  portioned({ id: 'glazed-carrots', label: 'Glazed carrots', priceDelta: 0 }),
+  portioned({ id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'spinach', label: 'Spinach', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'salsa', label: 'Salsa', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'green-salad', label: 'Green salad', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'corn-ribs', label: 'Corn ribs', priceDelta: 0 }, SIDE_PORTION_PRICE),
+  portioned({ id: 'glazed-carrots', label: 'Glazed carrots', priceDelta: 0 }, SIDE_PORTION_PRICE),
 ];
 
 /*
@@ -835,6 +850,7 @@ export const sides = uniqueSides().map((side) => ({
   language: '',
   pronunciation: '',
   category: 'sides',
+  /* Every generated bowl here is a vegetable side, so it carries the R15 rate. */
   price: SIDE_PORTION_PRICE,
   image: sideImage(side.id),
   description: sideBlurb(side.id),
@@ -865,7 +881,8 @@ sides.push({
   language: '',
   pronunciation: '',
   category: 'sides',
-  price: SIDE_PORTION_PRICE,
+  /* Pap is a starch, not a relish — it carries the R20 starch rate. */
+  price: STARCH_PORTION_PRICE,
   image: img('side-stywe-pap'),
   description: 'Stiff maize pap, the traditional partner to a braai or a pot of mogodu.',
   story: '',
@@ -927,23 +944,33 @@ export const settings = {
   deliveryAreas: ['Rosebank', 'Sandton'],
 
   /*
-   * Delivery-only pricing, on the owner's instruction (14 Nov 2026).
+   * Delivery-only pricing.
    *
    * `deliveryIncluded` above still describes the Sandton/Rosebank run: inside
    * that ring the plate price is the whole price. Outside it, `outsideFee` is
    * added, and past `maxDeliveryKm` the checkout refuses the order instead of
-   * quoting for it. Collection was removed at the same time, so there is no
-   * counter price any more — `deliveryFlat: 0` is the honest default because
-   * the included ring owes nothing, and the surcharge is a separate field.
+   * quoting for it. Collection was removed, so there is no counter price any
+   * more — `deliveryFlat: 0` is the honest default because the included ring
+   * owes nothing, and the surcharge is a separate field.
    *
-   * THE FEE IS A GUESS. The owner has the number; R30 is placeholder. It is
-   * read from here by the server, the basket and the checkout, so replacing
-   * this one value updates the entire site.
+   * THE FEE IS CONFIRMED (19 Nov 2026), not a guess any more: "Are you able to
+   * make this 10km radius please at a flat fee of R50. 30km is way too far and
+   * will be uneconomical pricing wise".
+   *
+   * So the outer ring is a FLAT R50, out to 10 km — the same fee at 6.5 km and at
+   * 9.9 km. The kitchen's reason for the flatness is that a tiered price is a
+   * negotiation at the door, and its reason for the 10 km cap is that beyond it
+   * the run stops paying for itself at all.
+   *
+   * Read from here by the server, the basket and the checkout, so this one value
+   * updates the whole site.
    */
-  outsideFee: 30,
-  outsideFeeNote: 'Farther than the included run we add a small delivery fee, confirmed on WhatsApp before you pay.',
+  outsideFee: 50,
+  outsideFeeNote: 'Farther than the included run we add a flat R50 delivery fee, confirmed on WhatsApp before you pay.',
   /*
-   * Owner, 15 Nov 2026: 15 km, not 50.
+   * Owner, 19 Nov 2026: 10 km, not 15 and not the 50 the previous builder
+   * proposed. "30km is way too far and will be uneconomical pricing wise" — and
+   * the 50 km in the agency's plan was further still.
    *
    * Every other surface derives from this number — the address search envelope,
    * the basket's running total, the checkout's refusal and the copy on the home,
@@ -951,7 +978,7 @@ export const settings = {
    * delivery rule at once, which is the only way the site can be trusted to
    * quote what it charges.
    */
-  maxDeliveryKm: 15,
+  maxDeliveryKm: 10,
   deliveryOrigin: { lat: -26.126, lng: 28.049 },
   includedRadiusKm: 6,
 

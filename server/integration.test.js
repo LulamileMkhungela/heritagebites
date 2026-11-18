@@ -1112,16 +1112,16 @@ describe('checkout', () => {
     assert.equal(rosebank.body.order.deliveryArea, 'Rosebank');
   });
 
-  test('the delivery boundary is a 15 km radius, not a suburb list', async () => {
+  test('the delivery boundary is a 10 km radius, not a suburb list', async () => {
     /*
-     * Owner, 15 Nov 2026: the limit is 15 km, down from 50. Outside
-     * Sandton/Rosebank a fee is added; past 15 km the order is refused.
+     * Owner, 19 Nov 2026: the limit is 10 km, down from 15. Outside
+     * Sandton/Rosebank a flat R50 is added; past 10 km the order is refused.
      *
      * Both are decided by distance, so a Midrand address at ~16 km is refused
      * for being 16 km away — not for failing to name a suburb in a list. That
-     * distinction matters more at 15 km than it did at 50: a tenth of a kilometre
-     * is now a real share of the radius, and the address is the only thing that
-     * says which side of it someone is on.
+     * distinction matters more at 10 km than it did at 50: a fraction of a
+     * kilometre is now a real share of the radius, and the address is the only
+     * thing that says which side of it someone is on.
      */
     const far = await placeOrder({
       customer: {
@@ -1132,7 +1132,7 @@ describe('checkout', () => {
     });
     assert.equal(far.res.status, 422);
     assert.match(far.body.errors[0], /52\.2 km away/i);
-    assert.match(far.body.errors[0], /within 15 km/);
+    assert.match(far.body.errors[0], /within 10 km/);
     assert.equal(far.body.outOfRange, true);
 
     /*
@@ -1147,9 +1147,9 @@ describe('checkout', () => {
         lat: -25.9992, lng: 28.1263,
       },
     });
-    assert.equal(midrand.res.status, 422, '16.1 km is outside a 15 km radius');
+    assert.equal(midrand.res.status, 422, '16.1 km is outside a 10 km radius');
     assert.match(midrand.body.errors[0], /16\.1 km away/i);
-    assert.match(midrand.body.errors[0], /within 15 km/);
+    assert.match(midrand.body.errors[0], /within 10 km/);
   });
 
   test('an address just outside the included ring pays the fee, and is still served', async () => {

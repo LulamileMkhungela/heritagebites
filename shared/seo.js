@@ -79,7 +79,7 @@ export const PAGES = {
   '/specials': {
     title: "This Week's Cooking & Delivery",
     description:
-      'What is cooking this week, and how service works: Thursdays and Fridays, delivered in Sandton and Rosebank and up to 15 km from the kitchen.',
+      'What is cooking this week, and how service works: Thursdays and Fridays, delivered in Sandton and Rosebank and up to 10 km from the kitchen.',
     priority: 0.8,
     changefreq: 'daily',
   },
