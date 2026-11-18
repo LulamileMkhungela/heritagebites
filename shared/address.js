@@ -16,6 +16,20 @@
 /** Photon's public endpoint. Keyless by design. */
 export const PHOTON_ENDPOINT = 'https://photon.komoot.io/api/';
 
+/**
+ * The same service, asked the other way round: coordinates in, address out.
+ *
+ * This is what turns "the customer allowed their location" into a filled-in
+ * delivery address. Without it the button could only ever answer "how far is
+ * it" — which is the bug the owner hit on her phone: she allowed the location,
+ * the checkout correctly worked out 9.3 km and added the fee, and the address
+ * box she would actually be delivered to stayed empty.
+ *
+ * Photon's reverse endpoint takes the same bbox and lang parameters and returns
+ * the same GeoJSON shape, so the feature can be read by the same mapper.
+ */
+export const PHOTON_REVERSE_ENDPOINT = 'https://photon.komoot.io/reverse';
+
 /** Fewer than this is too vague to geocode and wastes a request per keystroke. */
 export const MIN_QUERY_LENGTH = 4;
 
@@ -577,6 +591,53 @@ export function mapPhotonResponse(body, settings) {
     out.push(suggestion);
   }
   return out;
+}
+
+/**
+ * The address at a pair of coordinates — what "use my location" puts in the box.
+ *
+ * Reverse geocoding does not always return a street number, and it sometimes
+ * returns the nearest named thing rather than a house (a school, a park, a
+ * shopping centre). Both are handled honestly:
+ *
+ *   - a street with no number still makes a usable delivery line, because the
+ *     customer typed nothing and the alternative is an empty box; it is marked in
+ *     the returned `line` exactly as the map gave it, so what they see is what
+ *     was found;
+ *   - anything without a street at all is refused, because "Sandton" is not an
+ *     address a driver can deliver to, and silently filling "Sandton" into a box
+ *     the customer believes holds their location is worse than leaving it empty
+ *     and telling them to type it.
+ *
+ * Coordinates come back unchanged and are the ones the distance was measured
+ * from, so the address and the fee always describe the same place.
+ *
+ * @param {unknown} body  A Photon `/reverse` response body.
+ * @param {{ deliveryAreas?: string[] } | null} [settings]
+ * @returns {AddressSuggestion | null}
+ */
+export function mapPhotonReverse(body, settings) {
+  const features = /** @type {{ features?: unknown[] } | null} */ (body)?.features;
+  if (!Array.isArray(features)) return null;
+
+  /*
+   * The first feature with a street wins. Photon ranks by proximity, so the
+   * first is the best answer; a later one is only used when the nearest result
+   * is the thing *beside* the location rather than the location itself.
+   */
+  for (const feature of features) {
+    const suggestion = mapPhotonFeature(feature, settings);
+    if (!suggestion) continue;
+    /*
+     * A house number is not required, but a street line is. `streetLine()`
+     * already refuses anything with no road or house number — this second check
+     * exists because a named place ("Rosebank Mall") can produce a line that
+     * reads like an address without being one.
+     */
+    if (!/\d|street|road|avenue|drive|lane|close|crescent|way|boulevard/i.test(suggestion.line)) continue;
+    return suggestion;
+  }
+  return null;
 }
 
 /**

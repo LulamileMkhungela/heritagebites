@@ -28,6 +28,7 @@ import {
   deliveryFeeForPoint,
   deliveryZoneFor,
   haversineKm,
+  mapPhotonReverse,
   insideDeliveryBox,
   mapPhotonFeature,
   mapPhotonResponse,
@@ -577,4 +578,72 @@ test('33 Baker Street, Rosebank is inside the free ring, at 1.7 km', () => {
   /* And the named suburb in the line is the one deliveryAreaFor reports, so a
      customer who types it is not told they contradicted themselves. */
   assert.equal(deliveryAddressProblem(REFERENCE_FAR_ADDRESS.line, 'Rosebank', settings), null);
+});
+
+/*
+ * Reverse geocoding — the other half of "Use my current location".
+ *
+ * Owner, 18 Nov 2026, from her phone: she allowed the location, the checkout
+ * correctly said "9.3 km away — R30,00 delivery fee added", and the delivery
+ * address box stayed empty. The permission had been granted and the distance was
+ * right; the address — the one thing the kitchen is actually sent — was not.
+ *
+ * These tests are about what may be put in that box. The failure that matters is
+ * not "no address" (the customer can type one, and is told to); it is a *wrong*
+ * address, silently filled from the nearest thing the map happened to name.
+ */
+test('a coordinate with a street and number reverse-geocodes to a deliverable line', () => {
+  const body = {
+    features: [
+      {
+        properties: { street: 'Oxford Road', housenumber: '12', suburb: 'Illovo', city: 'Sandton', osm_type: 'W', osm_id: 1 },
+        geometry: { coordinates: [28.05, -26.13] },
+      },
+    ],
+  };
+  const found = mapPhotonReverse(body, seedSettings);
+  assert.ok(found, 'a full address must be found');
+  assert.equal(found.line, '12 Oxford Road, Illovo, Sandton');
+  assert.equal(found.area, 'Sandton', 'the area select follows the address');
+});
+
+test('a street with no number is still usable — the customer typed nothing', () => {
+  /*
+   * Reverse geocoding frequently omits the house number. Refusing the result
+   * would leave the box empty — the exact bug — while offering it gives the
+   * customer a line to correct rather than a blank field to fill from scratch.
+   */
+  const body = {
+    features: [
+      {
+        properties: { street: 'Oxford Road', suburb: 'Illovo', city: 'Sandton', osm_type: 'W', osm_id: 2 },
+        geometry: { coordinates: [28.05, -26.13] },
+      },
+    ],
+  };
+  const found = mapPhotonReverse(body, seedSettings);
+  assert.ok(found);
+  assert.equal(found.line, 'Oxford Road, Illovo, Sandton');
+});
+
+test('a name without a street is refused, not filled in', () => {
+  /*
+   * Standing on a park or in a shopping centre, the nearest named thing is the
+   * park or the centre. "Sandton" or "Zoo Lake Park" in a delivery box is an
+   * address a driver cannot use, and silently putting it there is worse than
+   * leaving the box empty and saying so.
+   */
+  for (const properties of [
+    { name: 'Sandton', city: 'Sandton', osm_type: 'R', osm_id: 3 },
+    { name: 'Zoo Lake Park', leisure: 'park', osm_type: 'W', osm_id: 4 },
+  ]) {
+    const found = mapPhotonReverse({ features: [{ properties, geometry: { coordinates: [28.05, -26.13] } }] }, seedSettings);
+    assert.equal(found, null, `${properties.name} is not a deliverable address`);
+  }
+});
+
+test('an empty or malformed response resolves to nothing rather than throwing', () => {
+  for (const body of [{ features: [] }, null, undefined, {}, { features: 'nope' }]) {
+    assert.equal(mapPhotonReverse(body, seedSettings), null);
+  }
 });

@@ -33,10 +33,12 @@ import {
   KITCHEN_ORIGIN,
   MIN_QUERY_LENGTH,
   PHOTON_ENDPOINT,
+  PHOTON_REVERSE_ENDPOINT,
   applyHouseHint,
   expandStreetAbbreviations,
   filterSuggestions,
   mapPhotonResponse,
+  mapPhotonReverse,
   radiusBboxParam,
   stripHouseNumber,
 } from '../../shared/address.js';
@@ -51,6 +53,7 @@ export {
   KITCHEN_ORIGIN,
   MIN_QUERY_LENGTH,
   PHOTON_ENDPOINT,
+  PHOTON_REVERSE_ENDPOINT,
   applyHouseHint,
   areaForPoint,
   deliveryFeeForPoint,
@@ -60,6 +63,7 @@ export {
   haversineKm,
   mapPhotonFeature,
   mapPhotonResponse,
+  mapPhotonReverse,
   stripHouseNumber,
 } from '../../shared/address.js';
 
@@ -91,48 +95,63 @@ export async function describePoint(
   lng: number,
   options: { settings?: { deliveryAreas?: string[] } | null; timeoutMs?: number } = {},
 ): Promise<AddressSuggestion | null> {
-  const ask = async (query: string): Promise<AddressSuggestion | null> => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 4500);
-    try {
-      const url = new URL(PHOTON_ENDPOINT);
-      url.searchParams.set('q', query);
-      url.searchParams.set('limit', '5');
-      url.searchParams.set('lang', 'en');
-      /*
-       * The radius envelope still applies: a reverse lookup is a search like any
-       * other, and a coordinate outside the delivery area should come back as the
-       * nearest *real* address rather than the nearest address in another province.
-       */
-      url.searchParams.set('bbox', radiusBboxParam());
-      url.searchParams.set('lat', String(lat));
-      url.searchParams.set('lon', String(lng));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 6000);
+  try {
+    /*
+     * Photon's REVERSE endpoint, not its search endpoint.
+     *
+     * This used to call `/api/?q=${lat},${lng}` — a *text search* for the
+     * characters "-26.13,28.05". A text search cannot answer "what is at this
+     * point": it looks for that string in street names and returns nothing. So
+     * the lookup always came back empty, the address box was never filled, and
+     * "Use my current location" looked broken even though the permission had
+     * been granted and the distance was correct.
+     *
+     * `/reverse?lat=&lon=` is the endpoint that actually answers the question,
+     * and it returns the same GeoJSON shape, so the same mapper reads it.
+     */
+    const url = new URL(PHOTON_REVERSE_ENDPOINT);
+    url.searchParams.set('lat', String(lat));
+    url.searchParams.set('lon', String(lng));
+    url.searchParams.set('lang', 'en');
+    url.searchParams.set('limit', '5');
+    /*
+     * Deliberately NO bbox. A bbox means "only answer if the address is inside
+     * this box", and the interesting customer is the one standing *outside* it:
+     * they still deserve to see the address the kitchen would be sent to, and
+     * the distance check then tells them honestly whether we reach them. With a
+     * bbox, a Bryanston customer who shares their location gets nothing at all —
+     * no address and no fee explanation.
+     */
 
-      const res = await fetch(url.toString(), { signal: controller.signal, headers: { Accept: 'application/json' } });
-      if (!res.ok) return null;
-      const found = mapPhotonResponse(await res.json(), options.settings ?? null);
-      /* Ranked by the map's own distance ordering, so the first usable one is it. */
-      return found[0] ?? null;
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(timer);
+    const res = await fetch(url.toString(), { signal: controller.signal, headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+
+    const body = await res.json();
+    const features = Array.isArray(body?.features) ? body.features : [];
+
+    /*
+     * Prefer a result that names a street. Reverse geocoding often returns the
+     * nearest *named thing* first — a park, a shopping centre — which makes an
+     * address a driver cannot use. `mapPhotonReverse` already refuses those, but
+     * a street with no house number is still worth having: the customer typed
+     * nothing, and a street they can correct beats an empty box.
+     */
+    const found = mapPhotonReverse(body, options.settings ?? null);
+    if (found) return { ...found, lat, lng };
+
+    /* Nothing with a street: fall back to whatever the map did say, if anything. */
+    for (const feature of features) {
+      const suggestion = mapPhotonResponse({ features: [feature] }, options.settings ?? null)[0];
+      if (suggestion) return { ...suggestion, lat, lng };
     }
-  };
-
-  /* 1. The address at the point itself. Photon can answer a bare lat/lon query. */
-  const exact = await ask(`${lat},${lng}`);
-  if (exact?.street) return exact;
-
-  /* 2. The street the first lookup named, to recover a house number. */
-  const street = exact?.line || '';
-  if (street) {
-    const house = await ask(street);
-    if (house?.street) return house;
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
-
-  /* 3. Nothing with a street: keep whatever the map did say, if anything. */
-  return exact;
 }
 
 export interface AddressSuggestion {
@@ -302,5 +321,67 @@ export async function suggestAddresses(
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+/**
+ * The address at a pair of coordinates — what "Use my current location" fills in.
+ *
+ * The owner hit this on her phone: she allowed the location, the checkout worked
+ * out "9.3 km away — R30,00 delivery fee added" correctly, and the delivery
+ * address box stayed empty. The button had only ever answered "how far is it",
+ * and an empty address box is an order that cannot be delivered.
+ *
+ * Never throws, and never invents an address. A refused request, a timeout or a
+ * result with no street all come back as `null`, and the caller tells the
+ * customer to type it instead — the same advice the denied path gives, because
+ * the customer's next step is identical.
+ *
+ * The coordinates are the ones passed in, not the ones the geocoder echoes back:
+ * they are what the fee was calculated from, and the address must describe the
+ * same place the customer is charged for.
+ */
+export async function addressAtLocation(
+  lat: number,
+  lng: number,
+  options: {
+    settings?: {
+      deliveryAreas?: string[];
+      maxDeliveryKm?: number;
+      deliveryOrigin?: { lat: number; lng: number };
+    } | null;
+    /** Photon asks for `lat,lon` — the reverse of GeoJSON's `[lon, lat]`. */
+    timeoutMs?: number;
+  } = {},
+): Promise<AddressSuggestion | null> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 6000);
+  try {
+    const url = new URL(PHOTON_REVERSE_ENDPOINT);
+    url.searchParams.set('lat', String(lat));
+    url.searchParams.set('lon', String(lng));
+    url.searchParams.set('lang', 'en');
+    url.searchParams.set('limit', '5');
+    /*
+     * No bbox here, deliberately. A bbox on a reverse lookup means "only answer
+     * if the address is inside this box", and the interesting case is precisely
+     * the customer standing outside it — they still deserve to see the address
+     * the kitchen would be sent to, and the distance check then tells them the
+     * truth about whether we reach them.
+     */
+
+    const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const found = mapPhotonReverse(body, options.settings ?? null);
+    if (!found) return null;
+
+    return { ...found, lat, lng };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
