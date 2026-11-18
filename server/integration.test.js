@@ -10,7 +10,7 @@ import { test, before, after, describe } from 'node:test';
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -1675,6 +1675,54 @@ describe('static hosting', () => {
       assert.equal(res.status, 404, `${path} should be 404`);
       assert.match(res.headers.get('content-type') ?? '', /application\/json/);
     }
+  });
+
+  /*
+   * The shell names the hashed bundle, so a shell cached for the life of the
+   * process makes every rebuild invisible until the server is restarted — the
+   * page loads, looks fine, and is simply an older version of the app. That is
+   * how the back-to-top button was reported missing after it had shipped: the
+   * build was right, the served HTML pointed at a bundle from before it.
+   *
+   * This has to be tested against a *running* server, not a fresh one: a
+   * freshly spawned process reads the current shell, so it looks correct either
+   * way and proves nothing. The shell on disk is rewritten underneath a server
+   * that is already up, and the next request must carry the new bundle name.
+   */
+  test('a rebuilt shell is served without restarting the server', async () => {
+    const shellPath = join(process.cwd(), 'dist', 'index.html');
+    if (!existsSync(shellPath)) return; /* nothing built on this host */
+
+    const original = readFileSync(shellPath, 'utf8');
+    const bundleOf = async () => {
+      const res = await fetch(`${base}/menu`, { headers: { Accept: 'text/html' } });
+      return (await res.text()).match(/\/assets\/index-[A-Za-z0-9_-]+\.js/)?.[0];
+    };
+
+    const before = await bundleOf();
+    assert.ok(before, 'the shell does not reference a hashed bundle');
+
+    /*
+     * Point the shell at a different (fake) bundle hash. The file is restored in
+     * the finally block so a failure here cannot leave the build corrupted.
+     */
+    const swapped = original.replace(before, '/assets/index-RB000000.js');
+    assert.notEqual(swapped, original, 'could not find the bundle name to swap');
+    try {
+      writeFileSync(shellPath, swapped);
+      /* mtime granularity: make sure the change is observable even on a coarse clock. */
+      utimesSync(shellPath, new Date(), new Date(Date.now() + 2000));
+      const after = await bundleOf();
+      assert.equal(
+        after,
+        '/assets/index-RB000000.js',
+        `the server kept serving ${after} after the shell was rebuilt — a stale shell means a rebuild is invisible until restart`,
+      );
+    } finally {
+      writeFileSync(shellPath, original);
+    }
+
+    assert.equal(await bundleOf(), before, 'the shell did not go back to the real bundle');
   });
 });
 

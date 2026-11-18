@@ -9,7 +9,7 @@ import 'dotenv/config';
 import express from 'express';
 import compression from 'compression';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { store, has } from './lib/store.js';
@@ -1702,7 +1702,37 @@ if (existsSync(DIST)) {
    * crawlers index a page whose entire content is an apology.
    */
   const shellPath = join(DIST, 'index.html');
-  const renderShell = shellRenderer(readFileSync(shellPath, 'utf8'));
+
+  /*
+   * The shell is re-read whenever the file on disk changes, not once at boot.
+   *
+   * `index.html` names the hashed bundle (`/assets/index-<hash>.js`), so caching
+   * it for the life of the process means a `npm run build` is invisible until
+   * someone restarts the server — and the symptom is vicious: the page loads,
+   * looks fine, and is simply an older version of the app. That is exactly how
+   * the back-to-top button appeared to be missing after it had shipped: the
+   * build was correct, the served HTML pointed at a bundle from before it.
+   *
+   * One `statSync` per request is cheap next to rendering the head, and the
+   * parse only repeats when the file actually changes.
+   */
+  let shell = { mtimeMs: -1, size: -1, render: null };
+  const renderShell = (path, origin) => {
+    try {
+      const stat = statSync(shellPath);
+      if (stat.mtimeMs !== shell.mtimeMs || stat.size !== shell.size) {
+        shell = {
+          mtimeMs: stat.mtimeMs,
+          size: stat.size,
+          render: shellRenderer(readFileSync(shellPath, 'utf8')),
+        };
+      }
+      return shell.render(path, origin);
+    } catch (error) {
+      console.error(`[web] could not render the shell: ${String(error?.message ?? error).slice(0, 160)}`);
+      return null;
+    }
+  };
 
   const KNOWN_ROUTES = new Set([
     '/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest', '/alerts',
