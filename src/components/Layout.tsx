@@ -11,6 +11,7 @@ import { extraLabel } from '../../shared/service.js';
 import { HeritageBand, WhatsAppIcon } from './ui';
 import { BasketBar } from './BasketBar';
 import { BackToTop } from './BackToTop';
+import { ThemeToggle } from './ThemeToggle';
 import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY } from '../lib/whatsapp';
 
 const NAV = [
@@ -77,7 +78,7 @@ export default function Layout() {
   }, [open, searchOpen]);
 
   return (
-    <div className="min-h-screen bg-bone">
+    <div className="min-h-screen bg-canvas">
       {/* Main navigation */}
       <header ref={headerRef} className="sticky top-0 z-50 border-b border-bone/15 bg-ink hb-ink-surface text-bone backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-4 sm:px-4 sm:py-3">
@@ -111,7 +112,7 @@ export default function Layout() {
             */}
             <span className="hidden min-w-0 leading-none min-[360px]:block">
               <span className="block truncate font-display text-base font-semibold tracking-tight text-bone sm:text-xl">Heritage Bites</span>
-              <span className="mt-1 hidden truncate font-mono text-xs uppercase tracking-[0.18em] text-ochre sm:block">{catalog?.settings.tagline ?? 'Every Bite Tells a Story'}</span>
+              <span className="mt-1 hidden truncate font-mono text-xs uppercase tracking-[0.18em] text-accent-on-ink sm:block">{catalog?.settings.tagline ?? 'Every Bite Tells a Story'}</span>
             </span>
           </Link>
 
@@ -154,7 +155,7 @@ export default function Layout() {
                 setOpen(true);
                 setMenuOpen(false);
               }}
-              className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-bone/25 bg-transparent text-[13px] font-semibold text-bone transition-colors hover:border-ochre hover:text-ochre sm:flex sm:w-auto sm:gap-2 sm:px-4 sm:py-2.5"
+              className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full border border-bone/25 bg-transparent text-[13px] font-semibold text-bone transition-colors hover:border-ochre hover:text-accent-on-ink sm:flex sm:w-auto sm:gap-2 sm:px-4 sm:py-2.5"
               /*
                 The visible "Basket" label is hidden below sm, so without this
                 the button is an unnamed icon on a phone. The count is folded in
@@ -171,9 +172,12 @@ export default function Layout() {
               </svg>
               <span className="hidden sm:inline">Basket</span>
               {count > 0 && (
-                <span className="animate-pop absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-ochre px-1 font-mono text-xs font-bold text-ink sm:static">{count}</span>
+                <span className="animate-pop absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-ochre px-1 font-mono text-xs font-bold text-[#001938] sm:static">{count}</span>
               )}
             </button>
+
+            {/* Light/dark, beside the basket so it is reachable on every route. */}
+            <ThemeToggle className="text-bone" />
 
             <button
               type="button"
@@ -249,7 +253,7 @@ function ServiceStrip() {
   if (!service || service.open) return null;
 
   return (
-    <div className="border-b-2 border-ochre/40 bg-ochre/15 text-ink">
+    <div className="border-b-2 border-ochre/40 bg-ochre/15 text-theme">
       {/*
         Order matters here. On a phone the strip stacks: headline and the
         WhatsApp link share the first row and the message takes the full width
@@ -257,18 +261,18 @@ function ServiceStrip() {
         sentence in a ten-character column three lines deep.
       */}
       <div className="mx-auto flex max-w-7xl flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
-        <span className="order-1 font-mono text-xs font-bold uppercase tracking-[0.18em] text-ochre-deep">
+        <span className="order-1 font-mono text-xs font-bold uppercase tracking-[0.18em] text-accent">
           {service.headline}
         </span>
         <a
           href={wa}
           target="_blank"
           rel="noreferrer"
-          className="order-2 ml-auto inline-flex min-h-11 shrink-0 items-center text-xs font-semibold uppercase tracking-wide text-ochre-deep underline decoration-ochre-deep/40 underline-offset-2 hover:text-ink sm:order-3"
+          className="order-2 ml-auto inline-flex min-h-11 shrink-0 items-center text-xs font-semibold uppercase tracking-wide text-accent underline decoration-ochre-deep/40 underline-offset-2 hover:text-theme sm:order-3"
         >
           Ask on WhatsApp
         </a>
-        <p className="order-3 w-full min-w-0 text-[12px] leading-snug text-ink/75 sm:order-2 sm:w-auto sm:flex-1">
+        <p className="order-3 w-full min-w-0 text-[12px] leading-snug text-theme-soft sm:order-2 sm:w-auto sm:flex-1">
           {service.shortMessage}
         </p>
       </div>
@@ -379,7 +383,7 @@ function Footer() {
             <a
               href={`tel:${(s?.phone ?? '+27670137587').replace(/\s/g, '')}`}
               aria-label={`Call us on ${s?.phoneDisplay ?? '+27 67 013 7587'}`}
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-accent-on-ink"
             >
               <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z" />
@@ -390,7 +394,7 @@ function Footer() {
               href={wa}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-accent-on-ink"
             >
               <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.4 8.4 0 0 1-12.5 7.4L3 21l2.1-5.5A8.5 8.5 0 1 1 21 11.5Z" />
@@ -400,7 +404,7 @@ function Footer() {
             <a
               href={`mailto:${s?.email ?? 'heritagebitesfood@gmail.com'}`}
               aria-label={`Email us at ${s?.email ?? 'heritagebitesfood@gmail.com'}`}
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-ochre"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-bone/25 px-4 py-2 text-xs font-semibold hover:border-ochre hover:text-accent-on-ink"
             >
               <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2.5" y="4.5" width="19" height="15" rx="2" />
@@ -418,7 +422,7 @@ function Footer() {
         </div>
 
         <div>
-          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre">Kitchen hours</h2>
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-accent-on-ink">Kitchen hours</h2>
           <ul className="space-y-1 text-sm text-bone/70">
             {(s?.hours ?? []).filter((h) => !h.closed).map((h) => {
               /* Today is marked, so "12:00–13:30" on a Thursday reads as today's window. */
@@ -427,7 +431,7 @@ function Footer() {
                 <li key={h.day} className={`flex justify-between gap-4 ${today ? 'text-bone' : ''}`}>
                   <span>
                     {h.label.slice(0, 3)}
-                    {today && <span className="ml-1.5 text-[11px] uppercase tracking-wide text-ochre">today</span>}
+                    {today && <span className="ml-1.5 text-[11px] uppercase tracking-wide text-accent-on-ink">today</span>}
                   </span>
                   <span className="font-mono text-xs">{h.open}–{h.close}</span>
                 </li>
@@ -438,7 +442,7 @@ function Footer() {
         </div>
 
         <div>
-          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre">Order</h2>
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-accent-on-ink">Order</h2>
           {/*
             "Meals" opens rather than navigates: the four things a customer
             ordering actually needs sit behind it, so the footer column stays
@@ -453,7 +457,7 @@ function Footer() {
                 onClick={() => setMealsOpen((open) => !open)}
                 aria-expanded={mealsOpen}
                 aria-controls="footer-meals"
-                className="inline-flex min-h-11 min-w-11 items-center gap-1.5 font-semibold text-bone hover:text-ochre"
+                className="inline-flex min-h-11 min-w-11 items-center gap-1.5 font-semibold text-bone hover:text-accent-on-ink"
               >
                 Meals
                 <svg
@@ -470,9 +474,9 @@ function Footer() {
                 </svg>
               </button>
               <ul id="footer-meals" className={`mt-1 space-y-1 border-l border-bone/20 pl-4 ${mealsOpen ? 'block' : 'hidden'}`}>
-                <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Meals</Link></li>
-                <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">This week</Link></li>
-                <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Loyalty card</Link></li>
+                <li><Link to="/menu" className="inline-flex min-h-11 min-w-11 items-center hover:text-accent-on-ink">Meals</Link></li>
+                <li><Link to="/specials" className="inline-flex min-h-11 min-w-11 items-center hover:text-accent-on-ink">This week</Link></li>
+                <li><Link to="/passport" className="inline-flex min-h-11 min-w-11 items-center hover:text-accent-on-ink">Loyalty card</Link></li>
                 {/*
                   With a basket this is the checkout; with nothing in it, it is
                   the menu. Landing a customer on "Your basket is empty" is a
@@ -483,7 +487,7 @@ function Footer() {
                 <li>
                   <Link
                     to={footerLines.length ? '/checkout' : '/menu'}
-                    className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre"
+                    className="inline-flex min-h-11 min-w-11 items-center hover:text-accent-on-ink"
                   >
                     {footerLines.length ? 'Checkout & pay' : 'Start an order'}
                   </Link>
@@ -492,15 +496,15 @@ function Footer() {
             </li>
             {/* The pages that are not part of ordering a plate. "Loyalty card"
                 used to appear here and again inside the Meals group above. */}
-            <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Customer request</Link></li>
+            <li><Link to="/quest" className="inline-flex min-h-11 min-w-11 items-center hover:text-accent-on-ink">Customer request</Link></li>
             <li>
               {s?.channels?.ubereats?.url
-                ? <a href={s.channels.ubereats.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Uber Eats</a>
+                ? <a href={s.channels.ubereats.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-accent-on-ink">Uber Eats</a>
                 : <span className="text-bone/40">Uber Eats · order on WhatsApp</span>}
             </li>
             <li>
               {s?.channels?.mrd?.url
-                ? <a href={s.channels.mrd.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-ochre">Mr D Food</a>
+                ? <a href={s.channels.mrd.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 min-w-11 items-center hover:text-accent-on-ink">Mr D Food</a>
                 : <span className="text-bone/40">Mr D Food · order on WhatsApp</span>}
             </li>
           </ul>
@@ -530,7 +534,7 @@ function Footer() {
                 key={social.label}
                 href={social.href}
                 aria-label={social.label}
-                className="grid h-11 w-11 place-items-center rounded-full border border-bone/25 text-bone/75 transition-colors hover:border-ochre hover:text-ochre"
+                className="grid h-11 w-11 place-items-center rounded-full border border-bone/25 text-bone/75 transition-colors hover:border-ochre hover:text-accent-on-ink"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d={social.path} />
@@ -538,7 +542,7 @@ function Footer() {
               </a>
             ))}
           </nav>
-          <Link to="/policies" className="order-3 inline-flex min-h-11 items-center justify-center hover:text-ochre md:justify-self-end">
+          <Link to="/policies" className="order-3 inline-flex min-h-11 items-center justify-center hover:text-accent-on-ink md:justify-self-end">
             Policies &amp; terms
           </Link>
         </div>
@@ -604,13 +608,13 @@ function CartDrawerPanel() {
   return (
     <div ref={dialogRef} className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Your basket">
       <button type="button" className="absolute inset-0 bg-ink/60 backdrop-blur-sm" onClick={() => setOpen(false)} aria-label="Close basket" />
-      <aside className="animate-rise absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-bone shadow-2xl">
-        <header className="flex items-center justify-between border-b-2 border-ink/10 px-5 py-4">
+      <aside className="animate-rise absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-canvas shadow-2xl">
+        <header className="flex items-center justify-between border-b-2 border-theme/10 px-5 py-4">
           <div>
             <h2 className="font-display text-xl font-semibold">Your basket</h2>
-            <p className="text-xs text-ink/50">{lines.length} line{lines.length === 1 ? '' : 's'}</p>
+            <p className="text-xs text-theme-soft">{lines.length} line{lines.length === 1 ? '' : 's'}</p>
           </div>
-          <button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-full border-2 border-ink/12 hover:bg-ink hover:text-bone" aria-label="Close">
+          <button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-full border-2 border-theme/12 hover:bg-ink hover:text-bone" aria-label="Close">
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
         </header>
@@ -619,7 +623,7 @@ function CartDrawerPanel() {
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
             <span className="text-4xl">🍲</span>
             <p className="font-display text-lg">Nothing in the pot yet</p>
-            <p className="text-sm text-ink/55">Add a plate or a side from the menu and it will show up here.</p>
+            <p className="text-sm text-theme-soft">Add a plate or a side from the menu and it will show up here.</p>
             <Link to="/menu" onClick={() => setOpen(false)} className="mt-2 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-bone hover:bg-ink-3">
               Browse the menu
             </Link>
@@ -632,19 +636,19 @@ function CartDrawerPanel() {
               toggle is a button that cannot change anything, so the drawer
               states the arrangement instead.
             */}
-            <div className="flex items-center gap-2 border-b border-ink/10 px-5 py-3 text-xs font-semibold text-ink/60">
+            <div className="flex items-center gap-2 border-b border-theme/10 px-5 py-3 text-xs font-semibold text-theme-soft">
               <span aria-hidden="true">🛵</span>
               <span>Delivered — included in Sandton &amp; Rosebank</span>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {lines.map((l) => (
-                <div key={l.key} className="flex gap-3 border-b border-ink/8 py-3 last:border-0">
+                <div key={l.key} className="flex gap-3 border-b border-theme/8 py-3 last:border-0">
                   <img src={l.image} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" loading="lazy" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold leading-tight">{l.name}</p>
-                      <button type="button" onClick={() => remove(l.key)} className="text-ink/40 hover:text-chili" aria-label={`Remove ${l.name}`}>
+                      <button type="button" onClick={() => remove(l.key)} className="text-theme-muted hover:text-chili" aria-label={`Remove ${l.name}`}>
                         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
                       </button>
                     </div>
@@ -652,12 +656,12 @@ function CartDrawerPanel() {
                         needs to check before paying, so it is never folded into
                         the line total and left unexplained. */}
                     {l.picks.length > 0 && (
-                      <p className="mt-0.5 text-xs leading-snug text-ink/50">
+                      <p className="mt-0.5 text-xs leading-snug text-theme-soft">
                         {l.picks.map((p) => extraLabel(p.label, p.qty)).join(' · ')}
                       </p>
                     )}
                     <div className="mt-2 flex items-center justify-between">
-                      <div className="inline-flex items-center rounded-full border-2 border-ink/12">
+                      <div className="inline-flex items-center rounded-full border-2 border-theme/12">
                         <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="grid h-7 w-7 place-items-center hover:bg-ink hover:text-bone rounded-full" aria-label="Decrease">−</button>
                         <span className="w-6 text-center font-mono text-xs font-semibold">{l.qty}</span>
                         <button type="button" onClick={() => setQty(l.key, l.qty + 1)} className="grid h-7 w-7 place-items-center hover:bg-ink hover:text-bone rounded-full" aria-label="Increase">+</button>
@@ -669,19 +673,19 @@ function CartDrawerPanel() {
               ))}
             </div>
 
-            <footer className="border-t-2 border-ink/10 px-5 py-4">
+            <footer className="border-t-2 border-theme/10 px-5 py-4">
               <div className="space-y-1 text-sm">
-                <div className="flex justify-between text-ink/60"><span>Subtotal</span><span className="font-mono">{zar(subtotal)}</span></div>
-                <div className="flex justify-between text-ink/60">
+                <div className="flex justify-between text-theme-soft"><span>Subtotal</span><span className="font-mono">{zar(subtotal)}</span></div>
+                <div className="flex justify-between text-theme-soft">
                   <span>Delivery</span>
                   <span className="font-mono">Included</span>
                 </div>
-                <div className="flex justify-between border-t border-ink/10 pt-2 text-base font-semibold">
+                <div className="flex justify-between border-t border-theme/10 pt-2 text-base font-semibold">
                   <span>Total</span>
                   <span className="font-mono">{zar(subtotal)}</span>
                 </div>
               </div>
-              <p className="mt-2 text-xs text-ink/45" id={belowMinimum ? 'hb-drawer-minimum' : undefined}>
+              <p className="mt-2 text-xs text-theme-muted" id={belowMinimum ? 'hb-drawer-minimum' : undefined}>
                 {belowMinimum
                   ? `Delivery orders start at ${zar(settings?.minDeliveryOrder ?? 100)}.`
                   : 'Delivery included in Sandton & Rosebank — anywhere else, the fee is added at checkout.'}
@@ -692,7 +696,7 @@ function CartDrawerPanel() {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setOpen(false)}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full hb-gold px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink transition-colors"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full hb-gold px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-theme transition-colors"
                 >
                   <WhatsAppIcon className="h-4 w-4" />
                   Ask if we can cook it
@@ -710,7 +714,7 @@ function CartDrawerPanel() {
                   type="button"
                   disabled
                   aria-describedby="hb-drawer-minimum"
-                  className="mt-3 flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border-2 border-ink/20 bg-ink/5 px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink/40"
+                  className="mt-3 flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border-2 border-theme/20 bg-ink/5 px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-theme-muted"
                 >
                   Checkout
                 </button>
@@ -718,7 +722,7 @@ function CartDrawerPanel() {
                 <Link
                   to="/checkout"
                   onClick={() => setOpen(false)}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full hb-gold px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink transition-colors"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full hb-gold px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-theme transition-colors"
                 >
                   Checkout
                 </Link>
@@ -738,7 +742,7 @@ function CartDrawerPanel() {
               <Link
                 to="/checkout"
                 onClick={() => setOpen(false)}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border-2 border-ink px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-full border-2 border-theme px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-theme transition-colors hover:bg-ink hover:text-bone"
               >
                 Add your details to order on WhatsApp
               </Link>
@@ -752,7 +756,7 @@ function CartDrawerPanel() {
                 type="button"
                 onClick={() => (confirmClear ? (clear(), setConfirmClear(false)) : setConfirmClear(true))}
                 className={`mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-wide transition-colors ${
-                  confirmClear ? 'bg-chili text-bone hover:bg-chili/90' : 'text-ink/50 underline hover:text-chili'
+                  confirmClear ? 'bg-chili text-bone hover:bg-chili/90' : 'text-theme-soft underline hover:text-chili'
                 }`}
               >
                 {confirmClear ? `Tap again to clear ${lines.reduce((n, l) => n + l.qty, 0)} plates` : 'Clear basket'}
@@ -830,9 +834,9 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
   return (
     <div ref={dialogRef} className="fixed inset-0 z-[80]" role="dialog" aria-modal="true" aria-label="Search the menu">
       <button type="button" className="absolute inset-0 bg-ink/70 backdrop-blur-sm" onClick={onClose} aria-label="Close search" />
-      <div className="animate-rise absolute left-1/2 top-[8vh] w-full max-w-xl -translate-x-1/2 overflow-hidden rounded-3xl bg-bone shadow-2xl">
-        <div className="flex items-center gap-3 border-b-2 border-ink/10 px-5">
-          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-ink/40" fill="none" stroke="currentColor" strokeWidth="2">
+      <div className="animate-rise absolute left-1/2 top-[8vh] w-full max-w-xl -translate-x-1/2 overflow-hidden rounded-3xl bg-canvas shadow-2xl">
+        <div className="flex items-center gap-3 border-b-2 border-theme/10 px-5">
+          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-theme-muted" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" strokeLinecap="round" />
           </svg>
@@ -849,10 +853,10 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
               if (e.key === 'Enter' && results[active]) go(results[active].id);
             }}
             placeholder="Search mogodu, tshotlo, wings…"
-            className="w-full bg-transparent py-4 text-base outline-none placeholder:text-ink/35"
+            className="w-full bg-transparent py-4 text-base outline-none placeholder:text-theme-muted"
             aria-label="Search dishes"
           />
-          <button type="button" onClick={onClose} className="shrink-0 rounded-full border border-ink/15 px-2 py-1 font-mono text-xs text-ink/50 hover:bg-ink hover:text-bone">
+          <button type="button" onClick={onClose} className="shrink-0 rounded-full border border-theme/15 px-2 py-1 font-mono text-xs text-theme-soft hover:bg-ink hover:text-bone">
             ESC
           </button>
         </div>
@@ -860,44 +864,44 @@ function SearchPalette({ onClose, onNavigate }: { onClose: () => void; onNavigat
         <div className="max-h-[52vh] overflow-y-auto">
           {!q.trim() && (
             <div className="px-5 py-5">
-              <p className="mb-2 font-mono text-xs uppercase tracking-widest text-ink/45">Try one of these</p>
+              <p className="mb-2 font-mono text-xs uppercase tracking-widest text-theme-muted">Try one of these</p>
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((s) => (
-                  <button key={s} type="button" onClick={() => setQ(s)} className="rounded-full border-2 border-ink/12 px-3 py-1.5 text-sm hover:border-ochre hover:bg-ochre/10">
+                  <button key={s} type="button" onClick={() => setQ(s)} className="rounded-full border-2 border-theme/12 px-3 py-1.5 text-sm hover:border-ochre hover:bg-ochre/10">
                     {s}
                   </button>
                 ))}
               </div>
-              <p className="mt-5 text-xs leading-relaxed text-ink/40">
+              <p className="mt-5 text-xs leading-relaxed text-theme-muted">
                 Search matches dish names, ingredients and what a dish is made of. Press ⏎ to open, or + to add straight to your basket.
               </p>
             </div>
           )}
 
-          {busy && <p className="px-5 py-6 text-sm text-ink/45">Searching…</p>}
+          {busy && <p className="px-5 py-6 text-sm text-theme-muted">Searching…</p>}
 
           {!busy && q.trim() && results.length === 0 && (
-            <p className="px-5 py-6 text-sm text-ink/55">
-              Nothing matches “{q}”. Try <button type="button" className="font-semibold text-ochre-deep underline" onClick={() => setQ('mogodu')}>mogodu</button> or{' '}
-              <button type="button" className="font-semibold text-ochre-deep underline" onClick={() => setQ('wings')}>wings</button>.
+            <p className="px-5 py-6 text-sm text-theme-soft">
+              Nothing matches “{q}”. Try <button type="button" className="font-semibold text-accent-on-ink underline" onClick={() => setQ('mogodu')}>mogodu</button> or{' '}
+              <button type="button" className="font-semibold text-accent-on-ink underline" onClick={() => setQ('wings')}>wings</button>.
             </p>
           )}
 
           {results.map((r, i) => (
             <div
               key={r.id}
-              className={`flex items-center gap-3 border-b border-ink/8 px-5 py-3 ${i === active ? 'bg-ochre/10' : ''}`}
+              className={`flex items-center gap-3 border-b border-theme/8 px-5 py-3 ${i === active ? 'bg-ochre/10' : ''}`}
               onMouseEnter={() => setActive(i)}
             >
               <img src={r.image} alt="" className="h-12 w-12 rounded-lg object-cover" loading="lazy" />
               <button type="button" onClick={() => go(r.id)} className="min-w-0 flex-1 text-left">
                 <span className="block truncate text-sm font-semibold">{r.name}</span>
-                <span className="block text-xs text-ink/50">{r.localName ? `${r.localName} · ` : ''}{zar(r.price)}</span>
+                <span className="block text-xs text-theme-soft">{r.localName ? `${r.localName} · ` : ''}{zar(r.price)}</span>
               </button>
               <button
                 type="button"
                 onClick={() => quickAdd(r.id)}
-                className="shrink-0 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-bone hover:bg-ochre hover:text-ink"
+                className="shrink-0 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-bone hover:bg-ochre hover:text-[#001938]"
               >
                 + Add
               </button>

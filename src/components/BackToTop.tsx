@@ -119,7 +119,7 @@ export function BackToTop() {
        * 44px minimum, like every other thumb control on the site; the mobile
        * audit treats anything smaller as a miss.
        */
-      className={`fixed right-4 z-40 grid h-11 w-11 place-items-center rounded-full border-2 border-ink/15 bg-bone/95 text-ink/70 shadow-[0_2px_12px_rgba(22,16,12,0.16)] backdrop-blur transition-all duration-300 hover:border-ink hover:text-ink sm:right-6 ${
+      className={`fixed right-4 z-40 grid h-11 w-11 place-items-center rounded-full border-2 border-theme/15 bg-canvas/95 text-theme-soft shadow-[0_2px_12px_rgba(22,16,12,0.16)] backdrop-blur transition-all duration-300 hover:border-theme hover:text-theme sm:right-6 ${
         barPresent ? 'bottom-32' : 'bottom-6'
       }`}
       aria-label="Back to the top of the page"

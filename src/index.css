@@ -41,9 +41,30 @@
 @font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2'); }
 
 @theme {
-  /* Sampled from the supplied Heritage Bites Figma screens: midnight navy,
-     warm paper, clean white surfaces, and antique gold. */
-  --color-ink: #001938; /* primary midnight navy */
+  /*
+   * Light and dark.
+   *
+   * `ink` is navy and `bone` is warm paper, and they are used two different
+   * ways: as *text* on each other, and as *surfaces* in their own right. That
+   * double duty is the whole difficulty of a dark mode here — the header and
+   * footer are navy and must stay navy in both themes, while `text-ink` is body
+   * copy and must become light. Swapping the raw tokens would sink the header
+   * into the page in dark mode.
+   *
+   * The resolution has three parts:
+   *
+   *  1. `--color-canvas` is the page ground (bone by day, near-black by night).
+   *  2. `--color-surface` is a card (white by day, a raised charcoal by night).
+   *  3. --color-ink and --color-bone stay exactly as they are, because they are
+   *     brand colours that are already correct on both sides of the switch.
+   *     What flips is which one is used as text, and that is handled by
+   *     `light-dark()` on the body's default colour plus the ink×canvas ramp
+   *     below, which is the one the text utilities actually resolve to.
+   *
+   * `--color-ink` therefore remains a fixed navy; `text-ink` on a canvas reads
+   * through the ramp, and on a navy surface the navy/paper pair is untouched.
+   */
+  --color-ink: #001938; /* primary midnight navy — a brand colour, not a theme */
   --color-ink-2: #0c2441; /* raised navy surface */
   --color-ink-3: #192f4a; /* hover / secondary navy */
   --color-bone: #f8f4ec; /* warm paper */
@@ -55,6 +76,73 @@
   --color-maize: #f3eddf; /* pale cream */
   --color-morogo: #b77e23; /* legacy accent alias; no green in the brand UI */
   --color-sky: #0c2441; /* legacy navy alias */
+
+  /*
+   * Themed surfaces. Defined once and re-pointed per theme below; every card,
+   * sheet and input uses these rather than `bg-white`, so the page has one
+   * place to change rather than 55.
+   */
+  --color-canvas: light-dark(#f8f4ec, #071120); /* the page ground */
+  --color-surface: light-dark(#ffffff, #0f1d31); /* cards, sheets, popovers */
+  --color-surface-2: light-dark(#f1ebdd, #132339); /* a card resting on a card */
+
+  /*
+   * The text/border ramp.
+   *
+   * This is the token every `text-ink`/`border-ink` call site was migrated to.
+   * By day it is the midnight navy; by night it is warm paper, so body copy
+   * stays legible on the dark ground. Opacity modifiers (`text-theme/60`) still
+   * work and still mean the same thing: secondary text.
+   */
+  --color-theme: light-dark(#001938, #f2ede2);
+
+  /*
+   * Secondary text, as explicit token pairs rather than opacity steps.
+   *
+   * The utilities used to express it as `text-ink/45` and friends, and those
+   * opacities are not accessibility-neutral: at 45% the navy falls to 2.9:1 on
+   * paper, and 40% and below were worse — real words ("optional", "per bottle",
+   * the delivery note under a disabled checkout) set at half the contrast AA
+   * asks for. Dark mode would have inherited exactly the same fault on its own
+   * ground, so the ramp is flattened here and each step is chosen to clear 4.5:1
+   * against both the page ground and a card in *both* themes.
+   *
+   *   soft    light #4a5c73 (6.2–6.8:1)   dark #ccd3db (12.5–11.2:1)
+   *   muted   light #5c6b7d (5.0–5.5:1)   dark #a8b2bd ( 8.8– 7.9:1)
+   *
+   * Opacity modifiers still work on --color-theme for decoration (hairlines,
+   * disabled states, icons that are never the only signal), but anything a
+   * customer has to read now uses one of these two.
+   */
+  --color-theme-soft: light-dark(#4a5c73, #ccd3db);
+  --color-theme-muted: light-dark(#5c6b7d, #a8b2bd);
+
+  /*
+   * The gold used for *text* — eyebrows, prices, small labels.
+   *
+   * By day this is the deep antique gold (#8a5d14) that already shipped. By
+   * night that same gold is 3.3:1 against the dark ground, so it lightens along
+   * the ramp to #d9a24a: still unmistakably the brand gold, now 8.3:1. The
+   * decorative gold (`ochre`) is unchanged — it is used for fills, borders and
+   * hairlines, where contrast against a dark ground already reads.
+   */
+  --color-accent: light-dark(#8a5d14, #d9a24a);
+
+  /*
+   * Gold for text *on the navy brand surfaces* — the header tagline, footer
+   * column headings, hero eyebrows.
+   *
+   * This is a separate token because `--color-accent` cannot serve both
+   * grounds. The deep antique gold (#8a5d14) is 3.06:1 on navy: too dark, and
+   * it was in the shipped header and footer already, so this is a fix as well
+   * as a theming hook. On navy the ramp moves the other way — lighter is
+   * legible: #d9a24a is 7.7:1 on the header navy and 6.9:1 on the lifted navy
+   * the footer uses.
+   *
+   * It does not vary with the theme: the header and footer are navy in both,
+   * so the gold that sits on them is the same gold in both.
+   */
+  --color-accent-on-ink: #d9a24a;
 
   /*
    * The gold buttons are a gradient: pale antique gold at the top-left falling to
@@ -76,7 +164,18 @@
    * printer's ink on a phone screen. It is deliberately too subtle to notice as
    * decoration; the point is depth, not effect.
    */
+  /*
+   * The navy ground has two ramps, not one.
+   *
+   * By day the header and footer are the brand navy sitting on warm paper, and
+   * the gradient runs deep-to-mid. By night the page ground is #071120 — 1.08:1
+   * against the navy, which is to say the header would dissolve into the page
+   * and the sticky bar would stop reading as a bar. The dark ramp is lifted to
+   * #132a44 at its deepest, 1.30:1 against the ground, which is a visible band
+   * without pretending the navy is no longer navy.
+   */
   --hb-ink-gradient: linear-gradient(180deg, #001530 0%, #001938 45%, #0c2441 100%);
+  --hb-ink-gradient-dark: linear-gradient(180deg, #0d2137 0%, #112741 52%, #162f4b 100%);
 
   /*
    * One gradient per button surface, and the reason each one is shaped the way
@@ -118,11 +217,34 @@
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    /*
+     * `color-scheme` is what makes the switch real rather than cosmetic: it
+     * tells the browser to paint scrollbars, form controls, the caret and the
+     * address-bar tint in the matching mode. Without it a dark page has a white
+     * scrollbar and white date pickers bolted to it.
+     */
+    color-scheme: light dark;
+  }
+
+  /*
+   * The explicit choice wins over the OS.
+   *
+   * `color-scheme: light dark` means "follow the system", which is the right
+   * default — but a customer who has deliberately picked Light on a phone set
+   * to Dark must get Light, or the control is a lie. Setting color-scheme to a
+   * single value is what makes `light-dark()` resolve to that side.
+   */
+  :root[data-theme='light'] {
+    color-scheme: light;
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
   }
 
   body {
-    background-color: var(--color-bone);
-    color: var(--color-ink);
+    background-color: var(--color-canvas);
+    color: var(--color-theme);
     font-family: var(--font-sans);
     font-feature-settings: 'ss01', 'cv11';
     -webkit-font-smoothing: antialiased;
@@ -165,8 +287,12 @@
   .hb-gold {
     background-image: var(--hb-gold-gradient);
     background-color: var(--color-ochre);
-    /* Ink on the pale gold: 9.2:1 at the lightest stop, 5.0:1 at the deepest. */
-    color: var(--color-ink);
+    /*
+     * Ink on the pale gold: 9.2:1 at the lightest stop, 5.0:1 at the deepest.
+     * Literal ink, not `--color-theme`: gold is a fixed brand surface in both
+     * themes, and theme text would turn paper-on-gold (~2:1) in dark mode.
+     */
+    color: #001938;
     /* The light sits on the top edge of the pill. */
     box-shadow: 0 2px 0 0 var(--color-ink), inset 0 1px 0 0 rgb(255 255 255 / 0.35);
   }
@@ -207,6 +333,16 @@
     background-image: var(--hb-ink-gradient);
   }
 
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .hb-ink-surface {
+      background-image: var(--hb-ink-gradient-dark);
+    }
+  }
+
+  :root[data-theme='dark'] .hb-ink-surface {
+    background-image: var(--hb-ink-gradient-dark);
+  }
+
   /* ---------------------------------------------------------- dark button */
 
   /*
@@ -245,12 +381,16 @@
   .hb-outline {
     background-image: none;
     background-color: transparent;
-    color: var(--color-ink);
+    /* Theme text, not literal ink: this button sits on the page ground, and in
+       dark mode literal navy on a dark card is invisible. */
+    color: var(--color-theme);
   }
 
   .hb-outline:hover {
+    /* The hover fill is warm paper, so the label must go back to literal ink —
+       paper-on-paper would vanish the other way. */
     background-image: var(--hb-bone-gradient);
-    color: var(--color-ink);
+    color: #001938;
   }
 
   /* ---------------------------------------------------------- on-dark fill */

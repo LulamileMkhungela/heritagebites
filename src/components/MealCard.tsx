@@ -53,12 +53,19 @@ export function MealCard({
   const priceBlock = (
     <span className={`flex shrink-0 items-baseline gap-1 font-mono font-bold ${isList ? 'text-xl' : 'text-lg'}`}>
       {zar(item.price)}
-      <span className="font-sans text-[11px] font-normal uppercase tracking-wider text-ink/45">{unit}</span>
+      <span className="font-sans text-[11px] font-normal uppercase tracking-wider text-theme-muted">{unit}</span>
     </span>
   );
 
   const actions = (
-    <div className={`flex items-center gap-2 ${isList ? 'w-full sm:w-auto' : 'w-full'}`}>
+    /*
+     * In list view the price and the buttons share one row, and at 390px a
+     * `w-full` button beside a price has nowhere to go — it overflowed the card
+     * by about 20px, which the customer sees as a clipped "CHOOSE". Below `sm`
+     * the buttons take only the space their label needs; from `sm` they sit in
+     * a fixed row at the end.
+     */
+    <div className={`flex items-center gap-2 ${isList ? 'shrink-0 sm:w-auto' : 'w-full'}`}>
       <Button size="sm" variant="dark" onClick={quickAdd} disabled={item.available === false} block>
         {/* "basket", everywhere: the sheet footer, the bar and the drawer all
             call it the basket, and one card calling it a cart is a second word
@@ -87,11 +94,11 @@ export function MealCard({
       {!isList && <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-transparent to-transparent" />}
       {item.available === false && (
         <span className="absolute inset-0 grid place-items-center bg-ink/70">
-          <span className="rounded-full bg-bone px-4 py-2 text-xs font-bold uppercase tracking-widest text-ink">Sold out today</span>
+          <span className="rounded-full bg-canvas px-4 py-2 text-xs font-bold uppercase tracking-widest text-theme">Sold out today</span>
         </span>
       )}
       {item.imagePending && (
-        <span className="absolute right-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-ink">
+        <span className="absolute right-3 top-3 rounded-full bg-canvas/90 px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-theme">
           Photo coming soon
         </span>
       )}
@@ -101,18 +108,18 @@ export function MealCard({
   /* ------------------------------- list -------------------------------- */
   if (isList) {
     return (
-      <article className="group flex overflow-hidden rounded-2xl border-2 border-ink/10 bg-white transition-colors hover:border-ink/25">
+      <article className="group flex overflow-hidden rounded-2xl border-2 border-theme/10 bg-surface transition-colors hover:border-theme/25">
         {photo}
         <div className="flex min-w-0 flex-1 flex-col gap-1 p-4 sm:flex-row sm:items-center sm:gap-5">
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
             {item.localName && (
-              <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-ochre-deep">{item.localName}</p>
+              <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-accent">{item.localName}</p>
             )}
-            <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>
-            {item.portion && <p className="mt-1 text-[12px] text-ink/45">{item.portion}</p>}
+            <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-theme-soft">{item.description}</p>
+            {item.portion && <p className="mt-1 text-[12px] text-theme-muted">{item.portion}</p>}
           </div>
-          <div className="mt-auto flex items-center justify-between gap-3 pt-2 sm:mt-0 sm:justify-end sm:pt-0">
+          <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-2 sm:mt-0 sm:flex-nowrap sm:justify-end sm:pt-0">
             {priceBlock}
             {actions}
           </div>
@@ -123,7 +130,7 @@ export function MealCard({
 
   /* ------------------------------- grid -------------------------------- */
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-3xl border-2 border-ink/10 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-ink/25 hover:shadow-[0_18px_40px_-24px_rgba(0,25,56,0.5)]">
+    <article className="group relative flex flex-col overflow-hidden rounded-3xl border-2 border-theme/10 bg-surface transition-all duration-300 hover:-translate-y-1 hover:border-theme/25 hover:shadow-[0_18px_40px_-24px_rgba(0,25,56,0.5)]">
       {/* Ndebele painted band: the card is framed, not just a photo in a box. */}
       <HeritageBand className="h-4 w-full shrink-0" width={300} tile={40} />
       {photo}
@@ -145,10 +152,10 @@ export function MealCard({
           {priceBlock}
         </div>
         {item.localName && (
-          <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-ochre-deep">{item.localName}</p>
+          <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-accent">{item.localName}</p>
         )}
-        {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>}
-        {item.portion && <p className="mt-1 text-[12px] text-ink/45">{item.portion}</p>}
+        {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-theme-soft">{item.description}</p>}
+        {item.portion && <p className="mt-1 text-[12px] text-theme-muted">{item.portion}</p>}
 
         <div className="mt-auto pt-4">{actions}</div>
       </div>
@@ -261,29 +268,29 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
       aria-label={item.name}
     >
       <button type="button" className="absolute inset-0 bg-ink/70 backdrop-blur-sm" onClick={onClose} aria-label="Close" />
-      <div className="animate-rise relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-bone shadow-2xl sm:rounded-3xl">
+      <div className="animate-rise relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-canvas shadow-2xl sm:rounded-3xl">
         <div className="relative h-52 shrink-0 sm:h-64">
           <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent" />
-          <button type="button" onClick={onClose} className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-bone/90 text-ink hover:bg-bone" aria-label="Close">
+          <button type="button" onClick={onClose} className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-canvas/90 text-theme hover:bg-canvas" aria-label="Close">
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
           <div className="absolute bottom-4 left-5 right-5 text-bone">
             <h2 className="font-display text-3xl font-semibold">{item.name}</h2>
-            {item.localName && <p className="font-mono text-xs uppercase tracking-wider text-ochre">/{item.pronunciation}/ · {item.language}</p>}
+            {item.localName && <p className="font-mono text-xs uppercase tracking-wider text-accent">/{item.pronunciation}/ · {item.language}</p>}
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7">
-          <p className="text-[15px] leading-relaxed text-ink/75">{item.description}</p>
+          <p className="text-[15px] leading-relaxed text-theme-soft">{item.description}</p>
 
-          <dl className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border-2 border-ink/10 bg-white p-3 text-center">
+          <dl className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border-2 border-theme/10 bg-surface p-3 text-center">
             {[
               ['Serves', String(item.serves)],
               ['Rating', `★ ${item.rating}`],
             ].map(([k, v]) => (
               <div key={k}>
-                <dt className="font-mono text-xs uppercase tracking-wider text-ink/40">{k}</dt>
+                <dt className="font-mono text-xs uppercase tracking-wider text-theme-muted">{k}</dt>
                 <dd className="text-sm font-semibold">{v}</dd>
               </div>
             ))}
@@ -291,8 +298,8 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
 
           {item.story && (
             <div className="mt-5 rounded-2xl border-l-4 border-ochre bg-ochre/10 p-4">
-              <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Every bite tells a story</p>
-              <p className="text-[14px] leading-relaxed text-ink/80">{item.story}</p>
+              <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">Every bite tells a story</p>
+              <p className="text-[14px] leading-relaxed text-theme-soft">{item.story}</p>
             </div>
           )}
 
@@ -300,7 +307,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
             <fieldset key={o.id} className="mt-5">
               <legend className="mb-2 flex items-center gap-2 text-sm font-semibold">
                 {o.label}
-                {o.required ? <span className="text-ochre-deep">*</span> : <span className="text-xs font-normal text-ink/40">optional{o.multiple ? ' · choose any' : ''}</span>}
+                {o.required ? <span className="text-accent">*</span> : <span className="text-xs font-normal text-theme-muted">optional{o.multiple ? ' · choose any' : ''}</span>}
                 {/*
                   A required group that holds several (starch, vegetable side)
                   says so, because a row of checkboxes under a bare "Choose your
@@ -308,7 +315,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                   catalogue, so this can never promise a fourth one.
                 */}
                 {o.multiple && o.required && (
-                  <span className="text-xs font-normal text-ink/45">· pick up to {Math.max(1, Math.min(20, Number(o.max) || 1))}</span>
+                  <span className="text-xs font-normal text-theme-muted">· pick up to {Math.max(1, Math.min(20, Number(o.max) || 1))}</span>
                 )}
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -342,12 +349,12 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                       >
                         <span className="min-w-0">
                           <span className="block font-semibold leading-snug">{c.label}</span>
-                          <span className="font-mono text-xs text-ink/60">
+                          <span className="font-mono text-xs text-theme-soft">
                             + {zar(extraCost(c.priceDelta, count))}
-                            {count > 1 && <span className="text-ink/40"> · {zar(c.priceDelta)} each</span>}
+                            {count > 1 && <span className="text-theme-muted"> · {zar(c.priceDelta)} each</span>}
                           </span>
                         </span>
-                        <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
+                        <span className="inline-flex shrink-0 items-center rounded-full border-2 border-theme/20 bg-surface">
                           <button
                             type="button"
                             onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max) : setCount(count - 1))}
@@ -395,21 +402,21 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                       role={isChoice ? 'radio' : 'checkbox'}
                       aria-checked={isOn}
                       onClick={() => toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max)}
-                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-theme/12 hover:border-theme/30'}`}
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         {/* The visible control: a box for a checkbox, a dot for a radio. */}
                         <span
                           aria-hidden="true"
-                          className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${isOn ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                          className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${isOn ? 'border-ochre bg-ochre' : 'border-theme/30 bg-surface'}`}
                         >
                           {isOn && (isChoice
                             ? <span className="h-1.5 w-1.5 rounded-full bg-ink" />
-                            : <svg viewBox="0 0 12 12" className="h-3 w-3 text-ink" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
+                            : <svg viewBox="0 0 12 12" className="h-3 w-3 text-theme" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
                         </span>
                         <span className="min-w-0">{c.label}</span>
                       </span>
-                      {c.priceDelta > 0 && <span className="shrink-0 font-mono text-xs text-ink/55">+ {zar(c.priceDelta)}</span>}
+                      {c.priceDelta > 0 && <span className="shrink-0 font-mono text-xs text-theme-soft">+ {zar(c.priceDelta)}</span>}
                     </button>
                   );
                 })}
@@ -418,7 +425,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
           ))}
         </div>
 
-        <footer className="flex shrink-0 items-center gap-3 border-t-2 border-ink/10 bg-bone px-5 py-4">
+        <footer className="flex shrink-0 items-center gap-3 border-t-2 border-theme/10 bg-canvas px-5 py-4">
           <Qty value={qty} onChange={setQty} />
           {/*
             A dish with a required choice cannot be added until the choice is

@@ -124,11 +124,11 @@ export default function Quest() {
           <Reveal>
             <div>
               <div className="flex flex-wrap items-baseline gap-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink font-mono text-sm font-bold text-ochre">1</span>
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink font-mono text-sm font-bold text-accent">1</span>
                 <h2 className="font-display text-3xl font-semibold">What the kitchen cooks</h2>
                 <Badge tone="ink">Reference only</Badge>
               </div>
-              <p className="mt-2 text-sm text-ink/60">
+              <p className="mt-2 text-sm text-theme-soft">
                 Both plate menus, and everything you can already choose inside them. It is here so you know what we have
                 before you ask for something else.
               </p>
@@ -150,18 +150,18 @@ export default function Quest() {
                 {(catalog?.categories ?? []).map((category) => {
                   const plate = catalog?.plateMenus?.find((p) => p.id === category.id);
                   return (
-                    <article key={category.id} className="rounded-3xl border-2 border-ink/10 bg-white p-5">
+                    <article key={category.id} className="rounded-3xl border-2 border-theme/10 bg-surface p-5">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <h3 className="font-display text-xl font-semibold">{category.name}</h3>
-                        <p className="font-mono text-xs uppercase tracking-wider text-ochre-deep">{category.tagline}</p>
+                        <p className="font-mono text-xs uppercase tracking-wider text-accent">{category.tagline}</p>
                       </div>
-                      <p className="mt-1.5 text-[13px] leading-relaxed text-ink/55">{category.blurb}</p>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-theme-soft">{category.blurb}</p>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
                         {(plate?.groups ?? []).map((group) => (
                           <div key={group.id} className="rounded-2xl bg-bone/60 p-3">
-                            <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink/45">{groupHeading(group.label)}</p>
-                            <p className="mt-1.5 text-[13px] leading-snug text-ink/75">
+                            <p className="font-mono text-xs uppercase tracking-[0.14em] text-theme-muted">{groupHeading(group.label)}</p>
+                            <p className="mt-1.5 text-[13px] leading-snug text-theme-soft">
                               {group.items.map((item) => item.label).join(' · ')}
                             </p>
                           </div>
@@ -172,7 +172,7 @@ export default function Quest() {
                 })}
               </div>
 
-              <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-ink/45">
+              <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-theme-muted">
                 <span aria-hidden="true" className="mt-px">ℹ</span>
                 <span>
                   Nothing in this list opens. There are no dish pages here on purpose — it is a quick look at what the pots
@@ -190,9 +190,9 @@ export default function Quest() {
             until an IntersectionObserver fires is a form some people never see.
           */}
           <div>
-            <div className="rounded-[2rem] border-2 border-ink/10 bg-white p-6 md:p-8">
+            <div className="rounded-[2rem] border-2 border-theme/10 bg-surface p-6 md:p-8">
               <div className="flex flex-wrap items-baseline gap-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ochre font-mono text-sm font-bold text-ink">2</span>
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ochre font-mono text-sm font-bold text-[#001938]">2</span>
                 <h2 className="font-display text-3xl font-semibold">Send your request</h2>
               </div>
 
@@ -200,14 +200,14 @@ export default function Quest() {
                 <div className="mt-6 rounded-3xl border-2 border-ochre bg-ochre/10 p-6 text-center">
                   <p className="text-3xl" aria-hidden="true">✦</p>
                   <h3 className="mt-2 font-display text-2xl font-semibold">{delivered ? 'Request sent' : 'Request received'}</h3>
-                  <p className="mt-2 text-sm text-ink/65">
+                  <p className="mt-2 text-sm text-theme-soft">
                     {delivered
                       ? 'It is in our inbox and a person will come back to you on the number you gave us.'
                       : STATIC_PREVIEW
                         ? 'Your request reached the site, but it could not be delivered to our inbox. Please call or WhatsApp us so it is not missed.'
                         : 'Your request is saved with us, but our email notification did not go through just now. Please call or WhatsApp us if it is for this week’s window.'}
                   </p>
-                  <p className="mt-2 text-[13px] font-medium text-ink/70">
+                  <p className="mt-2 text-[13px] font-medium text-theme-soft">
                     This is a request, not an order — nothing has been charged and nothing is booked yet.
                   </p>
                   <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
@@ -215,7 +215,7 @@ export default function Quest() {
                       href={waLink}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center justify-center rounded-full border-2 border-ink bg-white px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+                      className="inline-flex items-center justify-center rounded-full border-2 border-theme bg-surface px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-theme transition-colors hover:bg-ink hover:text-bone"
                     >
                       Open WhatsApp
                     </a>
@@ -226,7 +226,7 @@ export default function Quest() {
                 </div>
               ) : (
                 <form onSubmit={submit} className="mt-6 grid gap-4" noValidate>
-                  <p className="text-sm text-ink/60">
+                  <p className="text-sm text-theme-soft">
                     Not in the list, or not the way you want it? Tell us here. No deposit, no payment — just the request.
                   </p>
 
@@ -318,10 +318,10 @@ export default function Quest() {
                     {state === 'sending' ? 'Sending…' : 'Send my request'}
                   </Button>
 
-                  <p className="text-xs leading-relaxed text-ink/40">
+                  <p className="text-xs leading-relaxed text-theme-muted">
                     A request does not place an order. If we can cook it, we come back to you first with the date and what it
                     costs, and you decide from there. We only use these details to answer you — see our{' '}
-                    <Link to="/policies" className="font-semibold text-ink/60 underline">privacy policy</Link>.
+                    <Link to="/policies" className="font-semibold text-theme-soft underline">privacy policy</Link>.
                   </p>
                 </form>
               )}
@@ -329,11 +329,11 @@ export default function Quest() {
           </div>
         </div>
 
-        <p className="mt-10 text-center text-sm text-ink/55">
+        <p className="mt-10 text-center text-sm text-theme-soft">
           Already know exactly what you want from the menu?{' '}
-          <Link to="/menu" className="font-semibold text-ochre-deep underline">Order it here</Link>
+          <Link to="/menu" className="font-semibold text-accent underline">Order it here</Link>
           {' '}— or WhatsApp us on{' '}
-          <a href={waLink} target="_blank" rel="noreferrer" className="font-semibold text-ochre-deep underline">
+          <a href={waLink} target="_blank" rel="noreferrer" className="font-semibold text-accent underline">
             {s?.phoneDisplay ?? '+27 67 013 7587'}
           </a>
           .

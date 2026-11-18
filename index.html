@@ -126,6 +126,29 @@
   </head>
   <body>
     <!--
+      Theme, before first paint.
+
+      This has to be inline and synchronous: React mounts after the browser has
+      already painted, so a theme applied by a component shows a dark-mode
+      customer the light palette for as long as the bundle takes to parse. It is
+      six lines and no network cost.
+
+      No stored value means "follow the device", which is what `color-scheme:
+      light dark` in the stylesheet already does — so the common case sets no
+      attribute at all and the `light-dark()` tokens resolve themselves.
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('hb.theme');
+          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+          var dark = t === 'dark' || (t !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', dark ? '#071120' : '#001938');
+        } catch (e) {}
+      })();
+    </script>
+    <!--
       Boot loader.
 
       It is inline SVG and costs zero network requests: the badge PNG would have

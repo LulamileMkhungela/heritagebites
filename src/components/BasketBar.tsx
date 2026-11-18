@@ -85,7 +85,7 @@ export function BasketBar() {
     <>
       {/* Keeps the bar from covering the last line of the footer. */}
       <div aria-hidden="true" className="h-24" />
-      <div className="fixed inset-x-0 bottom-0 z-40 bg-bone/95 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-40 bg-canvas/95 backdrop-blur">
         <HeritageBand className="h-4 w-full" width={1440} on="ink" />
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
           <button
@@ -94,9 +94,9 @@ export function BasketBar() {
             className="min-h-11 min-w-0 flex-1 text-left"
             aria-label={`Open your basket, ${count} item${count === 1 ? '' : 's'}, ${zar(subtotal)}`}
           >
-            <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-ink/50">
+            <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-theme-soft">
               {flash ? (
-                <span className="text-ochre-deep" role="status">✓ {flash}</span>
+                <span className="text-accent" role="status">✓ {flash}</span>
               ) : (
                 <>
                   {/*
@@ -111,13 +111,13 @@ export function BasketBar() {
               )}
             </span>
             <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="font-display text-xl font-bold leading-tight text-ochre-deep tabular-nums">{zar(subtotal)}</span>
+              <span className="font-display text-xl font-bold leading-tight text-accent tabular-nums">{zar(subtotal)}</span>
               {/*
                 One line, always true: delivery is in the plate price for the
                 Sandton/Rosebank run, and the fee for anywhere further is worked
                 out at checkout where the address is known.
               */}
-              <span className="text-xs text-ink/55" id={belowMinimum ? 'hb-basket-minimum' : undefined}>
+              <span className="text-xs text-theme-soft" id={belowMinimum ? 'hb-basket-minimum' : undefined}>
                 {belowMinimum
                   ? `Add ${zar(minimum - subtotal)} to reach the R${minimum} minimum`
                   : 'Delivery included in Sandton & Rosebank'}
@@ -134,7 +134,7 @@ export function BasketBar() {
           <button
             type="button"
             onClick={clear}
-            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-2 border-ink/15 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink/60 transition-colors hover:border-chili hover:text-chili sm:px-4"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border-2 border-theme/15 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-theme-soft transition-colors hover:border-chili hover:text-chili sm:px-4"
             aria-label={`Clear the basket, ${count} item${count === 1 ? '' : 's'}`}
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -146,7 +146,7 @@ export function BasketBar() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="hidden min-h-11 items-center rounded-full border-2 border-ink/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide hover:border-ink sm:inline-flex"
+            className="hidden min-h-11 items-center rounded-full border-2 border-theme/15 px-4 py-2 text-xs font-semibold uppercase tracking-wide hover:border-theme sm:inline-flex"
           >
             Basket
           </button>
@@ -158,7 +158,7 @@ export function BasketBar() {
               })}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full hb-gold px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full hb-gold px-5 py-2 text-xs font-bold uppercase tracking-wide text-theme"
             >
               <WhatsAppIcon className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Can you cook it?</span>
@@ -176,7 +176,7 @@ export function BasketBar() {
                 type="button"
                 disabled
                 aria-describedby="hb-basket-minimum"
-                className="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center gap-1.5 rounded-full border-2 border-ink/20 bg-ink/5 px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink/40"
+                className="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center gap-1.5 rounded-full border-2 border-theme/20 bg-ink/5 px-5 py-2 text-xs font-bold uppercase tracking-wide text-theme-muted"
               >
                 Checkout
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -186,7 +186,7 @@ export function BasketBar() {
             ) : (
               <Link
                 to="/checkout"
-                className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full hb-gold px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink"
+                className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full hb-gold px-5 py-2 text-xs font-bold uppercase tracking-wide text-theme"
               >
                 Checkout
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

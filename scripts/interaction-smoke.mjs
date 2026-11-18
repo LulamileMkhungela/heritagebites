@@ -1075,7 +1075,12 @@ await step('choosing required options then adding puts the line in the basket', 
   const groups = [...s1.doc.querySelectorAll('[role="dialog"] fieldset')];
   let chosen = 0;
   for (const fs of groups) {
-    if (!fs.querySelector('.text-ochre-deep')) continue;
+    /*
+     * A required group is marked by an asterisk. That used to be found by its
+     * colour class, which was renamed when the gold became theme-aware — so the
+     * selector is now the marker itself, which does not change with the palette.
+     */
+    if (!fs.textContent.includes('*')) continue;
     const opt = fs.querySelector('button[aria-checked], button[aria-pressed]');
     if (!opt) throw new Error('required group has no options');
     s1.click(opt);
@@ -2405,7 +2410,12 @@ await step('only the asterisk on a required field is red', async () => {
   if (/\*/.test([...head.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(''))) {
     throw new Error('the asterisk is still part of the label text');
   }
-  if (!/text-ink\b/.test(head.className)) throw new Error(`the label is not ink-coloured: "${head.className}"`);
+  /*
+   * Body text is `text-theme` now — the token that resolves to ink in light
+   * mode and paper in dark. Pinning the literal `text-ink` would pin the old
+   * palette; what matters is that the label is not carrying the red.
+   */
+  if (!/text-theme\b/.test(head.className)) throw new Error(`the label is not theme-coloured: "${head.className}"`);
   /* The asterisk is decoration; a screen reader gets the word instead. */
   if (![...head.querySelectorAll('span')].some((el) => /sr-only/.test(el.className) && /required/i.test(el.textContent))) {
     throw new Error('the required marker is not announced to screen readers');
@@ -2747,7 +2757,7 @@ await step('the plate builder requires its mandatory groups before adding', asyn
   const groups = [...(builderDialog()?.querySelectorAll('fieldset') ?? [])];
   let chosen = 0;
   for (const fs of groups) {
-    const required = Boolean(fs.querySelector('.text-ochre-deep'));
+    const required = fs.textContent.includes('*');
     if (!required) continue;
     const opt = [...fs.querySelectorAll('button[aria-checked], button[aria-pressed]')][0];
     if (!opt) throw new Error('required group has no options');
@@ -3703,6 +3713,85 @@ await step('the back-to-top button appears only after scrolling, and returns the
   shopper.close();
   paying.close();
   return 'hidden at the top, appears after scrolling, clears the basket bar, returns to the top, absent from the checkout';
+});
+
+await step('the appearance control cycles light, dark and back to the device', async () => {
+  /*
+   * Owner, 19 Nov 2026: "can i have dark and light mode".
+   *
+   * Three states, not a switch: "follow my phone" is a preference in its own
+   * right, and a two-way toggle silently discards it the first time it is
+   * touched. jsdom has no CSS engine, so what is asserted here is the contract
+   * the styling depends on — the attribute that `light-dark()` resolves
+   * against, and the value persisted so the pre-paint script in index.html can
+   * restore it before React mounts.
+   */
+  const page = boot('/');
+  await page.waitFor(() => /Heritage/i.test(page.text()), 'home', 20000);
+
+  const control = () => [...page.doc.querySelectorAll('button')]
+    .find((el) => /^Appearance:/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!control()) throw new Error('there is no appearance control in the header');
+  if (!/Device/i.test(control().getAttribute('aria-label'))) {
+    throw new Error(`the control did not start on "follow the device": ${control().getAttribute('aria-label')}`);
+  }
+
+  const root = page.doc.documentElement;
+  if (root.dataset.theme) throw new Error('a theme attribute is set before the customer has chosen one');
+
+  page.click(control());
+  await sleep(150);
+  if (root.dataset.theme !== 'light') throw new Error('the first press did not select light');
+  if (page.w.localStorage.getItem('hb.theme') !== 'light') throw new Error('the light choice was not persisted');
+
+  page.click(control());
+  await sleep(150);
+  if (root.dataset.theme !== 'dark') throw new Error('the second press did not select dark');
+  if (page.w.localStorage.getItem('hb.theme') !== 'dark') throw new Error('the dark choice was not persisted');
+
+  /* Third press returns to the device: no attribute, nothing stored. */
+  page.click(control());
+  await sleep(150);
+  if (root.dataset.theme) throw new Error('the third press did not return to following the device');
+  if (page.w.localStorage.getItem('hb.theme')) throw new Error('the device choice left a stored override behind');
+  if (!/Device/i.test(control().getAttribute('aria-label'))) throw new Error('the label did not follow the state');
+
+  page.close();
+  return 'starts on the device, cycles light -> dark -> device, persists only explicit choices';
+});
+
+await step('the archive sections follow the list/grid choice too', async () => {
+  /*
+   * The Kasi Fast Food and Morning Heritage sections were a hardcoded grid, so
+   * switching to list view left them four-up while every selling section
+   * obeyed — it read as a broken page rather than a preference.
+   */
+  const page = boot('/menu');
+  await page.waitFor(() => /The full menu/i.test(page.text()), 'menu', 20000);
+  await sleep(400);
+
+  const toggle = [...page.doc.querySelectorAll('button')]
+    .find((el) => /Show meals as a list/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!toggle) throw new Error('there is no list/grid toggle on the menu');
+  page.click(toggle);
+  await sleep(300);
+
+  const archive = page.doc.querySelector('[data-coming-soon]');
+  if (!archive) throw new Error('the archive section is missing');
+  if (archive.getAttribute('data-view') !== 'list') {
+    throw new Error(`the archive section ignored the list choice: data-view=${archive.getAttribute('data-view')}`);
+  }
+  if (!/grid gap-4/.test(archive.className)) {
+    throw new Error(`the archive section is still laid out as a grid: ${archive.className}`);
+  }
+  const cards = [...archive.querySelectorAll('article')];
+  if (!cards.length) throw new Error('the archive section has no cards');
+  if (cards.some((c) => c.getAttribute('data-layout') !== 'list')) {
+    throw new Error('an archive card did not switch to the row layout');
+  }
+
+  page.close();
+  return `${cards.length} archive cards follow the toggle into list view`;
 });
 
 /* ------------------------------------------------------------------ */

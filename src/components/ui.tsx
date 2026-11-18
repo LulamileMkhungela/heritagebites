@@ -9,10 +9,10 @@ type Variant = 'primary' | 'ghost' | 'outline' | 'dark' | 'whatsapp' | 'onDark' 
  * Variants carry their own colour on purpose.
  *
  * Overriding colour through `className` does not work in Tailwind: `text-bone`
- * passed in a className and `text-ink` inside the variant are both single-class
+ * passed in a className and `text-theme` inside the variant are both single-class
  * utilities with equal specificity, so whichever the stylesheet emits last wins —
  * not whichever was written last. That is how the homepage's "View the menu"
- * button shipped invisible: a ghost variant (text-ink) overridden with text-bone
+ * button shipped invisible: a ghost variant (text-theme) overridden with text-bone
  * on a dark hero, and the ink won. Add a variant instead of overriding.
  */
 const variants: Record<Variant, string> = {
@@ -27,9 +27,9 @@ const variants: Record<Variant, string> = {
    */
   primary: 'hb-gold',
   /* Surfaces and labels all live in the .hb-* utilities — see index.css. */
-  dark: 'hb-dark border border-ink',
-  outline: 'hb-outline border-2 border-ink',
-  ghost: 'text-ink hover:bg-ink/5',
+  dark: 'hb-dark border border-theme',
+  outline: 'hb-outline border-2 border-theme',
+  ghost: 'text-theme hover:bg-ink/5',
   /* For heroes and cards that are already ink — never for a light background. */
   onDark: 'hb-on-dark border border-bone/30',
   danger: 'hb-danger border-2',
@@ -95,12 +95,12 @@ export function LinkButton({
 
 export function Badge({ children, tone = 'ochre', className = '' }: { children: ReactNode; tone?: string; className?: string }) {
   const tones: Record<string, string> = {
-    ochre: 'bg-ochre/20 text-ochre-deep border-ochre/40',
+    ochre: 'bg-ochre/20 text-accent border-ochre/40',
     chili: 'bg-chili/15 text-chili border-chili/30',
-    morogo: 'bg-ochre/15 text-ochre-deep border-ochre/30',
+    morogo: 'bg-ochre/15 text-accent border-ochre/30',
     clay: 'bg-clay/15 text-clay border-clay/30',
     sky: 'bg-sky/15 text-sky border-sky/30',
-    ink: 'bg-ink/10 text-ink border-ink/20',
+    ink: 'bg-ink/10 text-theme border-theme/20',
     bone: 'bg-bone/15 text-bone border-bone/30',
   };
   return (
@@ -154,7 +154,14 @@ export function SectionLabel({ children, onDark = false }: { children: ReactNode
     <div className="mb-4 flex items-center gap-3">
       <DiamondMark className="h-3 w-3 shrink-0" pigment="ochre" />
       <span className="h-px w-8 bg-ochre" />
-      <span className={`font-mono text-xs font-semibold uppercase tracking-[0.22em] ${onDark ? 'text-ochre' : 'text-ochre-deep'}`}>{children}</span>
+      {/*
+        Two golds, because the grounds are different. `onDark` used to select
+        between two identical strings — a dead ternary, so every section label
+        was the deep antique gold regardless of where it sat. On navy that is
+        3.06:1, which is why the header, footer and hero eyebrows were failing
+        contrast in *light* mode too, long before there was a dark theme.
+      */}
+      <span className={`font-mono text-xs font-semibold uppercase tracking-[0.22em] ${onDark ? 'text-accent-on-ink' : 'text-accent'}`}>{children}</span>
     </div>
   );
 }
@@ -163,7 +170,7 @@ export function SectionLabel({ children, onDark = false }: { children: ReactNode
 
 export function Spinner({ label = 'Working…' }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-3 py-10 text-ink/60">
+    <div className="flex items-center justify-center gap-3 py-10 text-theme-soft">
       <span className="h-4 w-4 animate-spin rounded-full border-2 border-ochre border-t-transparent" />
       <span className="text-sm">{label}</span>
     </div>
@@ -201,7 +208,7 @@ export function LoadError({
     <div className="mx-auto max-w-lg px-4 py-16 text-center" role="alert">
       <p className="text-4xl" aria-hidden="true">🍢</p>
       <h2 className="mt-4 font-display text-2xl font-semibold">We could not load {what}</h2>
-      <p className="mt-3 text-sm leading-relaxed text-ink/60">
+      <p className="mt-3 text-sm leading-relaxed text-theme-soft">
         {message?.trim() || 'The connection dropped before the kitchen answered.'} Nothing was charged and nothing was
         ordered — try again, or message us and we will take the order in the chat.
       </p>
@@ -645,7 +652,7 @@ export function Field({
   return (
     <label className="block">
       <span className="mb-1.5 flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-semibold text-ink">
+        <span className="text-[13px] font-semibold text-theme">
           {label}
           {required && (
             <>
@@ -656,7 +663,7 @@ export function Field({
             </>
           )}
         </span>
-        {hint && !error && <span className="text-xs text-ink/45">{hint}</span>}
+        {hint && !error && <span className="text-xs text-theme-muted">{hint}</span>}
       </span>
       {children}
       {/* Errors can quote the business's number (the "no inbox" notice), so the
@@ -671,7 +678,7 @@ export function Field({
 }
 
 export const inputCls =
-  'w-full rounded-xl border-2 border-ink/12 bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-ink/35 focus:border-ochre';
+  'w-full rounded-xl border-2 border-theme/12 bg-surface px-4 py-3 text-[15px] text-theme outline-none transition-colors placeholder:text-theme-muted focus:border-ochre';
 
 /* --------------------------- Contact links ---------------------------- */
 
@@ -723,12 +730,12 @@ export function ContactText({ children, className = '' }: { children: string; cl
 
 export function Qty({ value, onChange, min = 1, max = 99 }: { value: number; onChange: (n: number) => void; min?: number; max?: number }) {
   return (
-    <div className="inline-flex items-center rounded-full border-2 border-ink/12 bg-white">
+    <div className="inline-flex items-center rounded-full border-2 border-theme/12 bg-surface">
       <button
         type="button"
         aria-label="Decrease quantity"
         onClick={() => onChange(Math.max(min, value - 1))}
-        className="grid h-9 w-9 place-items-center rounded-full text-lg text-ink transition-colors hover:bg-ink hover:text-bone disabled:opacity-30"
+        className="grid h-9 w-9 place-items-center rounded-full text-lg text-theme transition-colors hover:bg-ink hover:text-bone disabled:opacity-30"
         disabled={value <= min}
       >
         −
@@ -738,7 +745,7 @@ export function Qty({ value, onChange, min = 1, max = 99 }: { value: number; onC
         type="button"
         aria-label="Increase quantity"
         onClick={() => onChange(Math.min(max, value + 1))}
-        className="grid h-9 w-9 place-items-center rounded-full text-lg text-ink transition-colors hover:bg-ink hover:text-bone disabled:opacity-30"
+        className="grid h-9 w-9 place-items-center rounded-full text-lg text-theme transition-colors hover:bg-ink hover:text-bone disabled:opacity-30"
         disabled={value >= max}
       >
         +

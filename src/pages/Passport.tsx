@@ -58,7 +58,7 @@ export default function Passport() {
       <section className="mx-auto max-w-4xl px-4 py-14">
         <SectionLabel>Loyalty card</SectionLabel>
         <h1 className="font-display text-4xl font-semibold md:text-5xl">Your loyalty card</h1>
-        <p className="mt-3 max-w-2xl text-ink/65">
+        <p className="mt-3 max-w-2xl text-theme-soft">
           {earnCopy}. Enter your cell number to see your stamps. Collect ten stamps for a meal on us — no app or account needed.
         </p>
 
@@ -68,10 +68,10 @@ export default function Passport() {
       */}
       {STATIC_PREVIEW && (
         <div className="mt-8 rounded-3xl border-2 border-ochre bg-ochre/10 p-5">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">Check your card on WhatsApp</p>
-          <p className="mt-1.5 text-sm text-ink/70">
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-accent">Check your card on WhatsApp</p>
+          <p className="mt-1.5 text-sm text-theme-soft">
             Stamp lookups need the live site. In the meantime, WhatsApp us on{' '}
-            <a href={waHref(settings?.whatsapp, loyaltyEnquiry(phone))} target="_blank" rel="noreferrer" className="font-semibold text-ochre-deep underline">
+            <a href={waHref(settings?.whatsapp, loyaltyEnquiry(phone))} target="_blank" rel="noreferrer" className="font-semibold text-accent underline">
               {settings?.phoneDisplay ?? '+27 67 013 7587'}
             </a>{' '}
             and we will check your card for you.
@@ -98,10 +98,10 @@ export default function Passport() {
 
       {result && (
         <Reveal>
-          <div className="hb-painted-dark mt-8 overflow-hidden rounded-[2rem] border-2 border-ink bg-ink text-bone">
+          <div className="hb-painted-dark mt-8 overflow-hidden rounded-[2rem] border-2 border-theme bg-ink text-bone">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-bone/15 px-6 py-4">
               <div>
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Heritage Bites</p>
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Heritage Bites</p>
                 <p className="font-display text-xl font-semibold">{result.found ? result.name : 'No stamps yet'}</p>
               </div>
               <p className="font-mono text-xs text-bone/50">{normalisePhone(phone)}</p>
@@ -113,7 +113,7 @@ export default function Passport() {
                   <div
                     key={i}
                     className={`grid aspect-square place-items-center rounded-2xl border-2 text-xl transition-all ${
-                      i < filled ? 'border-ochre bg-ochre text-ink' : i === filled ? 'border-dashed border-ochre/60 text-ochre/60' : 'border-bone/15 text-bone/15'
+                      i < filled ? 'border-ochre bg-ochre text-[#001938]' : i === filled ? 'border-dashed border-ochre/60 text-accent/60' : 'border-bone/15 text-bone/15'
                     }`}
                     aria-label={i < filled ? 'Stamp collected' : i === filled ? 'Next stamp' : 'Empty'}
                   >
@@ -132,7 +132,7 @@ export default function Passport() {
                   ].map(([k, v]) => (
                     <div key={k} className="rounded-2xl border border-bone/15 p-3">
                       <dt className="font-mono text-xs uppercase tracking-wider text-bone/45">{k}</dt>
-                      <dd className="mt-1 font-display text-2xl font-bold text-ochre">{v}</dd>
+                      <dd className="mt-1 font-display text-2xl font-bold text-accent">{v}</dd>
                     </div>
                   ))}
                 </dl>
@@ -143,9 +143,9 @@ export default function Passport() {
               )}
 
               {cardFull && (
-                <div className="mt-6 rounded-2xl border-2 border-ochre bg-ochre p-4 text-ink">
+                <div className="mt-6 rounded-2xl border-2 border-ochre bg-ochre p-4 text-[#001938]">
                   <p className="font-display text-lg font-semibold">Your card is full</p>
-                  <p className="mt-1 text-[13px] text-ink/75">
+                  <p className="mt-1 text-[13px] text-theme-soft">
                     {(result.cardsCompleted ?? 1) > 1
                       ? `${result.cardsCompleted} rewards earned. Show this screen when you place your next order so the team can apply one.`
                       : 'Show this screen when you place your next order so the team can apply your meal reward. Stamps keep counting after that.'}
@@ -175,11 +175,11 @@ export default function Passport() {
         person, so the invitation to ask for a specific meal sits on this page
         instead of hiding in the footer.
       */}
-      <div className="mt-10 flex flex-wrap items-center justify-between gap-5 rounded-3xl border-2 border-ink/10 bg-white p-6">
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-5 rounded-3xl border-2 border-theme/10 bg-surface p-6">
         <div className="max-w-xl">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Customer request</p>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Customer request</p>
           <h2 className="mt-1 font-display text-2xl font-semibold">Craving something that is not on the menu?</h2>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-ink/60">
+          <p className="mt-1.5 text-[13px] leading-relaxed text-theme-soft">
             Look through what the kitchen cooks, then ask us for the dish you actually want. A person reads it and replies
             — no payment, no order placed.
           </p>
@@ -196,9 +196,9 @@ export default function Passport() {
             { t: 'Family friendly', d: 'One number can cover the whole household — stamps pool together.' },
             { t: 'Claim your reward', d: 'When your card is full, show the screen when you place your next order so the team can apply your free meal.' }
           ].map((c) => (
-            <div key={c.t} className="rounded-3xl border-2 border-ink/10 bg-white p-5">
+            <div key={c.t} className="rounded-3xl border-2 border-theme/10 bg-surface p-5">
               <h3 className="font-display text-lg font-semibold">{c.t}</h3>
-              <p className="mt-1.5 text-[13px] text-ink/60">{c.d}</p>
+              <p className="mt-1.5 text-[13px] text-theme-soft">{c.d}</p>
             </div>
           ))}
         </div>

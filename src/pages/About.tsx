@@ -28,7 +28,7 @@ export default function About() {
           <Reveal>
             <SectionLabel>How we started</SectionLabel>
             <h2 className="font-display text-4xl font-semibold md:text-5xl">It began in a family kitchen, not a boardroom</h2>
-            <div className="mt-6 space-y-4 text-[15px] leading-relaxed text-ink/70">
+            <div className="mt-6 space-y-4 text-[15px] leading-relaxed text-theme-soft">
               <p>
                 Heritage Bites was officially established in {s?.established ?? 2025}, but the cooking started long before that. It started in family kitchens where the pot went on early, where mogodu was judged by how long it had been given, and where feeding people properly was not a service — it was the whole point.
               </p>
@@ -47,11 +47,16 @@ export default function About() {
 
           <Reveal delay={120}>
             <div className="relative">
-              <img src={asset('/img/tshotlo.jpg')} alt="Tshotlo, slow-cooked pounded beef" className="aspect-[4/5] w-full rounded-[2rem] border-2 border-ink object-cover" />
-              <div className="absolute -bottom-6 -left-6 hidden rounded-3xl border-2 border-ink bg-ochre p-5 md:block">
+              <img src={asset('/img/tshotlo.jpg')} alt="Tshotlo, slow-cooked pounded beef" className="aspect-[4/5] w-full rounded-[2rem] border-2 border-theme object-cover" />
+              {/*
+                A gold card: its text has to be literally ink in both themes,
+                because the surface does not change. Theme text went paper-on-
+                gold in dark mode at 3:1 — the audit caught it.
+              */}
+              <div className="absolute -bottom-6 -left-6 hidden rounded-3xl border-2 border-theme bg-ochre p-5 text-[#001938] md:block">
                 <p className="font-mono text-xs uppercase tracking-[0.2em]">Established</p>
                 <p className="font-display text-5xl font-bold">{s?.established ?? 2025}</p>
-                <p className="mt-1 text-xs text-ink/60">Our beginning</p>
+                <p className="mt-1 text-xs text-[#001938]">Our beginning</p>
               </div>
             </div>
           </Reveal>
@@ -61,7 +66,7 @@ export default function About() {
       <HeritageBand className="h-5 w-full" width={1440} />
 
       {/* Vision + Mission */}
-      <section className="border-b-2 border-ink/10 bg-ink py-20 text-bone">
+      <section className="border-b-2 border-theme/10 bg-ink py-20 text-bone">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 md:grid-cols-2">
           <Reveal>
             <div id="vision" className="scroll-mt-28">
@@ -92,7 +97,7 @@ export default function About() {
                   { n: '04', t: 'Make ordering painless', d: 'Explore the menu, place your order online, and contact us directly to confirm the delivery details.' },
                 ].map((m) => (
                   <li key={m.n} className="flex gap-4">
-                    <span className="font-mono text-sm font-bold text-ochre">{m.n}</span>
+                    <span className="font-mono text-sm font-bold text-accent-on-ink">{m.n}</span>
                     <span>
                       <span className="block font-semibold">{m.t}</span>
                       <span className="block text-sm leading-relaxed text-bone/60">{m.d}</span>
@@ -117,11 +122,11 @@ export default function About() {
             { t: 'Real value', d: 'One honest price a plate — protein, starch and vegetable side, nothing padded on.', img: '/img/plate-lamb-stew.jpg' },
           ].map((v, i) => (
             <Reveal key={v.t} delay={i * 80}>
-              <div className="h-full overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
+              <div className="h-full overflow-hidden rounded-3xl border-2 border-theme/10 bg-surface">
                 <img src={asset(v.img)} alt="" className="h-36 w-full object-cover" loading="lazy" />
                 <div className="p-5">
                   <h3 className="font-display text-xl font-semibold">{v.t}</h3>
-                  <p className="mt-2 text-[13px] leading-relaxed text-ink/60">{v.d}</p>
+                  <p className="mt-2 text-[13px] leading-relaxed text-theme-soft">{v.d}</p>
                 </div>
               </div>
             </Reveal>
@@ -130,10 +135,10 @@ export default function About() {
       </section>
 
       {/* Timeline */}
-      <section className="border-t-2 border-ink/10 bg-bone-2 py-20">
+      <section className="border-t-2 border-theme/10 bg-surface-2 py-20">
         <div className="mx-auto max-w-4xl px-4">
           <SectionLabel>The road so far</SectionLabel>
-          <ol className="mt-8 space-y-8 border-l-2 border-ink/15 pl-8">
+          <ol className="mt-8 space-y-8 border-l-2 border-theme/15 pl-8">
             {[
               { y: 'Before 2025', t: 'Family kitchens', d: 'Recipes and cooking knowledge passed down through generations and shared around the table.' },
               { y: '2025', t: 'Heritage Bites begins', d: 'We started bringing those meals and the stories behind them together under one name.' },
@@ -141,10 +146,10 @@ export default function About() {
               { y: 'Next', t: 'More stories to share', d: 'We’ll keep adding dishes and making it easier to enjoy food from across our heritage.' },
             ].map((e) => (
               <li key={e.t} className="relative">
-                <span className="absolute -left-[41px] top-1.5 h-3 w-3 rounded-full border-2 border-ink bg-ochre" />
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">{e.y}</p>
+                <span className="absolute -left-[41px] top-1.5 h-3 w-3 rounded-full border-2 border-theme bg-ochre" />
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">{e.y}</p>
                 <h3 className="mt-1 font-display text-2xl font-semibold">{e.t}</h3>
-                <p className="mt-1 text-[14px] leading-relaxed text-ink/65">{e.d}</p>
+                <p className="mt-1 text-[14px] leading-relaxed text-theme-soft">{e.d}</p>
               </li>
             ))}
           </ol>

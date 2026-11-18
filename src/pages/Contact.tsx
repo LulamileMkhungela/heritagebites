@@ -146,19 +146,19 @@ export default function Contact() {
                 href={row.href}
                 target={row.external ? '_blank' : undefined}
                 rel={row.external ? 'noreferrer' : undefined}
-                className="group flex items-start gap-4 rounded-3xl border-2 border-ink/10 bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-ink/30"
+                className="group flex items-start gap-4 rounded-3xl border-2 border-theme/10 bg-surface p-5 transition-all hover:-translate-y-0.5 hover:border-theme/30"
               >
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ochre/20 text-ochre-deep">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ochre/20 text-accent">
                   <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d={row.path} />
                   </svg>
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">{row.t}</span>
+                  <span className="block font-mono text-xs uppercase tracking-[0.2em] text-accent">{row.t}</span>
                   <span className="mt-1 block break-words text-[15px] font-semibold">{row.v}</span>
-                  <span className="mt-1 block text-[12px] text-ink/50">{row.cta}</span>
+                  <span className="mt-1 block text-[12px] text-theme-soft">{row.cta}</span>
                 </span>
-                <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-1 h-5 w-5 shrink-0 text-ink/25 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-1 h-5 w-5 shrink-0 text-theme/25 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
               </a>
@@ -166,8 +166,8 @@ export default function Contact() {
 
             {/* The same three profiles the footer carries, on the page a
                 customer opens when they want to find us somewhere. */}
-            <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Follow us</p>
+            <div className="rounded-3xl border-2 border-theme/10 bg-surface p-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Follow us</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {[
                   {
@@ -187,7 +187,7 @@ export default function Contact() {
                     key={social.label}
                     href="#"
                     aria-label={social.label}
-                    className="grid h-11 w-11 place-items-center rounded-full border-2 border-ink/15 text-ink/60 transition-colors hover:border-ochre hover:text-ochre-deep"
+                    className="grid h-11 w-11 place-items-center rounded-full border-2 border-theme/15 text-theme-soft transition-colors hover:border-ochre hover:text-accent"
                   >
                     <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d={social.path} />
@@ -195,13 +195,13 @@ export default function Contact() {
                   </a>
                 ))}
               </div>
-              <p className="mt-2 text-xs leading-relaxed text-ink/45">
+              <p className="mt-2 text-xs leading-relaxed text-theme-muted">
                 Profiles are being set up — the accounts above open as soon as they are live.
               </p>
             </div>
 
-            <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Opening hours</p>
+            <div className="rounded-3xl border-2 border-theme/10 bg-surface p-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Opening hours</p>
               {/*
                 Only the days the kitchen actually cooks. Five greyed "Closed"
                 rows pushed the two real windows off the card and made a
@@ -212,26 +212,26 @@ export default function Contact() {
                 {(s?.hours ?? []).filter((h) => !h.closed).map((h) => {
                   const isToday = h.day === new Date().getDay();
                   return (
-                    <li key={h.day} className={`flex justify-between gap-4 ${isToday ? 'font-bold' : 'text-ink/65'}`}>
-                      <span>{h.label}{isToday && <span className="ml-2 rounded-full bg-ochre px-2 py-0.5 text-xs uppercase text-ink">Today</span>}</span>
+                    <li key={h.day} className={`flex justify-between gap-4 ${isToday ? 'font-bold' : 'text-theme-soft'}`}>
+                      <span>{h.label}{isToday && <span className="ml-2 rounded-full bg-ochre px-2 py-0.5 text-xs uppercase text-[#001938]">Today</span>}</span>
                       <span className="font-mono text-xs">{h.open} – {h.close}</span>
                     </li>
                   );
                 })}
               </ul>
-              <p className="mt-3 border-t border-ink/10 pt-3 text-xs leading-relaxed text-ink/55">
+              <p className="mt-3 border-t border-theme/10 pt-3 text-xs leading-relaxed text-theme-soft">
                 Every order is delivered. The kitchen confirms the time on WhatsApp when your order is placed.
               </p>
             </div>
 
-            <div className="rounded-3xl border-2 border-ink/10 bg-white p-5">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Delivery</p>
-              <p className="mt-2 text-sm text-ink/70">
+            <div className="rounded-3xl border-2 border-theme/10 bg-surface p-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Delivery</p>
+              <p className="mt-2 text-sm text-theme-soft">
                 Thursdays and Fridays, and you can book any cooking day ahead. Delivery is included in{' '}
                 {s?.deliveryAreas?.join(' and ') ?? 'Sandton and Rosebank'}; elsewhere a fee applies, and we deliver up to{' '}
                 {s?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen. The minimum order is R{Number(s?.minDeliveryOrder ?? 100)}.
               </p>
-              <Link to="/policies" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-ochre-deep underline">
+              <Link to="/policies" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline">
                 Delivery, refund and cancellation policies
               </Link>
             </div>
@@ -239,9 +239,9 @@ export default function Contact() {
 
           {/* Form */}
           <Reveal>
-            <div className="rounded-[2rem] border-2 border-ink/10 bg-white p-6 md:p-8">
+            <div className="rounded-[2rem] border-2 border-theme/10 bg-surface p-6 md:p-8">
               <h2 className="font-display text-3xl font-semibold">Send us a message</h2>
-              <p className="mt-2 text-sm text-ink/60">
+              <p className="mt-2 text-sm text-theme-soft">
                 {inboxReady
                   ? 'Your message goes straight to the Heritage Bites inbox, and we reply by phone, WhatsApp or email.'
                   : 'This form saves your message. If you need an answer today, call or WhatsApp us directly.'}
@@ -253,7 +253,7 @@ export default function Contact() {
                   <h3 className="mt-3 font-display text-2xl font-semibold">
                     {delivered ? 'Message sent' : 'Message received'}
                   </h3>
-                  <p className="mt-2 text-sm text-ink/65">
+                  <p className="mt-2 text-sm text-theme-soft">
                     {delivered
                       ? 'Thank you — it is in our inbox and we will come back to you. If it is about an order in the next service window, please call or WhatsApp us as well.'
                       : STATIC_PREVIEW
@@ -273,7 +273,7 @@ export default function Contact() {
                       href={waLink}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center justify-center rounded-full border-2 border-ink bg-white px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+                      className="inline-flex items-center justify-center rounded-full border-2 border-theme bg-surface px-5 py-2.5 text-sm font-semibold uppercase tracking-wide text-theme transition-colors hover:bg-ink hover:text-bone"
                     >
                       Open WhatsApp
                     </a>
@@ -343,9 +343,9 @@ export default function Contact() {
                   <Button type="submit" size="lg" disabled={state === 'sending'}>
                     {state === 'sending' ? 'Sending…' : 'Send message'}
                   </Button>
-                  <p className="text-xs leading-relaxed text-ink/40">
+                  <p className="text-xs leading-relaxed text-theme-muted">
                     We only use these details to reply to your enquiry. No marketing list, no sharing. See our{' '}
-                    <Link to="/policies" className="font-semibold text-ink/60 underline">privacy policy</Link>.
+                    <Link to="/policies" className="font-semibold text-theme-soft underline">privacy policy</Link>.
                   </p>
                 </form>
               )}
