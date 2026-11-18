@@ -221,6 +221,19 @@ function LiveCheckout() {
   const bookable = catalog?.bookableDates ?? [];
   const [plannedDate, setPlannedDate] = useState('');
   const planned = bookable.find((d) => d.date === plannedDate) ?? null;
+  /*
+   * `suburb` starts on the likely area, not empty.
+   *
+   * The comment below already said the checkout opens on Rosebank, and the
+   * select has no empty row — but the state it rendered was `''`, so the control
+   * showed its first option while `customer.suburb` was blank. Anything that read
+   * the value (a validation message, the area a typed address belongs to) saw
+   * "nothing chosen" while the customer saw "Rosebank". A default that only
+   * exists in the markup is not a default.
+   *
+   * `defaultDeliveryArea` is applied once the catalogue arrives; until then the
+   * shared default keeps the field honest.
+   */
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
   /*
    * One address, typed the way a customer says it.
@@ -266,6 +279,15 @@ function LiveCheckout() {
     | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
     | { status: 'denied'; reason: LocationFailureReason }
   >({ status: 'idle' });
+  /*
+   * The location was granted, but nothing could be put in the address box.
+   *
+   * Kept apart from `geo`, because the two failures need different sentences:
+   * "we could not get your location" is a permission problem, while "we have your
+   * location but no address for it" happens in the middle of a park — there the
+   * fix is to type the address, and only then does saying so make sense.
+   */
+  const [addressFailed, setAddressFailed] = useState(false);
   const [quote, setQuote] = useState<{ subtotal: number; delivery: number; total: number } | null>(null);
   const [state, setState] = useState<'idle' | 'quoting' | 'paying'>('idle');
   const [fatal, setFatal] = useState<string | null>(null);
@@ -895,6 +917,7 @@ function LiveCheckout() {
                 onClick={() => {
                   if (geo.status === 'asking') return;
                   setGeo({ status: 'asking' });
+                  setAddressFailed(false);
                   /* Precise first, then a fallback — see lib/geolocation.ts for
                      why a coarse fix cannot decide a distance boundary honestly. */
                   void requestLocation().then(async (r) => {
@@ -947,6 +970,18 @@ function LiveCheckout() {
               {geo.status === 'ok' && !geo.precise && (
                 <span className="text-xs text-theme-muted">
                   Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
+                </span>
+              )}
+              {/*
+                We have the location but the map had no address for it — a park,
+                a new estate, or a geocoder outage. Say so and point at the box,
+                because the box is what the kitchen is sent. Silence here would
+                look exactly like the bug this replaced: permission granted, and
+                an empty address.
+              */}
+              {addressFailed && (
+                <span className="text-xs leading-relaxed text-ink/50" role="status">
+                  We have your location, but no street address for it. Please type your address and pick it from the list — that is what the kitchen is sent.
                 </span>
               )}
             </div>
@@ -1421,6 +1456,17 @@ function PreviewCheckout() {
 
   const [customer, setCustomer] = useState({ name: '', phone: '', address: '', suburb: '', notes: '' });
   /*
+   * The area starts on the default rather than on nothing, for the same reason
+   * the select has no empty row: the common customer is a Rosebank regular, and
+   * starting on an answer instead of a question saves them a decision. It only
+   * ever fills a blank, so a customer who picks Sandton keeps Sandton.
+   */
+  useEffect(() => {
+    const fallback = defaultDeliveryArea(settings);
+    if (!fallback) return;
+    setCustomer((current) => (current.suburb.trim() ? current : { ...current, suburb: fallback }));
+  }, [settings]);
+  /*
    * One address, typed the way a customer says it.
    *
    * This replaces the three boxes (house number / street / suburb) of 16 Nov. The
@@ -1453,7 +1499,6 @@ function PreviewCheckout() {
     | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
     | { status: 'denied'; reason: LocationFailureReason }
   >({ status: 'idle' });
-
   const rules = {
     includedTo: Number(settings?.includedRadiusKm ?? DELIVERY_ZONES.includedTo),
     maxKm: Number(settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm),
@@ -1552,8 +1597,15 @@ function PreviewCheckout() {
                 makes the delivery check below mean something.
               */}
               <Field label="Delivery area">
-                <select className={inputCls} value={customer.suburb} onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}>
-                  <option value="">Choose an area</option>
+                {/*
+                  No empty "Choose an area" row. The owner asked for the select to
+                  open on an area rather than on a decision, and an empty option is
+                  that decision: it is what a customer sees before choosing, and
+                  what they are left on if nothing touches the state. The state is
+                  defaulted below for the same reason a default has to exist in
+                  more than the markup.
+                */}
+                <select className={inputCls} value={customer.suburb || defaultDeliveryArea(settings)} onChange={(e) => setCustomer({ ...customer, suburb: e.target.value })}>
                   {deliveryAreaOptions(settings).map((area) => (
                     <option key={area} value={area}>{area}</option>
                   ))}
