@@ -10,6 +10,7 @@ import { asset } from '../lib/assets';
 import { extraLabel } from '../../shared/service.js';
 import { HeritageBand, WhatsAppIcon } from './ui';
 import { BasketBar } from './BasketBar';
+import { BackToTop } from './BackToTop';
 import { basketHref, serviceEnquiry, waHref, CHANNEL_ENQUIRY } from '../lib/whatsapp';
 
 const NAV = [
@@ -221,6 +222,7 @@ export default function Layout() {
       </main>
 
       <Footer />
+      <BackToTop />
       <BasketBar />
       <CartDrawer />
       {searchOpen && <SearchPalette onClose={() => setSearchOpen(false)} onNavigate={() => setSearchOpen(false)} />}

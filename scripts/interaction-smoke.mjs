@@ -115,7 +115,25 @@ function boot(path, { seedCart, offline } = {}) {
     observe(target) { this.targets.push(target); }
     disconnect() { this.targets = []; }
   };
-  w.scrollTo = (o) => scrolls.push({ kind: 'scrollTo', arg: o });
+  /*
+   * Scroll position, simulated.
+   *
+   * jsdom has no layout and pins `scrollY` at 0, but the back-to-top button's
+   * whole contract is "hidden at the top, visible once you have scrolled", so
+   * the suite needs a scroll position it can move. `__scrollTo(y)` sets it and
+   * fires the event a real browser would; the patched `scrollTo` moves it too,
+   * so a successful jump to the top is observable in both directions.
+   */
+  let scrollY = 0;
+  Object.defineProperty(w, 'scrollY', { configurable: true, get: () => scrollY });
+  w.__scrollTo = (y) => {
+    scrollY = y;
+    w.dispatchEvent(new w.Event('scroll'));
+  };
+  w.scrollTo = (o) => {
+    scrolls.push({ kind: 'scrollTo', arg: o });
+    if (o && typeof o === 'object' && typeof o.top === 'number') scrollY = o.top;
+  };
   w.HTMLElement.prototype.scrollIntoView = function () {
     scrolls.push({ kind: 'scrollIntoView', id: this.id || this.tagName });
     for (const observer of observers) {
@@ -3606,6 +3624,85 @@ await step('the footer keeps ordering behind one "Meals" toggle', async () => {
   await sleep(150);
   if (toggle.getAttribute('aria-expanded') !== 'false') throw new Error('the toggle does not close again');
   return 'closed by default, four ordering links inside, loyalty and quest outside';
+});
+
+await step('the back-to-top button appears only after scrolling, and returns the page to the top', async () => {
+  /*
+   * Owner, 18 Nov 2026: "add back to top floating button".
+   *
+   * The pages here are long — eight plates, ten sides, five policy documents —
+   * and the header is where search, navigation and the basket live, so getting
+   * back to it meant flicking up the whole document. What has to be true:
+   *
+   *   - it is not there on arrival (a button that does nothing is noise);
+   *   - it appears once the customer is genuinely down the page;
+   *   - it clears the basket bar when that bar is on screen, rather than hiding
+   *     behind it;
+   *   - tapping it actually scrolls to the top;
+   *   - it stays off the checkout and the order page, where scrolling away from
+   *     the submit control could cost an order.
+   */
+  const top = boot('/about');
+  await top.waitFor(() => /About/i.test(top.text()), 'about page', 20000);
+  await sleep(200);
+
+  const button = (page) => [...page.doc.querySelectorAll('button')]
+    .find((el) => /back to the top/i.test(el.getAttribute('aria-label') ?? ''));
+
+  if (button(top)) throw new Error('the button is showing at the top of the page, where it would do nothing');
+
+  /* One phone screen of scrolling: far enough that the top is lost. */
+  top.w.__scrollTo(900);
+  await sleep(200);
+  const shown = button(top);
+  if (!shown) throw new Error('the button did not appear after scrolling down 900px');
+
+  /* 44px minimum, like every other thumb control on the site. */
+  const size = shown.className.match(/\bh-(\d+)\b/)?.[1];
+  if (size !== '11') throw new Error(`the button is ${size ? `${size} units` : 'not sized'} tall, not the 44px minimum`);
+
+  for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) {
+    shown.dispatchEvent(new top.w.MouseEvent(type, { bubbles: true }));
+  }
+  await sleep(200);
+  const jump = top.scrolls.at(-1);
+  if (!jump || jump.kind !== 'scrollTo' || jump.arg?.top !== 0) {
+    throw new Error(`clicking it did not scroll to the top: ${JSON.stringify(jump)}`);
+  }
+  if (top.w.scrollY !== 0) throw new Error('the page did not end up at the top');
+  if (button(top)) throw new Error('the button is still floating over the top of the page after being used');
+
+  /* With a basket, the bar owns the bottom edge — the button must sit above it. */
+  const basketLine = {
+    key: 'plate::traditional',
+    itemId: 'plate-traditional',
+    plateId: 'traditional',
+    name: 'Traditional Plate',
+    image: '/img/plate-mogodu.jpg',
+    unitPrice: 100,
+    qty: 1,
+    picks: [],
+    kind: 'plate',
+  };
+  const shopper = boot('/menu', { seedCart: { state: { fulfilment: 'delivery', lines: [basketLine] }, version: 2 } });
+  await shopper.waitFor(() => /Menu/i.test(shopper.text()), 'menu', 20000);
+  shopper.w.__scrollTo(900);
+  await sleep(200);
+  const raised = button(shopper);
+  if (!raised) throw new Error('the button is missing on a page with a basket in it');
+  if (!/\bbottom-32\b/.test(raised.className)) throw new Error('the button does not clear the basket bar');
+
+  /* The checkout is a form in progress; no way out of it from here. */
+  const paying = boot('/checkout', { seedCart: CHECKOUT_CART });
+  await paying.waitFor(() => /Almost there/i.test(paying.text()), 'checkout', 20000);
+  paying.w.__scrollTo(900);
+  await sleep(200);
+  if (button(paying)) throw new Error('the button is offered on the checkout, mid-form');
+
+  top.close();
+  shopper.close();
+  paying.close();
+  return 'hidden at the top, appears after scrolling, clears the basket bar, returns to the top, absent from the checkout';
 });
 
 /* ------------------------------------------------------------------ */
