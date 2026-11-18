@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart, toApiItems, cartSubtotal } from '../store/cart';
 import { useCatalog } from '../store/catalog';
@@ -12,7 +12,7 @@ import { basketHref, waHref } from '../lib/whatsapp';
 import { AddressField } from '../components/AddressField';
 import { OUTSIDE_AREA, areasNamedIn, defaultDeliveryArea, deliveryAddressProblem, deliveryAreaOptions } from '../../shared/service.js';
 import { DELIVERY_ZONES, KITCHEN_ORIGIN, deliveryZoneFor, describePoint, type AddressSuggestion } from '../lib/address';
-import { deniedMessage, requestLocation, type LocationResult } from '../lib/geolocation';
+import { deniedMessage, hasLocationPermission, requestLocation, type LocationGrade, type LocationResult } from '../lib/geolocation';
 import type { BookableDate, PastOrder, Settings } from '../lib/types';
 
 /*
@@ -35,6 +35,37 @@ type PayMethod = 'card' | 'cash';
 type LocationFailureReason = Extract<LocationResult, { status: 'denied' }>['reason'];
 
 type CheckoutCustomer = { name: string; phone: string; email: string; address: string; suburb: string; notes: string };
+
+/**
+ * The exact wording used when the only thing missing is the delivery address.
+ *
+ * Compared by value rather than by re-deriving "is the address blank", because the
+ * order of the checks in `problem` is the rule: a missing name outranks a missing
+ * address, and a tap that quietly fills the address for someone whose real problem
+ * was the name would be solving the wrong thing.
+ */
+const ADDRESS_NEEDED = 'Add a delivery address first';
+
+/**
+ * The line under a location fix that is not GPS-grade.
+ *
+ * It says the radius in words ("about 300 m"), because "±0.3 km" is a number a
+ * customer has to translate before it means anything, and it names the
+ * consequence rather than only the measurement: a coarse fix can be on the wrong
+ * side of a fee boundary, so the address has to be confirmed from the list.
+ *
+ * Both grades lead to the same action — read the address, correct it if it is
+ * wrong — but the strong one is only loud for a coarse fix. Shouting at someone
+ * whose fix is ±30 m would train them to ignore the shout.
+ */
+export function fixAccuracyLine(accuracyM: number, grade: LocationGrade): string {
+  const radius =
+    accuracyM >= 1000 ? `about ${Math.round(accuracyM / 1000)} km` : `about ${Math.max(10, Math.round(accuracyM / 10) * 10)} m`;
+  if (grade === 'coarse') {
+    return `This is only accurate to ${radius}, which may put you on the wrong side of a delivery boundary. Check the address above and correct it if it is not where you are.`;
+  }
+  return `Accurate to ${radius}. Check the address above is where you are.`;
+}
 
 /**
  * The one rule for "is this order placeable?".
@@ -62,7 +93,7 @@ export function waValidationProblem(
   }
   if (fulfilment === 'delivery') {
     if (!customer.suburb.trim()) return 'Choose a delivery area first';
-    if (!customer.address.trim()) return 'Add a delivery address first';
+    if (!customer.address.trim()) return ADDRESS_NEEDED;
     /*
      * A picked suggestion may fill the address without a suburb name the map
      * recognises — Bryanston is a real place with no entry in `deliveryAreas`.
@@ -236,6 +267,15 @@ function LiveCheckout() {
    */
   const [customer, setCustomerRaw] = useState({ name: '', phone: '', email: '', address: '', suburb: '', notes: '' });
   /*
+   * The same value as `customer.address`, readable from an async callback without
+   * capturing the render it was created in. The automatic locate awaits a
+   * permission query and a geocoder; in that time the customer may have typed an
+   * address, and writing the map's answer over it would be the same insult as
+   * filling it against their will.
+   */
+  const addressRef = useRef(customer.address);
+  addressRef.current = customer.address;
+  /*
    * One address, typed the way a customer says it.
    *
    * This replaces the three boxes (house number / street / suburb) of 16 Nov. The
@@ -276,7 +316,7 @@ function LiveCheckout() {
   const [geo, setGeo] = useState<
     | { status: 'idle' }
     | { status: 'asking' }
-    | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
+    | { status: 'ok'; lat: number; lng: number; accuracyM: number; grade: LocationGrade }
     | { status: 'denied'; reason: LocationFailureReason }
   >({ status: 'idle' });
   /*
@@ -466,6 +506,60 @@ function LiveCheckout() {
   };
 
   /*
+   * Fill the address without being asked — but only for a customer who has
+   * already allowed location here.
+   *
+   * Owner, 18 Nov 2026: "fill the location if user didnt enter location or didnt
+   * click use current location". The complaint behind it is that a customer who
+   * ignores the button reaches the end of the form with an empty box and is sent
+   * back to fill it. So the box fills itself where that can be done politely.
+   *
+   * Politeness is the whole design here. Asking a browser for a position when the
+   * permission is still `prompt` raises a permission dialog the customer did not
+   * provoke — and on Safari outside a tap it raises nothing at all, so the page
+   * would sit silently and do nothing. `hasLocationPermission()` therefore gates
+   * this: only a standing yes triggers it. Everyone else is located on the submit
+   * tap instead, where the prompt unquestionably belongs. See `locateBeforeSubmit`.
+   *
+   * It never overwrites an address the customer typed, and never runs twice.
+   */
+  const autoFillTried = useRef(false);
+  /*
+   * Guards the tap, not the page load. Kept separate from `autoFillTried` because
+   * they answer different questions: "have we already tried to be helpful on
+   * arrival?" and "have we already used up the customer's one locate tap?". Sharing
+   * one flag meant the arrival attempt — which correctly does nothing when the
+   * permission is still undecided — consumed the flag and left the button unable
+   * to locate anyone at all. That is the bug this split fixes.
+   */
+  const submitLocateTried = useRef(false);
+  useEffect(() => {
+    if (autoFillTried.current) return;
+    if (fulfilment !== 'delivery') return;
+    if (!settings) return;
+    if (customer.address.trim()) return;
+    autoFillTried.current = true;
+
+    void (async () => {
+      if (!(await hasLocationPermission())) return;
+      /* The customer may have typed while the permission query was in flight. */
+      if (addressRef.current.trim()) return;
+      const r = await requestLocation();
+      if (r.status !== 'ok') return;
+      setGeo(r);
+      const found = await describePoint(r.lat, r.lng, { settings });
+      if (!found?.line) {
+        setAddressFailed(true);
+        return;
+      }
+      setAddress({ text: found.line });
+      setCustomerRaw((prev) => (prev.address.trim() ? prev : { ...prev, address: found.line, suburb: found.area ?? OUTSIDE_AREA }));
+      setAddressArea(found.area);
+      setPoint({ lat: r.lat, lng: r.lng });
+    })();
+  }, [fulfilment, settings, customer.address]);
+
+  /*
    * Preselect the default area as soon as there is a catalogue to read it from,
    * and again if the customer switches back to delivery after clearing it. It only
    * ever fills a blank: a customer who has chosen Sandton keeps Sandton.
@@ -512,12 +606,12 @@ function LiveCheckout() {
    * even if the customer edits the basket: the order is fixed, and quietly
    * changing the total would make the page disagree with what Yoco charged.
    */
-  const validate = () => {
+  const validate = (form: CheckoutCustomer = customer) => {
     const e: Record<string, string> = {};
-    if (!customer.name.trim()) e.name = 'We need a name for the order.';
-    if (!customer.phone.trim()) e.phone = 'We need a number to reach you on.';
-    else if (normalisePhone(customer.phone).length < 11) e.phone = 'Please enter a valid South African cell number.';
-    const emailGiven = customer.email.trim();
+    if (!form.name.trim()) e.name = 'We need a name for the order.';
+    if (!form.phone.trim()) e.phone = 'We need a number to reach you on.';
+    else if (normalisePhone(form.phone).length < 11) e.phone = 'Please enter a valid South African cell number.';
+    const emailGiven = form.email.trim();
     if (emailGiven && !/^\S+@\S+\.\S+$/.test(emailGiven)) e.email = 'That email does not look right.';
     if (fulfilment === 'delivery') {
       /*
@@ -531,8 +625,8 @@ function LiveCheckout() {
        * mismatch is refused here as well as on the server, so the customer is
        * told before paying rather than after the order is rejected.
        */
-      if (customer.suburb.trim() && customer.address.trim()) {
-        const problem = deliveryAddressProblem(customer.address, customer.suburb, settings, addressArea);
+      if (form.suburb.trim() && form.address.trim()) {
+        const problem = deliveryAddressProblem(form.address, form.suburb, settings, addressArea);
         if (problem?.level === 'error') e.address = problem.message;
       }
       /*
@@ -546,7 +640,7 @@ function LiveCheckout() {
        */
       if (zone.zone === 'refused') {
         e.form = `That address is ${zone.distanceKm} km away — we deliver within ${rules.maxKm} km.`;
-      } else if (zone.zone === 'unknown' && customer.address.trim()) {
+      } else if (zone.zone === 'unknown' && form.address.trim()) {
         e.form = 'We could not work out where that address is. Pick it from the list as you type, or tap "Use my current location" — we need one of them to check we can reach you.';
       }
     }
@@ -558,9 +652,67 @@ function LiveCheckout() {
     return Object.keys(e).length === 0;
   };
 
+  /**
+   * Locate the customer on the submit tap, for everyone the automatic fill
+   * deliberately skipped.
+   *
+   * This is the handler behind the owner's second requirement: a customer who
+   * never typed an address and never tapped "Use my current location" should not
+   * be bounced back to an empty form. Opening the page with a permission prompt
+   * would be intrusive and, on Safari, simply would not work — but the submit tap
+   * is a real gesture, so the browser's prompt appears here reliably and at a
+   * moment the customer understands.
+   *
+   * It only runs when the delivery address is genuinely blank. A typed address is
+   * the customer's own instruction and is never replaced. A refusal is not an
+   * error to shout about at this point: the button below it says what to do, and
+   * the form's own "type your address" message is the outcome.
+   *
+   * Returns the form as it now stands, because the caller validates immediately
+   * afterwards and the `customer` captured in its closure is from before the
+   * await. Returning it is cheaper to reason about than a delay-and-hope.
+   */
+  const locateBeforeSubmit = async (): Promise<CheckoutCustomer | null> => {
+    if (fulfilment !== 'delivery') return null;
+    if (addressRef.current.trim()) return null;
+    if (submitLocateTried.current) return null;
+    submitLocateTried.current = true;
+    setGeo({ status: 'asking' });
+    const r = await requestLocation();
+    setGeo(r);
+    if (r.status !== 'ok') return null;
+    const found = await describePoint(r.lat, r.lng, { settings });
+    if (!found?.line) {
+      setAddressFailed(true);
+      return null;
+    }
+    const next = {
+      ...customer,
+      address: customer.address.trim() ? customer.address : found.line,
+      suburb: customer.address.trim() ? customer.suburb : (found.area ?? OUTSIDE_AREA),
+    };
+    setAddress({ text: found.line });
+    setCustomerRaw(next);
+    setAddressArea(found.area);
+    setPoint({ lat: r.lat, lng: r.lng });
+    setErrors((e) => ({ ...e, address: '' }));
+    return next.address.trim() ? next : null;
+  };
+
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
-    if (!validate()) return;
+    /*
+     * If the address is still blank, the customer's answer to "where are you?" is
+     * their location — so ask for it here, on the tap, rather than refusing the
+     * order for a field they were never shown how to fill.
+     */
+    let form = customer;
+    if (fulfilment === 'delivery' && !customer.address.trim() && !submitLocateTried.current) {
+      setState('paying');
+      form = (await locateBeforeSubmit()) ?? customer;
+      setState('idle');
+    }
+    if (!validate(form)) return;
     setState('paying');
     setFatal(null);
     try {
@@ -947,7 +1099,13 @@ function LiveCheckout() {
                 }}
                 disabled={geo.status === 'asking'}
               >
-                {geo.status === 'asking' ? 'Finding your address…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
+                {geo.status === 'asking'
+                  ? 'Finding your address…'
+                  : geo.status === 'ok'
+                    ? geo.grade === 'precise'
+                      ? 'Location checked ✓'
+                      : 'Roughly located'
+                    : 'Use my current location'}
               </Button>
               {zone.zone !== 'unknown' && (
                 <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-accent' : 'text-emerald-700'}`} role="status">
@@ -967,9 +1125,9 @@ function LiveCheckout() {
               {geo.status === 'denied' && (
                 <span className="text-xs leading-relaxed text-theme-soft">{deniedMessage(geo.reason)}</span>
               )}
-              {geo.status === 'ok' && !geo.precise && (
-                <span className="text-xs text-theme-muted">
-                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
+              {geo.status === 'ok' && geo.grade !== 'precise' && (
+                <span className={`text-xs leading-relaxed ${geo.grade === 'coarse' ? 'text-amber-800' : 'text-theme-muted'}`}>
+                  {fixAccuracyLine(geo.accuracyM, geo.grade)}
                 </span>
               )}
               {/*
@@ -1165,12 +1323,47 @@ function LiveCheckout() {
                         : `Place order · ${zar(shown.total)}`}
               </Button>
 
-              {waReady ? (
+              {/*
+                A blank delivery address is the one problem this button can solve
+                itself: tapping it asks for the location, fills the box, and only
+                then opens WhatsApp. Rendered as a dead button it would refuse the
+                order over a field the customer may be leaving blank because they
+                expect us to know where they are.
+              */}
+              {waBlocked === ADDRESS_NEEDED ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void locateBeforeSubmit().then((form) => {
+                      if (form) window.open(waOrderHref, '_blank', 'noreferrer');
+                    });
+                  }}
+                  className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-theme px-6 py-3 text-sm font-bold uppercase tracking-wide text-bone transition-colors hover:bg-ink"
+                >
+                  Use my location &amp; order
+                </button>
+              ) : waReady ? (
                 <a
                   href={waOrderHref}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={rememberWhatsAppDetails}
+                  onClick={(ev) => {
+                    rememberWhatsAppDetails();
+                    /*
+                     * A customer who never touched the location button gets one
+                     * chance to be located here, on a real tap — the same rule as
+                     * the order button, so neither route can leave with an empty
+                     * delivery address.
+                     *
+                     * The navigation is held while the lookup runs, then the link
+                     * opens carrying the address that was just filled in.
+                     */
+                    if (customer.address.trim() || submitLocateTried.current) return;
+                    ev.preventDefault();
+                    void locateBeforeSubmit().then(() => {
+                      window.open(waOrderHref, '_blank', 'noreferrer');
+                    });
+                  }}
                   className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-theme bg-surface px-6 py-3 text-sm font-bold uppercase tracking-wide text-theme transition-colors hover:bg-ink hover:text-bone"
                 >
                   {closed ? 'Ask on WhatsApp if we can cook it' : 'Complete order on WhatsApp'}
@@ -1456,6 +1649,84 @@ function PreviewCheckout() {
 
   const [customer, setCustomer] = useState({ name: '', phone: '', address: '', suburb: '', notes: '' });
   /*
+   * The form as it stands, readable from an async callback. The automatic locate
+   * awaits a permission query and a geocoder; an address typed during that window
+   * must win. See the live checkout's copy of this for the reasoning.
+   */
+  const addressRef = useRef(customer.address);
+  addressRef.current = customer.address;
+
+  /*
+   * Fill the address without being asked — for a customer who has already allowed
+   * location on this site. Owner, 18 Nov 2026: "fill the location if user didnt
+   * enter location or didnt click use current location".
+   *
+   * Only a standing permission (a previous yes) starts this. Everyone else is
+   * located on the tap that completes the order, where a permission prompt is
+   * both expected and reliable — see `locateForWhatsApp`.
+   */
+  const autoFillTried = useRef(false);
+  /* A separate guard for the order tap — see the live checkout's copy. */
+  const submitLocateTried = useRef(false);
+  useEffect(() => {
+    if (autoFillTried.current) return;
+    if (!settings) return;
+    if (customer.address.trim()) return;
+    autoFillTried.current = true;
+
+    void (async () => {
+      if (!(await hasLocationPermission())) return;
+      if (addressRef.current.trim()) return;
+      const r = await requestLocation();
+      if (r.status !== 'ok') return;
+      setGeo(r);
+      const found = await describePoint(r.lat, r.lng, { settings });
+      if (!found?.line) {
+        setAddressFailed(true);
+        return;
+      }
+      setAddress({ text: found.line });
+      setCustomer((prev) => (prev.address.trim() ? prev : { ...prev, address: found.line, suburb: found.area ?? OUTSIDE_AREA }));
+      setAddressArea(found.area);
+      setPoint({ lat: r.lat, lng: r.lng });
+    })();
+  }, [settings, customer.address]);
+
+  /**
+   * Locate the customer when they complete the order with an empty address.
+   *
+   * The preview has no submit handler — the order leaves through an anchor to
+   * WhatsApp — so this runs on that click and lets the navigation through
+   * afterwards. An anchor's default action cannot be awaited, so the navigation
+   * is held, the address is filled, and the same URL is then opened with the
+   * address now in it. If the customer's permission is refused the original link
+   * still opens: a WhatsApp message with a blank address is no worse than no
+   * message, and they can see the button explaining what to type.
+   */
+  const locateForWhatsApp = async (href: string | null) => {
+    if (addressRef.current.trim() || submitLocateTried.current) return href;
+    submitLocateTried.current = true;
+    setGeo({ status: 'asking' });
+    const r = await requestLocation();
+    setGeo(r);
+    if (r.status !== 'ok') return href;
+    const found = await describePoint(r.lat, r.lng, { settings });
+    if (!found?.line) {
+      setAddressFailed(true);
+      return href;
+    }
+    setAddress({ text: found.line });
+    setCustomer((prev) => (prev.address.trim() ? prev : { ...prev, address: found.line, suburb: found.area ?? OUTSIDE_AREA }));
+    setAddressArea(found.area);
+    setPoint({ lat: r.lat, lng: r.lng });
+    /*
+     * Rebuild the message with the address in it. The href was computed from the
+     * cart before this ran, so the customer would otherwise be sent to WhatsApp
+     * with the box filled on screen and nothing in the text.
+     */
+    return href ? href.replace(/(address|Delivery address)[^&]*/i, `$1: ${encodeURIComponent(found.line)}`) : href;
+  };
+  /*
    * The area starts on the default rather than on nothing, for the same reason
    * the select has no empty row: the common customer is a Rosebank regular, and
    * starting on an answer instead of a question saves them a decision. It only
@@ -1475,6 +1746,13 @@ function PreviewCheckout() {
    * street and the number together. See `AddressField`.
    */
   const [address, setAddress] = useState({ text: '' });
+  /*
+   * The location was obtained, but the map had no street for it — a park, a new
+   * estate, a geocoder outage. Kept apart from `geo` because the two failures need
+   * different advice: "we could not get your location" is a permission problem,
+   * while this one is fixed by typing the address.
+   */
+  const [addressFailed, setAddressFailed] = useState(false);
   const [method, setMethod] = useState<'link' | 'cash'>('link');
   /*
    * The same day choice the live checkout offers. On the static build the
@@ -1496,7 +1774,7 @@ function PreviewCheckout() {
   const [geo, setGeo] = useState<
     | { status: 'idle' }
     | { status: 'asking' }
-    | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
+    | { status: 'ok'; lat: number; lng: number; accuracyM: number; grade: LocationGrade }
     | { status: 'denied'; reason: LocationFailureReason }
   >({ status: 'idle' });
   const rules = {
@@ -1527,7 +1805,7 @@ function PreviewCheckout() {
           : normalisePhone(customer.phone).length < 11
             ? 'That cell number looks too short — check it'
             : !customer.address.trim()
-              ? 'Add a delivery address first'
+              ? ADDRESS_NEEDED
               : !customer.suburb.trim()
                 ? 'Choose a delivery area first'
                 : tooFar
@@ -1664,7 +1942,13 @@ function PreviewCheckout() {
                   });
                 }}
               >
-                {geo.status === 'asking' ? 'Checking…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
+                {geo.status === 'asking'
+                  ? 'Checking…'
+                  : geo.status === 'ok'
+                    ? geo.grade === 'precise'
+                      ? 'Location checked ✓'
+                      : 'Roughly located'
+                    : 'Use my current location'}
               </Button>
               {zone.zone !== 'unknown' && (
                 <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-accent' : 'text-emerald-700'}`} role="status">
@@ -1680,9 +1964,14 @@ function PreviewCheckout() {
               {geo.status === 'denied' && (
                 <span className="text-xs leading-relaxed text-theme-soft">{deniedMessage(geo.reason)}</span>
               )}
-              {geo.status === 'ok' && !geo.precise && (
-                <span className="text-xs text-theme-muted">
-                  Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
+              {geo.status === 'ok' && geo.grade !== 'precise' && (
+                <span className={`text-xs leading-relaxed ${geo.grade === 'coarse' ? 'text-amber-800' : 'text-theme-muted'}`}>
+                  {fixAccuracyLine(geo.accuracyM, geo.grade)}
+                </span>
+              )}
+              {addressFailed && (
+                <span className="text-xs leading-relaxed text-theme-soft" role="status">
+                  We have your location, but no street address for it. Type your address and pick it from the list — that is what the kitchen is sent.
                 </span>
               )}
             </div>
@@ -1767,14 +2056,59 @@ function PreviewCheckout() {
             </p>
 
             <div className="mt-5 flex flex-col gap-3">
-              {problem ? (
+              {/*
+                A blank delivery address is the one problem the button itself can
+                solve: tapping it asks for the location and fills the box. Rendered
+                as a dead button, it refuses the order for a field the customer may
+                only be ignoring because they expect the kitchen to know where they
+                are — and they never get the chance to say yes.
+
+                Everything else stays disabled, because no tap can supply a name or
+                a cell number.
+              */}
+              {problem === ADDRESS_NEEDED ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void locateForWhatsApp(wa).then((href) => {
+                      if (href) window.open(href, '_blank', 'noreferrer');
+                    });
+                  }}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-theme px-6 py-3 text-sm font-bold uppercase tracking-wide text-bone transition-colors hover:bg-ink"
+                >
+                  Use my location &amp; order
+                </button>
+              ) : problem ? (
                 <span className="inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-full border-2 border-theme/25 bg-ink/5 px-6 py-3 text-sm font-bold uppercase tracking-wide text-theme-muted">
                   Order on WhatsApp
                 </span>
               ) : (
-                <LinkButton href={wa} variant="primary">Order on WhatsApp</LinkButton>
+                /*
+                 * A customer who never touched the location button gets one chance
+                 * to be located here, on a real tap. The window opens only after the
+                 * lookup finishes, so the message cannot leave without the address.
+                 */
+                <a
+                  href={wa}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-theme px-6 py-3 text-sm font-bold uppercase tracking-wide text-bone transition-colors hover:bg-ink"
+                  onClick={(ev) => {
+                    if (customer.address.trim() || submitLocateTried.current) return;
+                    ev.preventDefault();
+                    void locateForWhatsApp(wa).then((href) => {
+                      if (href) window.open(href, '_blank', 'noreferrer');
+                    });
+                  }}
+                >
+                  Order on WhatsApp
+                </a>
               )}
-              <p className={`text-xs leading-relaxed ${problem ? 'font-medium text-chili' : 'text-theme-soft'}`}>{problem ?? 'Opens WhatsApp with your order, details and payment choice already written out.'}</p>
+              <p className={`text-xs leading-relaxed ${problem ? 'font-medium text-chili' : 'text-theme-soft'}`}>
+                {problem === ADDRESS_NEEDED
+                  ? 'Tap this and we will ask for your location, fill in the address, then open WhatsApp with the whole order.'
+                  : (problem ?? 'Opens WhatsApp with your order, details and payment choice already written out.')}
+              </p>
               <LinkButton to="/menu" variant="outline">Back to the menu</LinkButton>
             </div>
           </div>

@@ -28,8 +28,39 @@
  * is identical: type the address and pick it from the list.
  */
 
+/**
+ * How good the fix actually is, decided by the accuracy the device *reported* —
+ * not by which code path happened to answer.
+ *
+ * The distinction matters because the fix prices a delivery fee. A laptop on
+ * Wi-Fi, or a phone that fell back to a cell tower, can report ±3 000 m: round
+ * that to the nearest suburb and the customer is quoted a fee for somewhere they
+ * are not. `precise` is the only grade allowed to decide a fee boundary without
+ * the customer confirming the address.
+ */
+export type LocationGrade = 'precise' | 'close' | 'coarse';
+
+/** A fix at or under this radius is GPS-grade and can price a delivery fee. */
+export const PRECISE_ACCURACY_M = 50;
+/** Outdoors-but-not-GPS: usable to fill the box, not to settle a fee boundary. */
+export const CLOSE_ACCURACY_M = 150;
+
+/**
+ * Grade a fix from the accuracy the device reported.
+ *
+ * `Infinity` (a browser that would not say) is treated as coarse: an unknown
+ * accuracy is not evidence of a good one, and the safe direction is to ask the
+ * customer to confirm the address rather than to charge from a guess.
+ */
+export function gradeFor(accuracyM: number): LocationGrade {
+  if (!Number.isFinite(accuracyM)) return 'coarse';
+  if (accuracyM <= PRECISE_ACCURACY_M) return 'precise';
+  if (accuracyM <= CLOSE_ACCURACY_M) return 'close';
+  return 'coarse';
+}
+
 export type LocationResult =
-  | { status: 'ok'; lat: number; lng: number; accuracyM: number; precise: boolean }
+  | { status: 'ok'; lat: number; lng: number; accuracyM: number; grade: LocationGrade }
   | {
       status: 'denied';
       reason:
@@ -82,6 +113,27 @@ async function geoPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unkno
     /* A browser that refuses the query refuses nothing else. */
     return 'unknown';
   }
+}
+
+/**
+ * Has this customer already allowed location on this site?
+ *
+ * This is the question that decides whether the checkout may locate them by
+ * itself. Only `granted` counts as a yes. Anything else — `prompt`, `denied`, or
+ * a browser that cannot answer — means no automatic request, because:
+ *
+ *  - a request without permission raises the browser's prompt, and a permission
+ *    prompt that appears unprompted, before the customer has asked for anything,
+ *    is both intrusive and unreliable (Safari suppresses it entirely outside a
+ *    tap, and Chrome throttles repeated ones);
+ *  - a customer who tapped Block last week must not be re-asked on every visit.
+ *
+ * So the automatic fill is limited to people who have already said yes once. For
+ * everyone else the fill happens on the tap that submits the order — a real user
+ * gesture, where the prompt is guaranteed to appear and obviously belongs there.
+ */
+export async function hasLocationPermission(): Promise<boolean> {
+  return (await geoPermission()) === 'granted';
 }
 
 /**
@@ -142,10 +194,21 @@ export async function requestLocation(): Promise<LocationResult> {
   const permission = await geoPermission();
   if (permission === 'denied') return { status: 'denied', reason: 'blocked' };
 
-  /* Precise first. A GPS fix is worth waiting for; it is what the radius needs. */
+  /*
+   * Precise first, and FRESH.
+   *
+   * `maximumAge: 0` is the part that actually makes it precise. The browser is
+   * free to answer a request from its cache, and a cached fix up to a minute old
+   * is a position from wherever the phone was a minute ago — through a suburban
+   * block, or a whole off-ramp. Asking for zero refuses the cache; the device has
+   * to answer where it is now.
+   */
+  const preciseAttempt = () =>
+    askPosition({ enableHighAccuracy: true, timeout: 12_000, maximumAge: 0 });
+
   try {
-    const precise = await askPosition({ enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 });
-    return { status: 'ok', lat: precise.lat, lng: precise.lng, accuracyM: precise.accuracy, precise: true };
+    const precise = await preciseAttempt();
+    return { status: 'ok', lat: precise.lat, lng: precise.lng, accuracyM: precise.accuracy, grade: gradeFor(precise.accuracy) };
   } catch (err) {
     const code = (err as GeolocationPositionError | undefined)?.code;
     /*
@@ -157,12 +220,29 @@ export async function requestLocation(): Promise<LocationResult> {
     if (code === 1) {
       return { status: 'denied', reason: permission === 'prompt' ? 'policy' : 'blocked' };
     }
+
+    /*
+     * A high-accuracy fix can miss its window indoors or in a car park. The
+     * timeout is passed through rather than swallowed so the coarse fallback below
+     * can still run: a second precise attempt here was worse on both counts — it
+     * doubled the wait for the customer, and it removed the fallback that makes the
+     * button work at all indoors.
+     */
   }
 
-  /* Then a normal fix: lower accuracy, much more likely to answer indoors. */
+  /*
+   * Last resort: a normal fix, much more likely to answer indoors.
+   *
+   * It is reported with the accuracy it actually has, and on most devices that
+   * is `coarse`. The caller is expected to treat a coarse fix as "we know roughly
+   * where you are" — good enough to fill the box and start from — and to ask the
+   * customer to confirm the address before it settles a fee boundary. Returning
+   * it as though it were precise is how a customer gets quoted a fee for the
+   * suburb centre instead of their house.
+   */
   try {
-    const coarse = await askPosition({ enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 });
-    return { status: 'ok', lat: coarse.lat, lng: coarse.lng, accuracyM: coarse.accuracy, precise: false };
+    const coarse = await askPosition({ enableHighAccuracy: false, timeout: 10_000, maximumAge: 0 });
+    return { status: 'ok', lat: coarse.lat, lng: coarse.lng, accuracyM: coarse.accuracy, grade: gradeFor(coarse.accuracy) };
   } catch (err) {
     const code = (err as GeolocationPositionError | undefined)?.code;
     if (code === 1) return { status: 'denied', reason: permission === 'prompt' ? 'policy' : 'blocked' };
