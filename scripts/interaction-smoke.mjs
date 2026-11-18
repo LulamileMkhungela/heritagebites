@@ -1793,7 +1793,15 @@ await step('when a precise fix is unavailable, the coarse answer is labelled as 
   if (!first?.enableHighAccuracy) throw new Error('the precise attempt was skipped');
   if (!second) throw new Error('there was no fallback attempt, so indoors the button would hang');
   if (second.enableHighAccuracy !== false) throw new Error(`the fallback asked for precision again: ${JSON.stringify(second)}`);
-  if (!/Approximate fix/i.test(s7d.text())) throw new Error('a coarse fix is not labelled as approximate');
+  /*
+   * The label moved with the grade. It used to say "Approximate fix (±1.2 km)",
+   * which the owner could not act on; it now names the radius in metres and says
+   * what it means for the fee. Either wording satisfies the rule the step is
+   * about — that a non-GPS fix is declared, not passed off as a check.
+   */
+  if (!/Approximate fix|Accurate to|only accurate to/i.test(s7d.text())) {
+    throw new Error('a coarse fix is not labelled as approximate');
+  }
   if (!/km away/i.test(s7d.text())) throw new Error('the coarse fix produced no distance');
   return 'precise attempt, coarse fallback, labelled approximate';
 });
@@ -3194,8 +3202,58 @@ await step('email is optional, the checkout has no card fields, and the WhatsApp
    * button is what makes it measurable.
    */
   s1.setInput(byPlaceholder(/Oxford Road/), '12 Oxford Road, Illovo, Sandton');
+  /*
+   * A standing permission, which is the state this step is about: a customer who
+   * allowed location on an earlier visit. jsdom shows no permission dialog, so an
+   * undecided permission can only ever answer "denied" — the granted case is
+   * declared here so the address lookup can run and the WhatsApp button can render
+   * as a link, which is what the step asserts.
+   */
+  s1.w.__geoPermission = 'granted';
+  /*
+   * The reverse lookup behind the location button must answer with a *measurable*
+   * address, or the delivery gate refuses the order for an unlocated address and
+   * the WhatsApp button renders as a disabled span — which is what this step would
+   * otherwise be asserting against. The fixture street is the one the customer
+   * typed, so the fill and the check agree.
+   */
+  const s1LiveFetch = s1.w.fetch;
+  s1.w.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : input?.url ?? '');
+    if (url.startsWith('https://photon.komoot.io/')) {
+      /*
+       * A plain object, not jsdom's `Response`. jsdom's Response body is a stream
+       * the page's `res.json()` never resolves from in this environment, and the
+       * abort timer then wins — the lookup returns null and the box stays empty,
+       * which reads as a page bug when it is a harness artefact.
+       */
+      const body = {
+        features: [
+          {
+            properties: { street: 'Oxford Road', housenumber: '12', suburb: 'Illovo', city: 'Sandton', osm_type: 'W', osm_id: 42 },
+            geometry: { coordinates: [28.0505, -26.1335] },
+          },
+        ],
+      };
+      return { ok: true, status: 200, json: async () => body };
+    }
+    return s1LiveFetch(input, init);
+  };
   await sleep(300);
   await useMyLocation(s1);
+  /*
+   * The button performs a reverse lookup after the fix, so the address box is not
+   * filled the instant the distance appears. Waiting for the button to stop saying
+   * "Finding your address…" is waiting for the thing this step depends on: an
+   * address the delivery rule can measure.
+   */
+  await s1.waitFor(
+    () => !/Finding your address/i.test(
+      [...s1.doc.querySelectorAll('button')].map((b) => b.textContent ?? '').join(' '),
+    ),
+    'the address lookup to finish',
+    8000,
+  );
 
   /* No card field may exist: money is taken on Yoco's own page. */
   const cardFields = [...s1.doc.querySelectorAll('input')].filter((f) => /4242 4242|MM\/YY|^123$|T MAHLANGU/.test(f.placeholder ?? ''));
@@ -3204,7 +3262,16 @@ await step('email is optional, the checkout has no card fields, and the WhatsApp
   /* The second action must exist and must carry the whole order. */
   const wa = [...s1.doc.querySelectorAll('a[href^="https://wa.me/"]')]
     .find((a) => /Complete order on WhatsApp/i.test(a.textContent ?? ''));
-  if (!wa) throw new Error('no "Complete order on WhatsApp" button');
+  if (!wa) {
+    /*
+     * Say *which* gate refused, not just that the link is missing. The button is a
+     * span whenever any rule fails, and "no button" alone sent the last reader
+     * hunting through four possible causes.
+     */
+    const gateText = s1.text();
+    const at = gateText.search(/Order summary/i);
+    throw new Error(`no "Complete order on WhatsApp" button; gate says: ${gateText.slice(at, at + 400)}`);
+  }
   const message = new URL(wa.href).searchParams.get('text') ?? '';
   for (const wanted of [/Interaction Test/, /\+27 82 000 7777/]) {
     if (!wanted.test(message)) throw new Error(`the WhatsApp order is missing the customer details typed above: ${message.slice(0, 200)}`);
