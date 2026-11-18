@@ -847,21 +847,22 @@ await step('overlays trap focus and close on Escape', async () => {
   return checked.join(', ');
 });
 
-await step('About Us contains vision, mission and story without separate nav links', async () => {
+await step('About Us keeps the story actions and section anchors without adding nav links', async () => {
   const about = s1.byText('a[href="/about"]', /About Us/i)[0];
   if (!about) throw new Error('About Us link not found');
   s1.click(about);
-  await s1.waitFor(() => /Every bite tells a story/i.test(s1.text()), 'About Us page', 10000);
+  await s1.waitFor(() => s1.doc.querySelector('main h1')?.textContent === 'Every bite tells a story', 'About Us page', 10000);
 
-  const checked = ['vision', 'mission', 'story'];
-  for (const id of checked) {
+  for (const id of ['story', 'why-we-began', 'vision', 'mission', 'whats-next']) {
     if (!s1.doc.getElementById(id)) throw new Error(`About Us is missing its ${id} section`);
     if (s1.doc.querySelector(`nav a[href="/about#${id}"]`)) throw new Error(`${id} should not be a separate top-nav link`);
   }
 
-  s1.click(s1.byText('a[href="/menu"]', /Offering|Meals/i)[0]);
+  const meals = s1.doc.querySelector('#story a[href="/menu"]');
+  if (!meals || !s1.doc.querySelector('#story a[href="/contact"]')) throw new Error('About Us is missing the original story actions');
+  s1.click(meals);
   await s1.waitFor(() => /The full menu/i.test(s1.text()), 'return to the menu', 15000);
-  return 'About Us has all three sections; top nav stays simple';
+  return 'story actions and section anchors are present; the menu link works';
 });
 
 await step('the kitchen archive reads like the menu but cannot be ordered', async () => {

@@ -14,11 +14,11 @@ export default function About() {
         <img src={asset('/img/hero-feast.jpg')} alt="" className="absolute inset-0 h-full w-full object-cover opacity-30" />
         <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/40" />
         <div className="relative mx-auto max-w-4xl px-4">
-          <SectionLabel onDark>Our story</SectionLabel>
+          <SectionLabel onDark>Our Story</SectionLabel>
           <h1 className="font-display text-5xl font-semibold leading-tight md:text-7xl">Every bite tells a story</h1>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-bone/75">
-            Every great meal begins with love. For us it started around the Sunday table, and in the lunch boxes packed
-            with care — because food has always been how we bring people together.
+            Every great meal begins with love. For us, it started around the Sunday table and in the lunch boxes packed
+            with care, because food has always been how we bring people together.
           </p>
         </div>
       </header>
@@ -32,22 +32,23 @@ export default function About() {
             <div className="mt-6 space-y-4 text-[15px] leading-relaxed text-theme-soft">
               <p>
                 Heritage Bites is the dream of a mother and daughter, Keneilwe and Regomoditswe Moremedi. Together they
-                bring years of experience in catering and running a food and pub business, a deep love of cooking, and an
-                instinct for how ingredients come together. That combination is the heart of everything we do.
+                bring years of experience in catering and running a food and pub business, along with a deep love of
+                cooking and an instinct for how ingredients come together. That combination is the heart of everything we do.
               </p>
               <p>
                 We want to share the taste of traditional Setswana food with you, served alongside modern, contemporary
-                dishes. It is the food of our heritage, made for the way you live today.
+                dishes. It’s the food of our heritage, made for the way you live today.
               </p>
-              <p>
-                We started because we love to cook, and because we saw people who needed us: busy professionals with
-                little time to cook, and a growing weariness with the same old canteen meals. We wanted to offer
-                something better — a home-cooked meal that tastes like it was made just for you.
-              </p>
-              <p>
-                Heritage Bites officially opened its doors in {s?.established ?? 2025}, and is a proudly registered
-                private company (CIPC).
-              </p>
+              <div id="why-we-began" className="scroll-mt-28 space-y-4">
+                <h3 className="font-display text-xl font-semibold text-theme">Why We Began</h3>
+                <p>
+                  Heritage Bites officially opened its doors in 2025. We started because we love to cook, and because
+                  we saw people who needed us: busy professionals with little time to cook, and a growing weariness
+                  with the same old canteen meals. We wanted to offer something better, a home-cooked meal that tastes
+                  like it was made just for you.
+                </p>
+                <p>Heritage Bites is a proudly registered private company (CIPC).</p>
+              </div>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
               <LinkButton to="/menu">Browse our meals</LinkButton>
@@ -80,15 +81,10 @@ export default function About() {
         <div className="mx-auto grid max-w-7xl gap-10 px-4 md:grid-cols-2">
           <Reveal>
             <div id="vision" className="scroll-mt-28">
-              <SectionLabel onDark>Vision</SectionLabel>
+              <SectionLabel onDark>Our Vision</SectionLabel>
               <h2 className="font-display text-4xl font-semibold md:text-5xl">South Africa’s most loved traditional kitchen</h2>
               <p className="mt-5 text-[15px] leading-relaxed text-bone/70">
                 To become South Africa’s most loved brand in traditional cuisine.
-              </p>
-              <p className="mt-4 text-[15px] leading-relaxed text-bone/70">
-                We are looking for a place to call home — a stable location where you can always find us. From there we
-                will take our frozen Tshotlo and Mogodu to homes across the country, while continuing to serve daily
-                traditional meals to everyone who needs a good plate of food, from the office to the worksite.
               </p>
               <p className="mt-4 text-[15px] leading-relaxed text-bone/70">
                 Today we cook on Thursdays and Fridays from a shadow kitchen, with delivery in Rosebank and Sandton and
@@ -99,18 +95,18 @@ export default function About() {
 
           <Reveal delay={120}>
             <div id="mission" className="scroll-mt-28">
-              <SectionLabel onDark>Mission</SectionLabel>
+              <SectionLabel onDark>Our Mission</SectionLabel>
               <h2 className="font-display text-4xl font-semibold md:text-5xl">Three things we hold to</h2>
               <ul className="mt-5 space-y-4">
                 {[
-                  { n: '01', t: 'Preserve and share our heritage', d: 'To bring authentic, high-quality traditional African meals to your table, fresh or frozen, in a way that is convenient and easy to enjoy.' },
-                  { n: '02', t: 'Celebrate African cuisine', d: 'To serve meals rich in culture, flavour and story.' },
-                  { n: '03', t: 'Grow with our community', d: 'To create jobs and build lasting partnerships with local suppliers.' },
+                  { n: '01', t: 'Preserve and share our heritage:', d: 'to bring authentic, high-quality traditional African meals to your table, fresh or frozen, in a way that is convenient and easy to enjoy.' },
+                  { n: '02', t: 'Celebrate African cuisine:', d: 'to serve meals rich in culture, flavour and story.' },
+                  { n: '03', t: 'Grow with our community:', d: 'to create jobs and build lasting partnerships with local suppliers.' },
                 ].map((m) => (
                   <li key={m.n} className="flex gap-4">
-                    <span className="font-mono text-sm font-bold text-accent-on-ink">{m.n}</span>
+                    <span aria-hidden="true" className="font-mono text-sm font-bold text-accent-on-ink">{m.n}</span>
                     <span>
-                      <span className="block font-semibold">{m.t}</span>
+                      <span className="block font-semibold">{m.t}</span>{' '}
                       <span className="block text-sm leading-relaxed text-bone/60">{m.d}</span>
                     </span>
                   </li>
@@ -122,7 +118,7 @@ export default function About() {
       </section>
 
       {/* Values / why us */}
-      <section className="mx-auto max-w-7xl px-4 py-20">
+      <section id="about-values" className="mx-auto max-w-7xl px-4 py-20">
         <SectionLabel>Why people come back</SectionLabel>
         <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">More than just a meal</h2>
         <div className="mt-10 grid gap-6 md:grid-cols-4">
@@ -146,7 +142,7 @@ export default function About() {
       </section>
 
       {/* Timeline */}
-      <section className="border-t-2 border-theme/10 bg-surface-2 py-20">
+      <section id="about-timeline" className="border-t-2 border-theme/10 bg-surface-2 py-20">
         <div className="mx-auto max-w-4xl px-4">
           <SectionLabel>The road so far</SectionLabel>
           <ol className="mt-8 space-y-8 border-l-2 border-theme/15 pl-8">
@@ -154,9 +150,14 @@ export default function About() {
               { y: 'Before 2025', t: 'Family kitchens', d: 'Recipes and cooking knowledge passed down through generations and shared around the table.' },
               { y: '2025', t: 'Heritage Bites begins', d: 'We started bringing those meals and the stories behind them together under one name.' },
               { y: 'Today', t: 'Two plate menus', d: 'Choose a traditional plate at R100 or a contemporary plate at R130, Thursdays and Fridays.' },
-              { y: 'Next', t: 'More stories to share', d: 'We’ll keep adding dishes and making it easier to enjoy food from across our heritage.' },
+              {
+                id: 'whats-next', y: 'Next', t: 'What’s Next',
+                d: 'We’re looking for a place to call home, a stable location where you can always find us. From there, we’ll ' +
+                  'introduce our frozen Tshotlo and Mogodu to homes across the country, while continuing to serve daily ' +
+                  'traditional meals to everyone who needs a good plate of food, from the office to the worksite.',
+              },
             ].map((e) => (
-              <li key={e.t} className="relative">
+              <li key={e.t} id={e.id} className="relative scroll-mt-28">
                 <span className="absolute -left-[41px] top-1.5 h-3 w-3 rounded-full border-2 border-theme bg-ochre" />
                 <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">{e.y}</p>
                 <h3 className="mt-1 font-display text-2xl font-semibold">{e.t}</h3>
@@ -164,6 +165,7 @@ export default function About() {
               </li>
             ))}
           </ol>
+          <p className="mt-8 font-display text-2xl font-semibold">Come hungry. Leave feeling at home.</p>
         </div>
       </section>
     </>
