@@ -39,7 +39,7 @@ canonical URLs come from these) → save; it redeploys on its own.
 ## Test it, in this order
 
 1. **The site**: open the address — the full storefront loads, menu and all.
-2. **The order path**: place a small order, *cash on collection*, with your own
+2. **The order path**: place a small order, *cash to the driver*, with your own
    name and number. The confirmation opens in WhatsApp with the order already
    written out; the tracking page shown before it keeps the private link.
 3. **The instant buzz**: on the kitchen phone or tablet, open

@@ -75,7 +75,7 @@ export default function OrderAlerts() {
     <section className="mx-auto max-w-xl px-4 py-14">
       <SectionLabel>Kitchen alerts</SectionLabel>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Enrol this device</h1>
-      <p className="mt-3 text-sm leading-relaxed text-ink/65">
+      <p className="mt-3 text-sm leading-relaxed text-theme-soft">
         Each new order is pushed to every enrolled device — free, with no app and no message fees.
         Enrol the phone or tablet that stays in the kitchen. Do this on each device you want alerted.
       </p>
@@ -84,10 +84,10 @@ export default function OrderAlerts() {
         <p
           className={`mt-5 rounded-2xl border-2 p-4 text-[13px] leading-relaxed ${
             state.status === 'subscribed'
-              ? 'border-ochre bg-ochre/15 text-ink'
+              ? 'border-ochre bg-ochre/15 text-theme'
               : state.status === 'blocked' || state.status === 'unconfigured'
-                ? 'border-chili/60 bg-chili/10 text-ink'
-                : 'border-ink/15 bg-white text-ink/70'
+                ? 'border-chili/60 bg-chili/10 text-theme'
+                : 'border-theme/15 bg-surface text-theme-soft'
           }`}
           role="status"
         >
@@ -96,9 +96,9 @@ export default function OrderAlerts() {
       )}
 
       {enrolled ? (
-        <div className="mt-6 rounded-3xl border-2 border-ink/10 bg-white p-6">
+        <div className="mt-6 rounded-3xl border-2 border-theme/10 bg-surface p-6">
           <p className="font-display text-xl font-semibold">This device is enrolled</p>
-          <p className="mt-2 text-[13px] leading-relaxed text-ink/65">
+          <p className="mt-2 text-[13px] leading-relaxed text-theme-soft">
             Leave a tab open here, or simply keep the browser installed — a push notification still
             arrives when the site is closed. Test it by placing an order from another device.
           </p>
@@ -107,7 +107,7 @@ export default function OrderAlerts() {
           </Button>
         </div>
       ) : (
-        <form onSubmit={submit} className="mt-6 rounded-3xl border-2 border-ink/10 bg-white p-6">
+        <form onSubmit={submit} className="mt-6 rounded-3xl border-2 border-theme/10 bg-surface p-6">
           <Field
             label="Owner key"
             hint="the HB_OWNER_PUSH_KEY value set on the host"
@@ -124,7 +124,7 @@ export default function OrderAlerts() {
           <Button type="submit" block className="mt-4" disabled={busy || key.trim().length < 16}>
             {busy ? 'Enrolling…' : 'Turn on kitchen alerts for this device'}
           </Button>
-          <p className="mt-3 text-xs leading-relaxed text-ink/50">
+          <p className="mt-3 text-xs leading-relaxed text-theme-soft">
             This page is protected by that key, not by a login: anyone who has it can enrol a device,
             and every enrolled device receives every order. Rotate the key on the host to revoke access,
             then remove the old devices from here.
@@ -132,13 +132,13 @@ export default function OrderAlerts() {
         </form>
       )}
 
-      <p className="mt-6 text-[12px] leading-relaxed text-ink/50">
+      <p className="mt-6 text-[12px] leading-relaxed text-theme-soft">
         On an iPhone, alerts only work after this site is added to the Home Screen
         (Share → Add to Home Screen), then enrolled. On Android and on desktop they work straight away.
       </p>
 
-      <p className="mt-4 text-[12px] text-ink/50">
-        <Link to="/" className="font-semibold text-ochre-deep hover:underline">Back to the site</Link>
+      <p className="mt-4 text-[12px] text-theme-soft">
+        <Link to="/" className="font-semibold text-accent hover:underline">Back to the site</Link>
       </p>
     </section>
   );

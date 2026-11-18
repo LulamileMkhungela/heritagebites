@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import type { CartOptionPick, MenuItem } from '../lib/types';
+import type { CartOptionPick, MenuItem, MenuOption } from '../lib/types';
 import { zar } from '../lib/format';
 import { Button, HeritageBand, Qty } from './ui';
 import { buildLine, useCart } from '../store/cart';
 import { useOverlay } from '../lib/useOverlay';
-import { extraCost, maxPerExtra } from '../../shared/service.js';
+import { extraCost, maxPerExtra, maxPortions, portionCost } from '../../shared/service.js';
 
 export function MealCard({
   item,
@@ -53,17 +53,24 @@ export function MealCard({
   const priceBlock = (
     <span className={`flex shrink-0 items-baseline gap-1 font-mono font-bold ${isList ? 'text-xl' : 'text-lg'}`}>
       {zar(item.price)}
-      <span className="font-sans text-[11px] font-normal uppercase tracking-wider text-ink/45">{unit}</span>
+      <span className="font-sans text-[11px] font-normal uppercase tracking-wider text-theme-muted">{unit}</span>
     </span>
   );
 
   const actions = (
-    <div className={`flex items-center gap-2 ${isList ? 'w-full sm:w-auto' : 'w-full'}`}>
+    /*
+     * In list view the price and the buttons share one row, and at 390px a
+     * `w-full` button beside a price has nowhere to go — it overflowed the card
+     * by about 20px, which the customer sees as a clipped "CHOOSE". Below `sm`
+     * the buttons take only the space their label needs; from `sm` they sit in
+     * a fixed row at the end.
+     */
+    <div className={`flex items-center gap-2 ${isList ? 'shrink-0 sm:w-auto' : 'w-full'}`}>
       <Button size="sm" variant="dark" onClick={quickAdd} disabled={item.available === false} block>
         {/* "basket", everywhere: the sheet footer, the bar and the drawer all
             call it the basket, and one card calling it a cart is a second word
             for the same thing. */}
-        {needsChoice ? 'Choose' : 'Add to basket'}
+        {needsChoice ? 'Customise' : 'Add to cart'}
       </Button>
       <Button size="sm" variant="outline" onClick={onOpen} aria-label={`Details for ${item.name}`}>
         ⓘ
@@ -75,7 +82,20 @@ export function MealCard({
     <button
       type="button"
       onClick={onOpen}
-      className={`relative block overflow-hidden bg-ink/5 text-left ${isList ? 'h-full w-32 shrink-0 sm:w-44' : 'aspect-[4/3] w-full'}`}
+      /*
+       * In list view the photo is a fixed-width column with a LOCKED aspect
+       * ratio, not `h-full`.
+       *
+       * `h-full` made the image column as tall as whatever the text beside it
+       * happened to need, so a two-line description gave a 136px row and a
+       * three-line one gave 190px — the pictures ran from a letterbox to a
+       * portrait down the same list, and the price never sat on the same line
+       * twice. A 4:3 column at a fixed width gives every row the same height, so
+       * the eye can run down the prices and the buttons line up.
+       */
+      className={`relative block shrink-0 overflow-hidden bg-ink/5 text-left ${
+        isList ? 'aspect-[4/3] w-28 self-start rounded-l-2xl sm:w-40' : 'aspect-[4/3] w-full'
+      }`}
       aria-label={`View ${item.name}`}
     >
       <img
@@ -87,11 +107,11 @@ export function MealCard({
       {!isList && <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-transparent to-transparent" />}
       {item.available === false && (
         <span className="absolute inset-0 grid place-items-center bg-ink/70">
-          <span className="rounded-full bg-bone px-4 py-2 text-xs font-bold uppercase tracking-widest text-ink">Sold out today</span>
+          <span className="rounded-full bg-canvas px-4 py-2 text-xs font-bold uppercase tracking-widest text-theme">Sold out today</span>
         </span>
       )}
       {item.imagePending && (
-        <span className="absolute right-3 top-3 rounded-full bg-bone/90 px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-ink">
+        <span className="absolute right-3 top-3 rounded-full bg-canvas/90 px-2.5 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-theme">
           Photo coming soon
         </span>
       )}
@@ -101,18 +121,18 @@ export function MealCard({
   /* ------------------------------- list -------------------------------- */
   if (isList) {
     return (
-      <article className="group flex overflow-hidden rounded-2xl border-2 border-ink/10 bg-white transition-colors hover:border-ink/25">
+      <article className="group flex items-start overflow-hidden rounded-2xl border-2 border-theme/10 bg-surface transition-colors hover:border-theme/25">
         {photo}
-        <div className="flex min-w-0 flex-1 flex-col gap-1 p-4 sm:flex-row sm:items-center sm:gap-5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1 p-4 sm:min-h-24 sm:flex-row sm:items-center sm:gap-5">
           <div className="min-w-0 flex-1">
             <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
             {item.localName && (
-              <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-ochre-deep">{item.localName}</p>
+              <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-accent">{item.localName}</p>
             )}
-            <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>
-            {item.portion && <p className="mt-1 text-[12px] text-ink/45">{item.portion}</p>}
+            <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-theme-soft">{item.description}</p>
+            {item.portion && <p className="mt-1 text-[12px] text-theme-muted">{item.portion}</p>}
           </div>
-          <div className="mt-auto flex items-center justify-between gap-3 pt-2 sm:mt-0 sm:justify-end sm:pt-0">
+          <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-2 sm:mt-0 sm:flex-nowrap sm:justify-end sm:pt-0">
             {priceBlock}
             {actions}
           </div>
@@ -123,7 +143,7 @@ export function MealCard({
 
   /* ------------------------------- grid -------------------------------- */
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-3xl border-2 border-ink/10 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-ink/25 hover:shadow-[0_18px_40px_-24px_rgba(0,25,56,0.5)]">
+    <article className="group relative flex flex-col overflow-hidden rounded-3xl border-2 border-theme/10 bg-surface transition-all duration-300 hover:-translate-y-1 hover:border-theme/25 hover:shadow-[0_18px_40px_-24px_rgba(0,25,56,0.5)]">
       {/* Ndebele painted band: the card is framed, not just a photo in a box. */}
       <HeritageBand className="h-4 w-full shrink-0" width={300} tile={40} />
       {photo}
@@ -145,10 +165,10 @@ export function MealCard({
           {priceBlock}
         </div>
         {item.localName && (
-          <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-ochre-deep">{item.localName}</p>
+          <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-accent">{item.localName}</p>
         )}
-        {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>}
-        {item.portion && <p className="mt-1 text-[12px] text-ink/45">{item.portion}</p>}
+        {!compact && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-theme-soft">{item.description}</p>}
+        {item.portion && <p className="mt-1 text-[12px] text-theme-muted">{item.portion}</p>}
 
         <div className="mt-auto pt-4">{actions}</div>
       </div>
@@ -198,20 +218,47 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
       const c = o.choices.find((x) => x.id === id);
       if (!c) continue;
       /*
-       * Only a priced extra carries a count. A starch picked "twice" is still one
-       * starch — and its delta is zero, so a count there would be a number with
-       * no meaning that still showed up in the key and split the basket line.
+       * A choice that can be taken more than once carries its count, so the cart
+       * line can say `2 × Pap` rather than leaving the kitchen to work the
+       * extras out from the plate price.
+       *
+       * Both kinds of counted choice end up here. A priced extra (the soft
+       * drink) is charged for every one; a starch or a side includes its first
+       * portion and charges only the rest. Which rule applies is decided by the
+       * two helpers from the choice itself, never by a flag on the group.
        */
-      const qty = o.priced ? Math.min(maxPerExtra(o, c), Math.max(1, counts[`${o.id}:${c.id}`] ?? 1)) : 1;
-      picks.push({ optionId: o.id, choiceId: c.id, label: c.label, priceDelta: c.priceDelta, ...(qty > 1 ? { qty } : {}) });
+      const cap = o.priced ? maxPerExtra(o, c) : maxPortions(c);
+      const qty = Math.min(cap, Math.max(1, counts[`${o.id}:${c.id}`] ?? 1));
+      const delta = o.priced ? extraCost(c.priceDelta, qty) : portionCost(c, qty);
+      picks.push({ optionId: o.id, choiceId: c.id, label: c.label, priceDelta: delta, ...(qty > 1 ? { qty } : {}) });
     }
   }
 
   /* The count multiplies the extra, not the plate: 2 beers beside one plate is
-     R100 + R50, never 2 × R125. */
-  const unitPrice = item.price + picks.reduce((n, p) => n + extraCost(p.priceDelta || 0, p.qty), 0);
+     R100 + R50, never 2 × R125. Each pick already carries the amount for its
+     own count, so this adds it once rather than multiplying it again. */
+  const unitPrice = item.price + picks.reduce((n, p) => n + (p.priceDelta || 0), 0);
 
-  const missing = item.options.filter((o) => o.required && !picked[o.id]);
+  /*
+   * What one extra portion of anything in this option costs.
+   *
+   * Read off the choices rather than a constant, so the label above the group
+   * and the amount the till charges cannot drift apart. Zero means no choice in
+   * the group has an extra-portion rule.
+   */
+  const extraPortionPrice = (o: MenuOption) =>
+    Math.max(0, ...o.choices.map((c) => Number(c.extraPrice) || 0));
+
+  /*
+   * A required option with nothing chosen.
+   *
+   * An array with nothing in it is still truthy, so `!picked[o.id]` alone said
+   * "answered" for a multiple group the customer had just emptied — and the Add
+   * button stayed enabled, offering to sell a plate with no starch. Empty means
+   * empty, in both the single and the multiple shape.
+   */
+  const answered = (v?: string | string[]) => (Array.isArray(v) ? v.length > 0 : Boolean(v));
+  const missing = item.options.filter((o) => o.required && !answered(picked[o.id]));
 
   const submit = () => {
     if (missing.length) {
@@ -223,13 +270,28 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
     onClose();
   };
 
-  const toggle = (optionId: string, choiceId: string, multiple?: boolean, required = true, max?: number) => {
+  /**
+   * Tap a choice: select it, or deselect it if it is already selected.
+   *
+   * **Anything selected can be deselected, in every option** (owner, 19 Nov
+   * 2026: "if a user click customise and select pap they must be able to
+   * deselect that applies to everything they select"). Tapping Pap by mistake
+   * has to be undoable, and a required group is no exception.
+   *
+   * Deselecting used to be refused in two places — the last tick of a required
+   * multiple group, and any required single-choice group such as the protein.
+   * Both were guarding the "nothing chosen" case, which is already guarded where
+   * it belongs: `missing` disables the Add button and names what is still needed,
+   * so a half-built dish can never be added. Refusing the tap instead left the
+   * customer holding a choice they could not take back.
+   */
+  const toggle = (optionId: string, choiceId: string, multiple?: boolean, _required = true, max?: number) => {
     setPicked((prev) => {
       if (!multiple) {
-        /* Tapping the chosen answer of an optional option clears it — that is
-           the only way to say "no drink", and a drink nobody wanted is money
-           taken for nothing. */
-        if (!required && prev[optionId] === choiceId) {
+        /* Tapping the chosen answer clears it — for the optional drink that is
+           how "no drink" is said, and for a required group it simply empties the
+           group, which `missing` then reports. */
+        if (prev[optionId] === choiceId) {
           const next = { ...prev };
           delete next[optionId];
           return next;
@@ -238,10 +300,6 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
       }
       const current = (Array.isArray(prev[optionId]) ? prev[optionId] : []) as string[];
       if (current.includes(choiceId)) {
-        /* A required group keeps at least one answer; unticking the last one
-           would leave the dish incomplete and the error would arrive at the
-           basket instead of here. */
-        if (required && current.length === 1) return prev;
         return { ...prev, [optionId]: current.filter((c) => c !== choiceId) };
       }
       /* The catalogue's own cap, so the button cannot add a fourth starch the
@@ -261,29 +319,29 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
       aria-label={item.name}
     >
       <button type="button" className="absolute inset-0 bg-ink/70 backdrop-blur-sm" onClick={onClose} aria-label="Close" />
-      <div className="animate-rise relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-bone shadow-2xl sm:rounded-3xl">
+      <div className="animate-rise relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-canvas shadow-2xl sm:rounded-3xl">
         <div className="relative h-52 shrink-0 sm:h-64">
           <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-transparent" />
-          <button type="button" onClick={onClose} className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-bone/90 text-ink hover:bg-bone" aria-label="Close">
+          <button type="button" onClick={onClose} className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-canvas/90 text-theme hover:bg-canvas" aria-label="Close">
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
           <div className="absolute bottom-4 left-5 right-5 text-bone">
             <h2 className="font-display text-3xl font-semibold">{item.name}</h2>
-            {item.localName && <p className="font-mono text-xs uppercase tracking-wider text-ochre">/{item.pronunciation}/ · {item.language}</p>}
+            {item.localName && <p className="font-mono text-xs uppercase tracking-wider text-accent">/{item.pronunciation}/ · {item.language}</p>}
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7">
-          <p className="text-[15px] leading-relaxed text-ink/75">{item.description}</p>
+          <p className="text-[15px] leading-relaxed text-theme-soft">{item.description}</p>
 
-          <dl className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border-2 border-ink/10 bg-white p-3 text-center">
+          <dl className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border-2 border-theme/10 bg-surface p-3 text-center">
             {[
               ['Serves', String(item.serves)],
               ['Rating', `★ ${item.rating}`],
             ].map(([k, v]) => (
               <div key={k}>
-                <dt className="font-mono text-xs uppercase tracking-wider text-ink/40">{k}</dt>
+                <dt className="font-mono text-xs uppercase tracking-wider text-theme-muted">{k}</dt>
                 <dd className="text-sm font-semibold">{v}</dd>
               </div>
             ))}
@@ -291,8 +349,8 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
 
           {item.story && (
             <div className="mt-5 rounded-2xl border-l-4 border-ochre bg-ochre/10 p-4">
-              <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Every bite tells a story</p>
-              <p className="text-[14px] leading-relaxed text-ink/80">{item.story}</p>
+              <p className="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">Every bite tells a story</p>
+              <p className="text-[14px] leading-relaxed text-theme-soft">{item.story}</p>
             </div>
           )}
 
@@ -300,7 +358,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
             <fieldset key={o.id} className="mt-5">
               <legend className="mb-2 flex items-center gap-2 text-sm font-semibold">
                 {o.label}
-                {o.required ? <span className="text-ochre-deep">*</span> : <span className="text-xs font-normal text-ink/40">optional{o.multiple ? ' · choose any' : ''}</span>}
+                {o.required ? <span className="text-accent">*</span> : <span className="text-xs font-normal text-theme-muted">optional{o.multiple ? ' · choose any' : ''}</span>}
                 {/*
                   A required group that holds several (starch, vegetable side)
                   says so, because a row of checkboxes under a bare "Choose your
@@ -308,7 +366,15 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                   catalogue, so this can never promise a fourth one.
                 */}
                 {o.multiple && o.required && (
-                  <span className="text-xs font-normal text-ink/45">· pick up to {Math.max(1, Math.min(20, Number(o.max) || 1))}</span>
+                  <span className="text-xs font-normal text-theme-muted">
+                    · pick up to {Math.max(1, Math.min(20, Number(o.max) || 1))}
+                    {/*
+                      What a second portion costs, before it is tapped. A
+                      stepper that only shows its price after the customer has
+                      pressed + is a price they agreed to without reading it.
+                    */}
+                    {extraPortionPrice(o) > 0 && <> · extra portion + {zar(extraPortionPrice(o))}</>}
+                  </span>
                 )}
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -325,11 +391,28 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                    * beers had to add the whole plate four times — four plates they
                    * did not order.
                    */
-                  const cap = maxPerExtra(o, c);
+                  const cap = o.priced ? maxPerExtra(o, c) : maxPortions(c);
                   const count = Math.min(cap, Math.max(1, counts[`${o.id}:${c.id}`] ?? 1));
-                  const steppable = Boolean(o.priced) && cap > 1;
+                  /*
+                   * Any choice the catalogue lets a customer take twice gets a
+                   * stepper: the soft drink, and now the starch and the
+                   * vegetable side. Owner, 19 Nov 2026: "on choose a starch,
+                   * choose vegetables, can we have similar functionality like we
+                   * have on add soft drink so the user can set if they want more
+                   * than 1 pap, etc but when they add more than 1 pap or any the
+                   * price goes up."
+                   */
+                  const steppable = cap > 1;
                   const setCount = (next: number) =>
                     setCounts((prev) => ({ ...prev, [`${o.id}:${c.id}`]: Math.min(cap, Math.max(1, next)) }));
+                  /* Removing the only tick in a required group would leave the
+                     plate incomplete, so the minus is disabled rather than dead. */
+                  /*
+                   * The minus at one portion removes the choice outright, even
+                   * in a required group: anything selected can be deselected.
+                   */
+                  const delta = o.priced ? extraCost(c.priceDelta, count) : portionCost(c, count);
+                  const eachPrice = o.priced ? c.priceDelta : Number(c.extraPrice) || 0;
 
                   if (steppable && isOn) {
                     return (
@@ -342,12 +425,21 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                       >
                         <span className="min-w-0">
                           <span className="block font-semibold leading-snug">{c.label}</span>
-                          <span className="font-mono text-xs text-ink/60">
-                            + {zar(extraCost(c.priceDelta, count))}
-                            {count > 1 && <span className="text-ink/40"> · {zar(c.priceDelta)} each</span>}
+                          <span className="font-mono text-xs text-theme-soft">
+                            {count === 1 ? (
+                              /* The first portion of a starch or a side is
+                                 inside the plate price; R0 would be a strange
+                                 thing to print. A drink is charged from one. */
+                              o.priced ? `+ ${zar(delta)}` : 'Included'
+                            ) : (
+                              <>
+                                + {zar(delta)}
+                                <span className="text-theme-muted"> · {zar(eachPrice)} each</span>
+                              </>
+                            )}
                           </span>
                         </span>
-                        <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
+                        <span className="inline-flex shrink-0 items-center rounded-full border-2 border-theme/20 bg-surface">
                           <button
                             type="button"
                             onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max) : setCount(count - 1))}
@@ -395,21 +487,29 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                       role={isChoice ? 'radio' : 'checkbox'}
                       aria-checked={isOn}
                       onClick={() => toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max)}
-                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                      className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${isOn ? 'border-ochre bg-ochre/15 font-semibold' : 'border-theme/12 hover:border-theme/30'}`}
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         {/* The visible control: a box for a checkbox, a dot for a radio. */}
                         <span
                           aria-hidden="true"
-                          className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${isOn ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                          className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${isOn ? 'border-ochre bg-ochre' : 'border-theme/30 bg-surface'}`}
                         >
                           {isOn && (isChoice
                             ? <span className="h-1.5 w-1.5 rounded-full bg-ink" />
-                            : <svg viewBox="0 0 12 12" className="h-3 w-3 text-ink" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
+                            : <svg viewBox="0 0 12 12" className="h-3 w-3 text-theme" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
                         </span>
                         <span className="min-w-0">{c.label}</span>
                       </span>
-                      {c.priceDelta > 0 && <span className="shrink-0 font-mono text-xs text-ink/55">+ {zar(c.priceDelta)}</span>}
+                      {c.priceDelta > 0 && <span className="shrink-0 font-mono text-xs text-theme-soft">+ {zar(c.priceDelta)}</span>}
+                      {/*
+                        A second portion costs money, so "Included" alone would
+                        read as "all of it is free". Show what the tap after this
+                        one will cost, on the row, before it is tapped.
+                      */}
+                      {!o.priced && extraPortionPrice(o) > 0 && (
+                        <span className="shrink-0 font-mono text-xs text-theme-muted">2nd + {zar(extraPortionPrice(o))}</span>
+                      )}
                     </button>
                   );
                 })}
@@ -418,7 +518,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
           ))}
         </div>
 
-        <footer className="flex shrink-0 items-center gap-3 border-t-2 border-ink/10 bg-bone px-5 py-4">
+        <footer className="flex shrink-0 items-center gap-3 border-t-2 border-theme/10 bg-canvas px-5 py-4">
           <Qty value={qty} onChange={setQty} />
           {/*
             A dish with a required choice cannot be added until the choice is
@@ -438,7 +538,7 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
               ? 'Sold out'
               : missing.length
                 ? `Pick a ${missing[0].label.toLowerCase().replace(/^choose your\s+/, '')}`
-                : `Add to basket · ${zar(unitPrice * qty)}`}
+                : `Add to cart · ${zar(unitPrice * qty)}`}
           </Button>
         </footer>
 

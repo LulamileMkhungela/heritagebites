@@ -114,7 +114,7 @@ export const PAGES = {
   '/quest': {
     title: 'Ask Us to Cook It',
     description:
-      'Ask the Heritage Bites kitchen to cook a dish you miss, or tell us how the food was. Every quest is read by a person and answered by a person.',
+      'Ask the Heritage Bites kitchen to cook a dish you miss, or tell us how the food was. Every request is read by a person and answered by a person.',
     priority: 0.5,
     changefreq: 'monthly',
   },

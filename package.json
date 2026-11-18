@@ -25,7 +25,8 @@
     "backup": "node scripts/export-data.mjs",
     "verify": "npm run test && npm run test:render && npm run test:interaction && npm run test:a11y",
     "push:keys": "node scripts/push-keys.mjs",
-    "notify:check": "node scripts/notification-check.mjs"
+    "notify:check": "node scripts/notification-check.mjs",
+    "test:theme": "node scripts/theme-audit.mjs"
   },
   "dependencies": {
     "compression": "^1.8.2",

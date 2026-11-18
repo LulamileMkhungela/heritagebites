@@ -39,7 +39,7 @@
  * customer is looking at, so a plate that gained a group since the order was
  * placed still resolves.
  */
-import { extraCost, maxPerExtra } from './service.js';
+import { extraCost, maxPerExtra, maxPortions, portionCost } from './service.js';
 
 /** The stable line key the basket uses, so a reorder merges with a matching line. */
 const lineKey = (prefix, picks) =>
@@ -101,14 +101,20 @@ export function reorderLines(orderItems, catalog) {
           lost = option.label || option.id;
           break;
         }
-        const count = group.priced
-          ? Math.min(maxPerExtra(group, item), Math.max(1, Math.floor(Number(option.qty) || 1)))
-          : 1;
+        /*
+         * How many, and what that costs — the same two rules the builder uses,
+         * so re-ordering a plate with double pap charges for the second pap
+         * exactly as building it by hand would. A priced extra is charged per
+         * unit; a starch or a side includes its first portion and charges the
+         * rest.
+         */
+        const cap = group.priced ? maxPerExtra(group, item) : maxPortions(item);
+        const count = Math.min(cap, Math.max(1, Math.floor(Number(option.qty) || 1)));
         picks.push({
           optionId: group.id,
           choiceId: `${group.id}:${item.id}`,
           label: item.label,
-          priceDelta: group.priced ? extraCost(priceOf(item), count) : 0,
+          priceDelta: group.priced ? extraCost(priceOf(item), count) : portionCost(item, count),
           ...(count > 1 ? { qty: count } : {}),
         });
       }
@@ -161,14 +167,15 @@ export function reorderLines(orderItems, catalog) {
         lost = option.label || option.id;
         break;
       }
-      const count = group.priced
-        ? Math.min(maxPerExtra(group, choice), Math.max(1, Math.floor(Number(option.qty) || 1)))
-        : 1;
+      const cap = group.priced ? maxPerExtra(group, choice) : maxPortions(choice);
+      const count = Math.min(cap, Math.max(1, Math.floor(Number(option.qty) || 1)));
       picks.push({
         optionId: group.id,
         choiceId: choice.id,
         label: choice.label,
-        priceDelta: extraCost(Number(choice.priceDelta) || 0, count),
+        priceDelta: group.priced
+          ? extraCost(Number(choice.priceDelta) || 0, count)
+          : portionCost(choice, count),
         ...(count > 1 ? { qty: count } : {}),
       });
     }

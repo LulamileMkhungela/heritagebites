@@ -276,14 +276,33 @@ export function serviceStatus(settings, now = new Date()) {
       : 'Please message us to arrange the next one.';
   } else {
     headline = `${at.dayLabel} is a rest day`;
+    /*
+     * What a rest day actually means for the customer, in their terms.
+     *
+     * The old copy said "the pots are resting" and left the practical question
+     * unanswered: can I order at all today? The answer is yes — you are never
+     * blocked, you choose the cooking day you want — but the kitchen needs the
+     * order before it starts, so it can buy and prep. Hence the ask for a day
+     * or two's notice, with 24 hours as the hard floor.
+     *
+     * Catering is offered here too: it is the one thing people ask about that
+     * cannot be handled in a normal slot, and putting it beside the schedule is
+     * where someone planning an event will look.
+     */
     message = [
-      `The pots are resting today — and honestly, so are we.`,
-      dayList ? `We cook on ${dayList}, ${window},` : 'We cook on selected days,',
-      `and we are working towards being open every day.`,
-      nextWindowLabel ? `We are back ${nextWindowLabel}.` : '',
+      `We are not cooking today.`,
+      dayList ? `The kitchen cooks on ${dayList}, ${window}.` : 'The kitchen cooks on selected days.',
+      nextWindowLabel ? `The next one is ${nextWindowLabel}.` : '',
+      `You can still order — nothing is blocked. Pick any cooking day ahead when you check out, and schedule as far forward as you like.`,
+      `Please order a day or two before the day you want, and at least 24 hours ahead, so the kitchen has time to buy and prep.`,
+      `Catering for an event? Ask us on WhatsApp.`,
     ].filter(Boolean).join(' ');
-    const nextDay = next ? next.dayLabel : null;
-    shortMessage = `We cook ${dayList}, ${window}. ${nextDay ? `Your order goes in first on ${nextDay}.` : 'Please message us to arrange a day.'}`;
+    /*
+     * The strip is one line on a phone. It carries the three things a customer
+     * standing on this page needs: we are shut, when we are open, and that they
+     * can still schedule. The full speech is in the panel below.
+     */
+    shortMessage = `Not cooking today — the kitchen cooks ${dayList}, ${window}. You can still schedule any cooking day ahead; please order at least 24 hours before it. Catering? Ask us on WhatsApp.`;
   }
 
   return {
@@ -627,6 +646,47 @@ export function serviceWindowFor(settings, now = new Date(), booking = null) {
 export function maxPerExtra(group, choice) {
   const raw = [choice?.max, group?.max].find((v) => Number.isFinite(Number(v)) && Number(v) >= 1);
   const n = Math.floor(Number(raw ?? 1));
+  return Math.max(1, Math.min(20, n));
+}
+
+/**
+ * The money a *second portion* of a starch or a vegetable side adds.
+ *
+ * This is a different rule from `extraCost`, and the difference is the whole
+ * point: `extraCost` prices every unit of a priced extra (a drink, where nothing
+ * is included), whereas a starch or side inside a plate already includes its
+ * first portion in the plate price. Asking R30 for the pap that the R100 plate
+ * is supposed to come with would be a second charge for the same food.
+ *
+ * So the count is split. Portions up to `extraAfter` are free; each one beyond
+ * it costs `extraPrice`. One pap is 0, two pap is 30, three is 60 — and the same
+ * rule applies to every side, so a plate with double pap and double chakalaka is
+ * plate + 60.
+ *
+ * @param {{ extraAfter?: number, extraPrice?: number, price?: number } | null | undefined} choice
+ * @param {number} [count]
+ * @returns {number}
+ */
+export function portionCost(choice, count) {
+  const n = Math.max(1, Math.min(20, Math.floor(Number(count) || 1)));
+  const included = Math.max(0, Math.floor(Number(choice?.extraAfter) || 0));
+  const charged = Math.max(0, n - included);
+  if (!charged) return 0;
+  const unit = Number(choice?.extraPrice);
+  return Math.round((Number.isFinite(unit) ? unit : 0) * charged * 100) / 100;
+}
+
+/**
+ * How many portions of this choice one line may carry.
+ *
+ * A portioned extra goes to four — two for the plate, two more on request —
+ * which is what the catalogue's `max` says. Everything else is one.
+ *
+ * @param {{ max?: number } | null | undefined} choice
+ * @returns {number}
+ */
+export function maxPortions(choice) {
+  const n = Math.floor(Number(choice?.max ?? 1));
   return Math.max(1, Math.min(20, n));
 }
 

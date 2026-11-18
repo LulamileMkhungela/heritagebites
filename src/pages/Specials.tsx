@@ -50,10 +50,10 @@ export default function Specials() {
 
       {/* Today's status is read from the API, not guessed in the browser. */}
       <section className="mx-auto max-w-7xl px-4 py-10">
-        <div className={`rounded-3xl border-2 p-6 ${service.open ? 'border-ochre bg-ochre/10' : 'border-ink/10 bg-white'}`}>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">{service.headline}</p>
+        <div className={`rounded-3xl border-2 p-6 ${service.open ? 'border-ochre bg-ochre/10' : 'border-theme/10 bg-surface'}`}>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">{service.headline}</p>
           <p className="mt-2 font-display text-2xl font-semibold">{service.message}</p>
-          <p className="mt-2 text-sm text-ink/60">
+          <p className="mt-2 text-sm text-theme-soft">
             {service.open
               ? 'We are delivering now — the kitchen confirms your time on WhatsApp.'
               : `Orders placed now are pre-orders${service.nextWindowLabel ? ` for ${service.nextWindowLabel}` : ''}, or for any cooking day you choose at checkout.`}
@@ -63,9 +63,9 @@ export default function Specials() {
         <div className="mt-6 grid gap-5 md:grid-cols-2">
           {openDays.map((day) => (
             <Reveal key={day.day}>
-              <div className="flex items-center justify-between rounded-3xl border-2 border-ink/10 bg-white p-6">
+              <div className="flex items-center justify-between rounded-3xl border-2 border-theme/10 bg-surface p-6">
                 <div>
-                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Service day</p>
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Service day</p>
                   <h2 className="mt-1 font-display text-2xl font-semibold">{DAY_NAMES[day.day]}</h2>
                 </div>
                 <p className="font-mono text-lg font-bold">{day.open}–{day.close}</p>
@@ -80,7 +80,7 @@ export default function Specials() {
         <div className="mb-6">
           <SectionLabel>The plates</SectionLabel>
           <h2 className="font-display text-3xl font-semibold md:text-4xl">Two menus, two prices</h2>
-          <p className="mt-2 max-w-2xl text-sm text-ink/60">
+          <p className="mt-2 max-w-2xl text-sm text-theme-soft">
             Every plate includes a starch and a vegetable side, and the price includes delivery in {areas}.
           </p>
         </div>
@@ -88,15 +88,15 @@ export default function Specials() {
         <div className="grid gap-6 md:grid-cols-2">
           {plateMenus.map((plate, i) => (
             <Reveal key={plate.id} delay={i * 70}>
-              <article className="flex h-full flex-col overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
+              <article className="flex h-full flex-col overflow-hidden rounded-3xl border-2 border-theme/10 bg-surface">
                 <img src={plate.image} alt="" className="h-44 w-full object-cover" loading="lazy" />
                 <div className="flex flex-1 flex-col p-6">
                   <div className="flex items-start justify-between gap-3">
                     <h3 className="font-display text-2xl font-semibold">{plate.name}</h3>
                     <span className="font-display text-3xl font-bold">{zar(plate.price)}</span>
                   </div>
-                  <p className="mt-2 text-[13px] leading-relaxed text-ink/60">{plate.blurb}</p>
-                  <ul className="mt-4 space-y-2 text-[13px] text-ink/70">
+                  <p className="mt-2 text-[13px] leading-relaxed text-theme-soft">{plate.blurb}</p>
+                  <ul className="mt-4 space-y-2 text-[13px] text-theme-soft">
                     {plate.groups.map((group) => (
                       <li key={group.id} className="flex items-start gap-2">
                         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ochre" />
@@ -120,7 +120,7 @@ export default function Specials() {
 
       {/* Delivery rules, stated once and clearly. */}
       <section className="mx-auto max-w-7xl px-4 py-10">
-        <div className="rounded-[2rem] border-2 border-ink/10 bg-bone-2 p-8 md:p-12">
+        <div className="rounded-[2rem] border-2 border-theme/10 bg-surface-2 p-8 md:p-12">
           <div className="grid gap-8 md:grid-cols-[1.3fr_1fr] md:items-center">
             <div>
               <SectionLabel>Delivery</SectionLabel>
@@ -142,15 +142,15 @@ export default function Specials() {
                    * "when", and it is the one the order is actually held to.
                    */
                 ].map(([term, value]) => (
-                  <div key={term} className="grid gap-1 border-b border-ink/10 pb-2 sm:grid-cols-[10rem_1fr] sm:gap-3">
-                    <dt className="font-semibold text-ink">{term}</dt>
-                    <dd className="text-ink/65">{value}</dd>
+                  <div key={term} className="grid gap-1 border-b border-theme/10 pb-2 sm:grid-cols-[10rem_1fr] sm:gap-3">
+                    <dt className="font-semibold text-theme">{term}</dt>
+                    <dd className="text-theme-soft">{value}</dd>
                   </div>
                 ))}
               </dl>
             </div>
             <div className="rounded-3xl bg-ink p-8 text-bone">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Ask about this week</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent-on-ink">Ask about this week</p>
               <p className="mt-3 text-sm leading-relaxed text-bone/75">
                 Specials change week to week and are confirmed on WhatsApp. Send us a message and we will tell you what
                 is in the pots.

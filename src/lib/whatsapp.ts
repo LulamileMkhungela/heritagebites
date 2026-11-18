@@ -239,14 +239,14 @@ export function loyaltyEnquiry(phone?: string): string {
  * page still needs a way to ask where to meet the kitchen.
  */
 export const COLLECTION_POINT_ENQUIRY =
-  'Hi Heritage Bites! My order was placed for collection before you moved to delivery — please confirm where to meet you.';
+  'Hi Heritage Bites! My order was placed for collection before you moved to delivery only — can you tell me what happens to it?';
 
 /** Asked from the WhatsApp channel card, and from the footer. */
 export const CHANNEL_ENQUIRY =
   'Hi Heritage Bites! I would like to order. Please tell me what is available and how to pay.';
 
 /**
- * A basket link, or an order enquiry when the basket is empty: a WhatsApp
+ * A basket link, or an order enquiry when the cart is empty: a WhatsApp
  * button must never open a blank message box.
  */
 export function basketHref(number: string | undefined, lines: CartLine[], opts: OrderMessageOptions = {}): string {

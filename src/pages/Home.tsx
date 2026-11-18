@@ -115,7 +115,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
       <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-20 md:grid-cols-[1.15fr_.85fr] md:py-28 lg:py-32">
         <div>
           {/* The pot mark was removed from the hero at the owner's request. */}
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-bone/25 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ochre">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-bone/25 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-accent-on-ink">
             Est. {s?.established ?? 2025} · Every Bite Tells a Story
           </div>
 
@@ -127,7 +127,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
           <h1 className="font-display text-5xl font-semibold leading-[0.95] tracking-tight md:text-7xl">
             A taste of South African heritage,
             <br />
-            <span className="text-ochre">made with love.</span>
+            <span className="text-accent">made with love.</span>
           </h1>
 
           {/*
@@ -176,7 +176,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
                   step than short ones ("2"): at exactly three columns the range
                   was a couple of pixels wider than its cell.
                 */}
-                <dt className={`font-display font-bold text-ochre ${String(v).length > 3 ? 'text-xl sm:text-2xl lg:text-3xl' : 'text-2xl sm:text-3xl'}`}>{v}</dt>
+                <dt className={`font-display font-bold text-accent ${String(v).length > 3 ? 'text-xl sm:text-2xl lg:text-3xl' : 'text-2xl sm:text-3xl'}`}>{v}</dt>
                 <dd className="text-xs uppercase tracking-wider text-bone/50">{k}</dd>
               </div>
             ))}
@@ -188,7 +188,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
           <div className="rounded-3xl border border-bone/20 bg-bone/5 p-6 backdrop-blur">
             {/* Shweshwe triangle print: the cloth reference, in the brand palette. */}
             <ShweshwePanel className="mb-4 h-6 w-full rounded-md opacity-80" />
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent-on-ink">
               {/* The strip above already prints the headline; this card is about
                   the routes, not the state. */}
               How to order
@@ -234,7 +234,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
                         <span className="block text-sm font-semibold">{row.t}</span>
                         <span className="block text-xs text-bone/55">{row.d}</span>
                       </span>
-                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 text-ochre transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 text-accent transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M5 12h14M13 6l6 6-6 6" />
                       </svg>
                     </Link>
@@ -244,7 +244,7 @@ function Hero({ onOrder }: { onOrder: () => void }) {
                         <span className="block text-sm font-semibold">{row.t}</span>
                         <span className="block text-xs text-bone/55">{row.d}</span>
                       </span>
-                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 text-ochre transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 text-accent transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M7 17 17 7M8 7h9v9" />
                       </svg>
                     </a>
@@ -282,7 +282,7 @@ function Ticker() {
     <div className="flex shrink-0 items-center gap-8 pr-8">
       {row.map((m) => (
         <span key={m.id} className="flex items-center gap-3 whitespace-nowrap font-display text-lg">
-          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3 w-3 shrink-0 text-ochre" fill="currentColor">
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3 w-3 shrink-0 text-accent" fill="currentColor">
             <path d="M12 1.5 14.7 9.3 22.5 12l-7.8 2.7-2.7 7.8-2.7-7.8L1.5 12l7.8-2.7L12 1.5Z" />
           </svg>
           {m.name}
@@ -292,7 +292,7 @@ function Ticker() {
   );
 
   return (
-    <div className="hb-mask-fade overflow-hidden border-y-2 border-ink/10 bg-ink py-3 text-bone">
+    <div className="hb-mask-fade overflow-hidden border-y-2 border-theme/10 bg-ink py-3 text-bone">
       <div className="animate-marquee flex w-max">
         {line}
         {line}
@@ -320,7 +320,7 @@ function ThisWeek() {
             strip above already prints word for word. This section is about the
             weekly schedule, so it states only the schedule.
           */}
-          <p className="mt-3 max-w-2xl text-sm text-ink/60">
+          <p className="mt-3 max-w-2xl text-sm text-theme-soft">
             Two cooking days a week — Thursday and Friday. Plates go up a few days ahead, so there is always something to
             plan around, and any of those days can be booked in advance.
           </p>
@@ -331,14 +331,14 @@ function ThisWeek() {
       <div className="grid gap-5 md:grid-cols-2">
         {plateMenus.map((plate, i) => (
           <Reveal key={plate.id} delay={i * 70}>
-            <article className="flex h-full flex-col overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
+            <article className="flex h-full flex-col overflow-hidden rounded-3xl border-2 border-theme/10 bg-surface">
               <img src={plate.image} alt="" className="h-44 w-full object-cover" loading="lazy" />
               <div className="flex flex-1 flex-col p-6">
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="font-display text-2xl font-semibold">{plate.name}</h3>
                   <span className="font-display text-3xl font-bold">{zar(plate.price)}</span>
                 </div>
-                <p className="mt-2 text-[13px] leading-relaxed text-ink/60">{plate.blurb}</p>
+                <p className="mt-2 text-[13px] leading-relaxed text-theme-soft">{plate.blurb}</p>
                 <div className="mt-auto flex flex-wrap gap-2 pt-5">
                   <Button size="sm" variant="dark" onClick={() => nav(`/menu?builder=${plate.id}`)}>Build this plate</Button>
                   <LinkButton to="/menu" variant="outline" size="sm">See the menu</LinkButton>
@@ -362,11 +362,11 @@ function PlateMenuCTA() {
   const contemporary = catalog.plateMenus.find((p) => p.id === 'contemporary');
 
   return (
-    <section className="border-y-2 border-ink/10 bg-bone-2 py-16">
+    <section className="border-y-2 border-theme/10 bg-surface-2 py-16">
       <div className="mx-auto max-w-7xl px-4">
         <SectionLabel>Build it yourself</SectionLabel>
         <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">One protein, your starches, your sides</h2>
-        <p className="mt-3 max-w-2xl text-ink/65">
+        <p className="mt-3 max-w-2xl text-theme-soft">
           Choose from the traditional kitchen at {zar(traditional?.price ?? 100)} a plate, or the contemporary kitchen at{' '}
           {zar(contemporary?.price ?? 130)}. Starches and vegetable sides are included — take more than one if you eat them
           together; delivery is the only extra, and it is priced at checkout.
@@ -374,12 +374,12 @@ function PlateMenuCTA() {
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           {catalog.plateMenus.map((plate) => (
             <Reveal key={plate.id}>
-              <div className="h-full rounded-3xl border-2 border-ink/10 bg-white p-6">
+              <div className="h-full rounded-3xl border-2 border-theme/10 bg-surface p-6">
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="font-display text-2xl font-semibold">{plate.name}</h3>
                   <span className="font-mono text-lg font-bold">{zar(plate.price)}</span>
                 </div>
-                <ul className="mt-4 space-y-2 text-sm text-ink/70">
+                <ul className="mt-4 space-y-2 text-sm text-theme-soft">
                   {plate.groups.map((g) => (
                     <li key={g.id} className="flex items-start gap-2">
                       <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ochre" />
@@ -435,17 +435,17 @@ function HowItWorks() {
   ];
 
   return (
-    <section className="border-y-2 border-ink/10 bg-bone-2 py-16">
+    <section className="border-y-2 border-theme/10 bg-surface-2 py-16">
       <div className="mx-auto max-w-7xl px-4">
         <SectionLabel>How it works</SectionLabel>
         <h2 className="max-w-2xl font-display text-4xl font-semibold md:text-5xl">From craving to confirmation in four steps</h2>
         <div className="mt-10 grid gap-6 md:grid-cols-4">
           {steps.map((s, i) => (
             <Reveal key={s.n} delay={i * 80}>
-              <div className="h-full rounded-3xl border-2 border-ink/10 bg-white p-6">
-                <span className="font-mono text-sm font-bold text-ochre-deep">{s.n}</span>
+              <div className="h-full rounded-3xl border-2 border-theme/10 bg-surface p-6">
+                <span className="font-mono text-sm font-bold text-accent">{s.n}</span>
                 <h3 className="mt-3 font-display text-xl font-semibold">{s.t}</h3>
-                <p className="mt-2 text-[13px] leading-relaxed text-ink/60">{s.d}</p>
+                <p className="mt-2 text-[13px] leading-relaxed text-theme-soft">{s.d}</p>
               </div>
             </Reveal>
           ))}
@@ -498,7 +498,7 @@ function ServiceRules() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-16">
-      <div className="grid gap-8 rounded-[2rem] border-2 border-ink/10 bg-white p-8 md:grid-cols-[1fr_1.1fr] md:p-12">
+      <div className="grid gap-8 rounded-[2rem] border-2 border-theme/10 bg-surface p-8 md:grid-cols-[1fr_1.1fr] md:p-12">
         <div>
           <SectionLabel>The rules, plainly</SectionLabel>
           <h2 className="font-display text-4xl font-semibold">When and where we cook</h2>
@@ -507,12 +507,12 @@ function ServiceRules() {
             top of every page. Here the rule itself is what matters: which days,
             which window, and what happens if you order outside it.
           */}
-          <p className="mt-3 text-ink/65">
+          <p className="mt-3 text-theme-soft">
             We cook on Thursdays and Fridays, and we are working towards being open every day. Any cooking day ahead can
             be booked now — you are not limited to the next one. On a day we are not cooking you can still send us a
             basket and the kitchen will confirm whether it can cook it.
           </p>
-          <p className="mt-3 text-sm text-ink/55">
+          <p className="mt-3 text-sm text-theme-soft">
             Every order is delivered. Inside Sandton and Rosebank the plate price is the whole price.
           </p>
           <LinkButton to="/policies" variant="outline" size="sm" className="mt-5">
@@ -521,9 +521,9 @@ function ServiceRules() {
         </div>
         <dl className="space-y-3 text-sm">
           {rows.map(([term, value]) => (
-            <div key={term} className="grid gap-1 border-b border-ink/10 pb-2 sm:grid-cols-[9rem_1fr] sm:gap-3">
-              <dt className="font-semibold text-ink">{term}</dt>
-              <dd className="text-ink/65">{value}</dd>
+            <div key={term} className="grid gap-1 border-b border-theme/10 pb-2 sm:grid-cols-[9rem_1fr] sm:gap-3">
+              <dt className="font-semibold text-theme">{term}</dt>
+              <dd className="text-theme-soft">{value}</dd>
             </div>
           ))}
         </dl>
@@ -581,13 +581,13 @@ function Channels({ settings }: { settings: Settings | undefined }) {
                 <r.Icon className="h-7 w-7" />
               </span>
               <h3 className="mt-4 font-display text-xl font-semibold">{r.name}</h3>
-              <p className="mt-1 text-[13px] text-ink/60">{description}</p>
-              <span className="mt-auto pt-4 text-sm font-semibold text-ochre-deep">
+              <p className="mt-1 text-[13px] text-theme-soft">{description}</p>
+              <span className="mt-auto pt-4 text-sm font-semibold text-accent">
                 {url ? (r.key === 'whatsapp' ? 'Start a chat' : 'Order in the app') : 'Coming soon'}
               </span>
             </>
           );
-          const cardClass = `group flex h-full flex-col rounded-3xl border-2 p-6 transition-all ${url ? 'border-ink/10 bg-white hover:-translate-y-1 hover:border-ink/30' : 'border-ink/10 bg-white/40 text-ink/60'}`;
+          const cardClass = `group flex h-full flex-col rounded-3xl border-2 p-6 transition-all ${url ? 'border-theme/10 bg-surface hover:-translate-y-1 hover:border-theme/30' : 'border-theme/10 bg-surface/40 text-theme-soft'}`;
           return (
             <Reveal key={r.key} delay={i * 80}>
               {url ? (
@@ -676,13 +676,13 @@ function GoogleReview({ settings }: { settings?: Settings }) {
   return (
     <section className="mx-auto max-w-7xl px-4 pb-4">
       <Reveal>
-        <div className="flex flex-col items-start gap-5 rounded-[2rem] border-2 border-ink/10 bg-white p-8 sm:flex-row sm:items-center sm:justify-between md:p-10">
+        <div className="flex flex-col items-start gap-5 rounded-[2rem] border-2 border-theme/10 bg-surface p-8 sm:flex-row sm:items-center sm:justify-between md:p-10">
           <div className="max-w-xl">
             <SectionLabel>Google reviews</SectionLabel>
             <h2 className="mt-2 font-display text-2xl font-semibold md:text-3xl">
               Eaten with us? Tell Google.
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-ink/60">
+            <p className="mt-2 text-sm leading-relaxed text-theme-soft">
               Reviews are how the next person finds a kitchen like this one. If the plate was good, it takes a minute.
             </p>
           </div>

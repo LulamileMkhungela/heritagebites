@@ -131,8 +131,8 @@ await check('ordering channels render', async () => {
   await waitFor(() => /Uber Eats/.test(text()) && /WhatsApp/.test(text()), 'delivery partners');
 });
 
-await check('basket control renders', async () => {
-  if (!/Basket/.test(text())) throw new Error('basket button missing');
+await check('cart control renders', async () => {
+  if (!/Cart/.test(text())) throw new Error('cart button missing');
 });
 
 /*
@@ -280,7 +280,7 @@ const ROUTES = [
   { path: '/policies', expect: [/Privacy Policy/i, /Refund Policy/i, /Order Cancellation Policy/i], title: /^Policies & Terms — Heritage Bites$/, description: /^Delivery, refunds/ },
   { path: '/about', expect: [/Every bite tells a story/i, /Vision/i, /Mission/i, /How we started/i], title: /^Our Story, Vision & Mission — Heritage Bites$/, description: /^Heritage Bites began in a family kitchen/ },
   { path: '/contact', expect: [/Talk to a human/i], title: /^Contact, WhatsApp & Directions — Heritage Bites$/, description: /^Call or WhatsApp \+27 67 013 7587/ },
-  { path: '/checkout', expect: [/basket is empty/i], title: /^Checkout — Heritage Bites$/, noindex: true },
+  { path: '/checkout', expect: [/cart is empty/i], title: /^Checkout — Heritage Bites$/, noindex: true },
   { path: '/passport', expect: [/Your loyalty card/i], title: /^Loyalty Card — Heritage Bites$/, description: /^Look up your Heritage Bites loyalty card/ },
   { path: '/quest', expect: [/Ask us to cook it/i, /What the kitchen cooks/i, /Send your request/i], title: /^Ask Us to Cook It — Heritage Bites$/, description: /^Ask the Heritage Bites kitchen/ },
   { path: trackingPath, displayPath: '/order/[secure-link]', expect: [new RegExp(orderCode), /Order received/i], title: new RegExp(`^Order ${orderCode} — Heritage Bites$`), noindex: true },

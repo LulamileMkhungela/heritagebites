@@ -13,10 +13,26 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 12;
+/*
+ * Bumped with the extra-portion rule below.
+ *
+ * The catalogue is seeded into the store once and then read from there, so a
+ * change to `seed.js` alone never reaches a running server: the choices in the
+ * store have no `extraPrice`, and a second pap would quietly cost nothing. The
+ * version is what makes the stored catalogue be replaced.
+ *
+ * 15 — starches and vegetable sides carry `extraAfter` / `extraPrice` / `max`.
+ */
+export const SEED_VERSION = 15;
 
 const img = (name) => `/img/${name}.jpg`;
-const PLACEHOLDER = '/img/plate-placeholder.svg';
+/*
+ * No PLACEHOLDER any more. Every plate and every side has a photograph: the last
+ * two (Tlhakwana and Smiley) were filled on 18 Nov 2026. The SVG stays on disk
+ * for the share card and as the fallback a future dish can point at, but nothing
+ * in the catalogue references it, so a missing photo is now a build error rather
+ * than a panel a customer has to look at.
+ */
 
 /* --------------------------------------------------------------------- */
 /* Menu structure                                                         */
@@ -27,39 +43,123 @@ const PLACEHOLDER = '/img/plate-placeholder.svg';
  * vegetable side — and are priced per plate, not per component. Every option
  * carries a zero price delta because the plate price already includes it.
  */
+/**
+ * The sides, sold on their own.
+ *
+ * Owner, 17 Nov 2026: "some sides & relishes must have prices and details when
+ * clicked" and, when asked whether a side can actually be bought: "they can add
+ * to cart but be unable to checkout if items are less than 100".
+ *
+ * So a side is a real product: its own price, its own portion sentence, its own
+ * photograph, addable to the basket. The R100 minimum is what stops somebody
+ * ordering one R30 bowl of chakalaka on its own — the same gate a small order
+ * already meets, not a special rule for sides.
+ *
+ * PRICE IS A GUESS — the owner has the number. R30 a portion is the placeholder,
+ * and every surface reads this one constant, so one edit moves the menu, the
+ * basket and the till together.
+ *
+ * "Inside a plate" is a different thing and stays true: every side here is also
+ * chosen *within* the R100/R130 plate, where it costs nothing extra. The card
+ * says both, in that order, because the price is for the bowl.
+ */
+const SIDE_PORTION_PRICE = 30;
+
+/*
+ * What a SECOND portion of a starch or a vegetable side costs.
+ *
+ * Owner, 19 Nov 2026: "on choose a starch, choose vegetables, can we have
+ * similar functionality like we have on add soft drink so the user can set if
+ * they want more than 1 pap, etc but when they add more than 1 pap or any the
+ * price goes up".
+ *
+ * The first portion of each is included in the plate price — that is what the
+ * plate price buys, and it is why these choices carry a zero delta. A further
+ * portion is food the kitchen has to cook and pack separately, so it is charged
+ * at the same amount as a side sold on its own: R30.
+ *
+ * It is deliberately tied to SIDE_PORTION_PRICE rather than being its own
+ * number. A customer can buy a bowl of pap for R30 in the sides section; being
+ * charged a different amount for the identical second bowl inside a plate would
+ * be a price the menu contradicts.
+ *
+ * PRICE IS A GUESS — the owner has the number.
+ *
+ * Declared with `SIDE_PORTION_PRICE`, above the lists that use it — a `const` is
+ * not hoisted, so reading it from a list further up the file throws before the
+ * menu ever loads.
+ */
+const EXTRA_PORTION_PRICE = SIDE_PORTION_PRICE;
+
+/**
+ * A starch or side choice, with the quantity rule both kinds share.
+ *
+ * `extraAfter: 1` is the whole rule in one word: the first portion is free, and
+ * anything after it is priced at `extraPrice`. The server and the builder both
+ * read these two fields, so the stepper cannot offer something the till refuses.
+ */
+const portioned = (choice) => ({
+  ...choice,
+  extraAfter: 1,
+  extraPrice: EXTRA_PORTION_PRICE,
+  max: 4,
+});
+
+/**
+ * A starch or side as a plate *item*, keeping the quantity rule.
+ *
+ * The groups carry `items`, not `choices`, and the mapping to an item used to
+ * copy only `id`, `label` and `price` — which silently dropped the extra-portion
+ * rule on the floor. The builder then saw a choice that could never be taken
+ * twice and a second pap that cost nothing, whatever the seed above it said.
+ * Copying the rule across is the whole point of this function, so the fields
+ * travel with the item instead of being remembered in two places.
+ *
+ * `price` stays at the plate price: an item inside a plate is already paid for,
+ * and the amount is only meaningful for the `priced` extras like the drink.
+ */
+const plateItem = (choice, platePrice) => ({
+  id: choice.id,
+  label: choice.label,
+  price: platePrice,
+  extraAfter: choice.extraAfter,
+  extraPrice: choice.extraPrice,
+  max: choice.max,
+});
+
 const traditionalStarches = [
-  { id: 'pap', label: 'Pap', priceDelta: 0 },
-  { id: 'mabele', label: 'Mabele (sorghum)', priceDelta: 0 },
-  { id: 'samp', label: 'Samp', priceDelta: 0 },
-  { id: 'dumpling', label: 'Dumpling', priceDelta: 0 },
+  portioned({ id: 'pap', label: 'Pap', priceDelta: 0 }),
+  portioned({ id: 'mabele', label: 'Mabele (sorghum)', priceDelta: 0 }),
+  portioned({ id: 'samp', label: 'Samp', priceDelta: 0 }),
+  portioned({ id: 'dumpling', label: 'Dumpling', priceDelta: 0 }),
 ];
 
 const traditionalSides = [
-  { id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 },
-  { id: 'spinach', label: 'Spinach', priceDelta: 0 },
-  { id: 'morogo', label: 'Morogo', priceDelta: 0 },
-  { id: 'salsa', label: 'Salsa', priceDelta: 0 },
+  portioned({ id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 }),
+  portioned({ id: 'spinach', label: 'Spinach', priceDelta: 0 }),
+  portioned({ id: 'morogo', label: 'Morogo', priceDelta: 0 }),
+  portioned({ id: 'salsa', label: 'Salsa', priceDelta: 0 }),
   /* Added on the owner's instruction (14 Nov 2026). Included in the plate price. */
-  { id: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
-  { id: 'atchaar', label: 'Atchaar', priceDelta: 0 },
-  { id: 'green-salad', label: 'Green salad', priceDelta: 0 },
+  portioned({ id: 'chakalaka', label: 'Chakalaka', priceDelta: 0 }),
+  portioned({ id: 'atchaar', label: 'Atchaar', priceDelta: 0 }),
+  portioned({ id: 'green-salad', label: 'Green salad', priceDelta: 0 }),
 ];
 
 const contemporaryStarches = [
-  { id: 'potato-mash', label: 'Potato mash', priceDelta: 0 },
-  { id: 'savoury-rice', label: 'Savoury rice', priceDelta: 0 },
-  { id: 'baby-potatoes', label: 'Baby potatoes', priceDelta: 0 },
-  { id: 'cous-cous', label: 'Cous cous', priceDelta: 0 },
-  { id: 'garlic-bread', label: 'Garlic bread', priceDelta: 0 },
+  portioned({ id: 'potato-mash', label: 'Potato mash', priceDelta: 0 }),
+  portioned({ id: 'savoury-rice', label: 'Savoury rice', priceDelta: 0 }),
+  portioned({ id: 'baby-potatoes', label: 'Baby potatoes', priceDelta: 0 }),
+  portioned({ id: 'cous-cous', label: 'Cous cous', priceDelta: 0 }),
+  portioned({ id: 'garlic-bread', label: 'Garlic bread', priceDelta: 0 }),
 ];
 
 const contemporarySides = [
-  { id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 },
-  { id: 'spinach', label: 'Spinach', priceDelta: 0 },
-  { id: 'salsa', label: 'Salsa', priceDelta: 0 },
-  { id: 'green-salad', label: 'Green salad', priceDelta: 0 },
-  { id: 'corn-ribs', label: 'Corn ribs', priceDelta: 0 },
-  { id: 'glazed-carrots', label: 'Glazed carrots', priceDelta: 0 },
+  portioned({ id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 }),
+  portioned({ id: 'spinach', label: 'Spinach', priceDelta: 0 }),
+  portioned({ id: 'salsa', label: 'Salsa', priceDelta: 0 }),
+  portioned({ id: 'green-salad', label: 'Green salad', priceDelta: 0 }),
+  portioned({ id: 'corn-ribs', label: 'Corn ribs', priceDelta: 0 }),
+  portioned({ id: 'glazed-carrots', label: 'Glazed carrots', priceDelta: 0 }),
 ];
 
 /*
@@ -91,6 +191,14 @@ const sideGroup = (choices, id = 'veg') => ({
   max: 3,
   choices,
 });
+
+/*
+ * `max: 3` above counts *selections* — up to three different starches — and has
+ * nothing to do with portions. The portion cap and the extra-portion price live
+ * on each choice (`extraAfter`, `extraPrice`, and the choice's own `max`), which
+ * is what turns a row into a stepper. Reading the group's `max` as a portion cap
+ * is how three helpings of pap would once have slipped through for free.
+ */
 
 /**
  * The soft drink, offered after the vegetable side.
@@ -170,7 +278,7 @@ export const plateMenus = [
     name: 'Traditional Plate',
     price: 100,
     blurb:
-      'One protein, and as many starches and vegetable sides as you like (up to three of each), from the traditional kitchen.',
+      'One protein, and up to three starches and three vegetable sides — the first of each is included, and an extra portion is charged, from the traditional kitchen.',
     image: img('plate-mogodu'),
     groups: [
       {
@@ -194,8 +302,8 @@ export const plateMenus = [
        * R100 meal. The items stay at `price: 100` (the plate price) because
        * every component is already inside it; the amount means nothing.
        */
-      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: traditionalStarches.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
-      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: traditionalSides.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
+      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: traditionalStarches.map((c) => plateItem(c, 100)) },
+      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: traditionalSides.map((c) => plateItem(c, 100)) },
       drinksGroup(),
     ],
   },
@@ -204,7 +312,7 @@ export const plateMenus = [
     name: 'Contemporary Plate',
     price: 130,
     blurb:
-      'One protein, and as many starches and vegetable sides as you like (up to three of each), from the contemporary kitchen.',
+      'One protein, and up to three starches and three vegetable sides — the first of each is included, and an extra portion is charged, from the contemporary kitchen.',
     image: img('plate-short-rib'),
     groups: [
       {
@@ -216,8 +324,8 @@ export const plateMenus = [
         ],
       },
       /* Multi-select, same rule and same cap as the traditional plate. */
-      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: contemporaryStarches.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
-      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: contemporarySides.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
+      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: contemporaryStarches.map((c) => plateItem(c, 130)) },
+      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: contemporarySides.map((c) => plateItem(c, 130)) },
       drinksGroup(),
     ],
   },
@@ -314,27 +422,11 @@ function sideImage(id) {
   );
 }
 
-/**
- * The sides, sold on their own.
- *
- * Owner, 17 Nov 2026: "some sides & relishes must have prices and details when
- * clicked" and, when asked whether a side can actually be bought: "they can add
- * to cart but be unable to checkout if items are less than 100".
- *
- * So a side is a real product: its own price, its own portion sentence, its own
- * photograph, addable to the basket. The R100 minimum is what stops somebody
- * ordering one R30 bowl of chakalaka on its own — the same gate a small order
- * already meets, not a special rule for sides.
- *
- * PRICE IS A GUESS — the owner has the number. R30 a portion is the placeholder,
- * and every surface reads this one constant, so one edit moves the menu, the
- * basket and the till together.
- *
- * "Inside a plate" is a different thing and stays true: every side here is also
- * chosen *within* the R100/R130 plate, where it costs nothing extra. The card
- * says both, in that order, because the price is for the bowl.
- */
-const SIDE_PORTION_PRICE = 30;
+
+
+
+
+
 
 /** How much one portion is, in the words a customer would ask for it. */
 function sidePortion(id) {
@@ -607,8 +699,15 @@ export const menu = [
     pronunciation: '',
     category: 'traditional',
     price: 100,
-    image: PLACEHOLDER,
-    imagePending: true,
+    /*
+     * A representative photograph of the dish, sourced on 18 Nov 2026 so the
+     * card is not a "photo coming soon" panel on a R100 plate. It is the dish,
+     * not this kitchen's plate, and it is not in the tray-and-plate house style
+     * the owner's own shots use — swap it for theirs the moment one arrives.
+     * Licensing is NOT cleared; that is the trade-off, stated openly rather than
+     * hidden behind a placeholder that costs the shop real orders.
+     */
+    image: '/img/plate-tlhakwana.jpg',
     description: 'Beef trotters braised until the gravy turns glossy, with your starches and vegetable sides.',
     story: '',
     tags: ['trotters'],
@@ -629,8 +728,9 @@ export const menu = [
     pronunciation: '',
     category: 'traditional',
     price: 100,
-    image: PLACEHOLDER,
-    imagePending: true,
+    /* Same caveat as Tlhakwana: a representative dish photograph, sourced, not
+       the owner's plate, licensing not cleared. */
+    image: '/img/plate-smiley.jpg',
     description: 'Sheep head, cooked and served the traditional way, with your starches and vegetable sides.',
     story: '',
     tags: ['sheep head'],
@@ -856,18 +956,23 @@ export const settings = {
   includedRadiusKm: 6,
 
   /*
-   * Collection: REMOVED (owner, 14 Nov 2026 — "there is no collection, it is
-   * delivery based"). The three fields stay in the schema because the type and
-   * a few legacy surfaces read them, but nothing in the customer's path offers
-   * collection any more. They are cleared rather than left pointing at a
-   * collection point that no longer exists.
+   * Collection: REMOVED, and now removed from the schema too.
+   *
+   * Owner, 14 Nov 2026 — "there is no collection, it is delivery based". The
+   * `collectionArea` / `collectionPoint` / `collectionNote` fields were kept
+   * "because a few legacy surfaces read them"; on 18 Nov 2026 I checked, and
+   * nothing did — not one component, page or server path. Three empty strings
+   * that no code reads are not compatibility, they are a standing invitation for
+   * the next person to wire a collection point back in. Deleted.
    */
-  collectionArea: '',
-  collectionPoint: '',
-  collectionNote: '',
-
-  /* Both delivery and collection run inside the service window. */
+  /* Delivery runs inside the service window. */
   serviceWindow: { open: '12:00', close: '13:30' },
+  /*
+   * Kept because the *types* still carry them and an older API publishes them;
+   * no current surface renders an estimate — the owner had the prep and delivery
+   * rows removed from the specials table and the checkout. They are here as
+   * harmless data, not as copy.
+   */
   prepEstimateMins: 20,
   deliveryEstimateMins: 30,
 
@@ -955,7 +1060,7 @@ export const policies = [
     sections: [
       {
         heading: 'What we collect',
-        body: 'When you place an order, submit an enquiry, make a reservation, or contact us, we may collect your name and surname, contact number, email address, delivery or collection address, and payment-related information processed through secure third-party providers.',
+        body: 'When you place an order, submit an enquiry, make a reservation, or contact us, we may collect your name and surname, contact number, email address, delivery address, and payment-related information processed through secure third-party providers.',
       },
       {
         heading: 'Why we use it',
@@ -990,7 +1095,7 @@ export const policies = [
     sections: [
       {
         heading: 'Accurate information',
-        body: 'Customers must provide accurate information when placing orders, and are responsible for ensuring delivery or collection details are correct.',
+        body: 'Customers must provide accurate information when placing orders, and are responsible for ensuring their delivery address is correct.',
       },
       {
         heading: 'Menu and imagery',
@@ -1011,8 +1116,12 @@ export const policies = [
     ],
   },
   {
-    /* The id is stable on purpose: it is a URL fragment, and renaming it breaks
-       every saved link to this policy and the test that pins the list. */
+    /*
+     * `delivery-collection` keeps its id. It is a URL fragment — /policies#delivery-collection
+     * — and the slug is the only durable part of a policy link, so it stays even
+     * though the policy inside is now purely about delivery. The title is what a
+     * customer reads, and that says Delivery.
+     */
     id: 'delivery-collection',
     title: 'Delivery',
     updated: '2026-11-14',
@@ -1020,24 +1129,28 @@ export const policies = [
     sections: [
       {
         heading: 'Service days and times',
-        body: 'We cook and deliver on Thursdays and Fridays only. Delivery and collection both run between 12:00 and 13:30. Orders placed outside those times are recorded as pre-orders for the next service day.',
+        body: 'We cook and deliver on Thursdays and Fridays only, between 12:00 and 13:30. Orders placed outside those times are recorded as pre-orders for the next service day.',
       },
       {
         heading: 'Delivery areas',
-        body: 'We deliver everywhere within 50 km of our kitchen in Sandton. Delivery is included in the plate price in Sandton and Rosebank; anywhere further out up to 50 km carries a delivery fee, confirmed on WhatsApp before you pay. Beyond 50 km we do not deliver, and the checkout will tell you so before you order.',
+        body: /*
+       * The distances here are written out, not interpolated, because the policy
+       * is signed copy the owner approved. They drifted: this paragraph said
+       * 50 km in three places while the catalogue had already moved to 15 km
+       * (owner, 15 Nov 2026), so the policy promised a radius the checkout would
+       * refuse. Both surfaces now say the same numbers, and a test pins them.
+       */
+      'We deliver within 15 km of our kitchen in Sandton. Delivery is included in the plate price in Sandton and Rosebank; anywhere further out up to 15 km carries a R30 delivery fee, confirmed on WhatsApp before you pay. Beyond 15 km we do not deliver, and the checkout will tell you so before you order.',
       },
       {
         heading: 'Minimum order and delivery fee',
         body: 'The minimum order is R100 for plated meals. Inside Sandton and Rosebank there is no separate delivery fee — the run is included in the plate price, so you pay R100 for a traditional plate and R130 for a contemporary one. Outside those areas a delivery fee applies; the exact amount is confirmed on WhatsApp before payment.',
       },
       {
-        heading: 'No collection',
-        body: 'We are a delivery-only kitchen. There is no counter to collect from and no collection point; every order is brought to the address you gave at checkout, within the service window.',
+        heading: 'Delivery only',
+        body: 'There is no collection. Every order is brought to the address you gave at checkout, within the service window — there is no counter to visit and no collection point to meet at.',
       },
-      {
-        heading: 'Preparation and delivery estimates',
-        body: 'Plated meals are prepared to order and typically need about 20 minutes. Delivery in Rosebank and Sandton usually takes about 30 minutes from dispatch, within the 12:00 to 13:30 service window.',
-      },
+
     ],
   },
   {

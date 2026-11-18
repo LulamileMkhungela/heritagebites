@@ -17,15 +17,15 @@ export default function NotFound() {
         height={104}
         className="mb-6 h-24 w-24 object-contain opacity-90"
       />
-      <p className="font-mono text-sm uppercase tracking-[0.3em] text-ochre-deep">Error 404</p>
+      <p className="font-mono text-sm uppercase tracking-[0.3em] text-accent">Error 404</p>
       <h1 className="mt-4 font-display text-5xl font-semibold md:text-6xl">This plate came back empty</h1>
-      <p className="mt-4 max-w-md text-ink/60">
+      <p className="mt-4 max-w-md text-theme-soft">
         The page you were looking for has moved or never existed. The menu, on the other hand, is very real.
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-3">
         <LinkButton to="/">Back home</LinkButton>
         <LinkButton to="/menu" variant="outline">See the menu</LinkButton>
-        <Link to="/contact" className="inline-flex min-h-11 items-center self-center text-sm font-semibold text-ochre-deep underline">
+        <Link to="/contact" className="inline-flex min-h-11 items-center self-center text-sm font-semibold text-accent underline">
           Tell us what broke
         </Link>
       </div>

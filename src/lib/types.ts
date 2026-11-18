@@ -16,6 +16,17 @@ export interface OptionChoice {
    * this, "2 ginger beers" meant adding the whole plate twice.
    */
   max?: number;
+  /**
+   * How many of this choice are *included* before a portion starts costing.
+   *
+   * A starch or a side inside a plate is included once — that is what the plate
+   * price buys — and each portion after the first is charged. Absent means the
+   * choice has no extra-portion rule and contributes nothing, which is what a
+   * protein is: pap costs money, a second scoop of chicken does not exist.
+   */
+  extraAfter?: number;
+  /** What each portion past `extraAfter` costs. Zero when there is no rule. */
+  extraPrice?: number;
 }
 
 export interface MenuOption {
@@ -166,10 +177,14 @@ export interface Settings {
   googlePlaceId?: string;
   googlePlaceName?: string;
   googleReviewUrl?: string;
-  /** Retired with collection; empty, and no surface reads it as an address. */
-  collectionArea: string;
-  collectionPoint: string;
-  collectionNote: string;
+  /*
+   * No collectionArea / collectionPoint / collectionNote.
+   *
+   * Removed with collection itself (owner, 18 Nov 2026: "no collection"). They
+   * survived as optional-looking required fields that nothing read, which is how
+   * a removed feature quietly comes back: someone sees the field, assumes the
+   * site still supports it, and wires it up again.
+   */
   serviceWindow: { open: string; close: string };
   prepEstimateMins: number;
   deliveryEstimateMins: number;

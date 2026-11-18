@@ -33,7 +33,7 @@ export function OrderAgain({
   /** Where the customer lands after their basket is rebuilt. */
   to = '/checkout',
   heading = 'Order it again',
-  intro = 'One tap puts the same plates, starches and sides back in your basket at today’s prices.',
+  intro = 'One tap puts the same plates, starches and sides back in your cart at today’s prices.',
 }: {
   orders: PastOrder[];
   to?: string;
@@ -83,19 +83,19 @@ export function OrderAgain({
          before they pay for a partly-different order. */
       setNotice({
         kind: 'error',
-        text: `Most of ${order.code} is back in your basket, but we could not add: ${missing.join('; ')}.`,
+        text: `Most of ${order.code} is back in your cart, but we could not add: ${missing.join('; ')}.`,
       });
       return;
     }
 
-    setNotice({ kind: 'ok', text: `${order.code} is back in your basket at today’s prices.` });
+    setNotice({ kind: 'ok', text: `${order.code} is back in your cart at today’s prices.` });
     nav(to);
   };
 
   return (
     <div>
       <h2 className="font-display text-2xl font-semibold">{heading}</h2>
-      <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink/60">{intro}</p>
+      <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-theme-soft">{intro}</p>
 
       <ul className="mt-4 grid gap-3">
         {orders.map((order) => {
@@ -106,21 +106,21 @@ export function OrderAgain({
           return (
             <li
               key={order.code}
-              className="rounded-3xl border-2 border-ink/10 bg-white p-5"
+              className="rounded-3xl border-2 border-theme/10 bg-surface p-5"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/45">
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-theme-muted">
                   {order.code} · {date}
                   {clockTime(order.createdAt) ? ` · ${clockTime(order.createdAt)}` : ''}
                 </p>
-                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-ochre-deep">
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
                   {order.statusLabel}
                 </p>
               </div>
 
               <ul className="mt-2 grid gap-1">
                 {order.items.map((item, index) => (
-                  <li key={`${item.itemId}-${index}`} className="text-[14px] leading-snug text-ink/80">
+                  <li key={`${item.itemId}-${index}`} className="text-[14px] leading-snug text-theme-soft">
                     {describeOrderItem(item)}
                   </li>
                 ))}
@@ -131,7 +131,7 @@ export function OrderAgain({
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
                     to={`/order/${order.code}`}
-                    className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-ochre-deep hover:underline"
+                    className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-accent hover:underline"
                   >
                     View order
                   </Link>
@@ -143,7 +143,7 @@ export function OrderAgain({
                     {busy === order.code
                       ? 'Putting it back…'
                       : basketCount > 0
-                        ? 'Replace my basket with this'
+                        ? 'Replace my cart with this'
                         : 'Order this again'}
                   </Button>
                 </div>
@@ -158,8 +158,8 @@ export function OrderAgain({
           role="status"
           className={`mt-3 rounded-xl border-2 p-3 text-[13px] ${
             notice.kind === 'error'
-              ? 'border-ochre bg-ochre/10 text-ink'
-              : 'border-morogo/40 bg-morogo/10 text-ink'
+              ? 'border-ochre bg-ochre/10 text-theme'
+              : 'border-morogo/40 bg-morogo/10 text-theme'
           }`}
         >
           {notice.text}
@@ -172,7 +172,7 @@ export function OrderAgain({
         not publish one. That is said plainly rather than left as a dead link that
         404s on a second device.
       */}
-      <p className="mt-3 text-[12px] leading-relaxed text-ink/45">
+      <p className="mt-3 text-[12px] leading-relaxed text-theme-muted">
         “View order” opens the full receipt and tracking on the device that placed the order. On a new phone,
         ask us on WhatsApp and we will resend the link.
       </p>

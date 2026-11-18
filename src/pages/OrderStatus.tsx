@@ -125,7 +125,7 @@ export default function OrderStatus() {
         <p className="text-4xl">🔍</p>
         <h1 className="mt-4 font-display text-3xl font-semibold">We could not find that order</h1>
         {/* The "call us" notice quotes the number — keep it tappable. */}
-        <p className="mt-3 text-ink/60"><ContactText>{error}</ContactText></p>
+        <p className="mt-3 text-theme-soft"><ContactText>{error}</ContactText></p>
         <LinkButton to="/menu" className="mt-6">Back to the menu</LinkButton>
       </section>
     );
@@ -158,12 +158,12 @@ export default function OrderStatus() {
         <div>
           <SectionLabel>Order tracking</SectionLabel>
           <h1 className="font-display text-4xl font-semibold md:text-5xl">{order.code}</h1>
-          <p className="mt-2 text-sm text-ink/55">
+          <p className="mt-2 text-sm text-theme-soft">
             Placed {timeAgo(order.createdAt)} · {order.fulfilmentLabel} · {order.items.reduce((n, i) => n + i.qty, 0)} items
           </p>
           {order.serviceWindow && (
-            <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-full border border-ink/15 bg-white px-3 py-1 text-[12px] font-medium text-ink/70">
-              <span className="font-mono text-xs uppercase tracking-wider text-ochre-deep">
+            <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-full border border-theme/15 bg-surface px-3 py-1 text-[12px] font-medium text-theme-soft">
+              <span className="font-mono text-xs uppercase tracking-wider text-accent">
                 {order.serviceWindow.isPreOrder ? 'Pre-order' : 'Service window'}
               </span>
               {order.serviceWindow.label}
@@ -173,7 +173,7 @@ export default function OrderStatus() {
         <div className="text-right">
           <Badge tone={order.status === 'cancelled' ? 'chili' : order.status === 'completed' ? 'ink' : 'ochre'}>{order.statusMeta.label}</Badge>
           <p className="mt-2 font-display text-3xl font-bold">{zar(order.totals.total)}</p>
-          <p className="text-xs text-ink/50">
+          <p className="text-xs text-theme-soft">
             {order.payment.status === 'approved'
               ? order.payment.last4
                 ? `Paid · ${order.payment.brand?.toUpperCase() ?? 'CARD'} ****${order.payment.last4}`
@@ -193,11 +193,11 @@ export default function OrderStatus() {
       */}
       {order.payment.status !== 'approved' && order.payment.redirectUrl && (
         <div className="mt-6 rounded-3xl border-2 border-ochre bg-ochre/10 p-5">
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-ochre-deep">Payment not completed</p>
-          <p className="mt-1 text-sm font-semibold text-ink">
+          <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent">Payment not completed</p>
+          <p className="mt-1 text-sm font-semibold text-theme">
             This order is saved, but we have not received the payment yet.
           </p>
-          <p className="mt-1 text-[13px] leading-relaxed text-ink/65">
+          <p className="mt-1 text-[13px] leading-relaxed text-theme-soft">
             Nothing is cooked until it is paid. You can pick it up where you left off — the order stays reserved.
           </p>
           <a
@@ -210,26 +210,26 @@ export default function OrderStatus() {
       )}
 
       {/* Order journey: the status is not advanced automatically in this build. */}
-      <div className="mt-8 rounded-3xl border-2 border-ink/10 bg-white p-6">
+      <div className="mt-8 rounded-3xl border-2 border-theme/10 bg-surface p-6">
         <h2 className="mb-3 font-display text-2xl font-semibold">Order journey</h2>
-        <p className="mb-6 text-sm text-ink/65" aria-live="polite">{order.statusMeta.note}</p>
+        <p className="mb-6 text-sm text-theme-soft" aria-live="polite">{order.statusMeta.note}</p>
 
-        <ol className="relative space-y-6 border-l-2 border-ink/12 pl-8">
+        <ol className="relative space-y-6 border-l-2 border-theme/12 pl-8">
           {order.timeline.map((t) => (
             <li key={t.status} className="relative">
               <span
                 className={`absolute -left-[41px] top-1 grid h-6 w-6 place-items-center rounded-full border-2 ${
-                  t.current ? 'animate-pulse-ring border-ochre bg-ochre' : t.done ? 'border-ink bg-ink' : 'border-ink/20 bg-bone'
+                  t.current ? 'animate-pulse-ring border-ochre bg-ochre' : t.done ? 'border-theme bg-ink' : 'border-theme/20 bg-canvas'
                 }`}
               >
                 {t.done && !t.current && <span className="text-xs font-bold text-bone">✓</span>}
                 {t.current && <span className="h-2 w-2 rounded-full bg-ink" />}
               </span>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className={`font-semibold ${t.done ? '' : 'text-ink/40'}`}>{t.label}</p>
-                {t.at && <span className="font-mono text-xs text-ink/45">{clockTime(t.at)}</span>}
+                <p className={`font-semibold ${t.done ? '' : 'text-theme-muted'}`}>{t.label}</p>
+                {t.at && <span className="font-mono text-xs text-theme-muted">{clockTime(t.at)}</span>}
               </div>
-              <p className={`text-[13px] ${t.done ? 'text-ink/60' : 'text-ink/35'}`}>{t.note}</p>
+              <p className={`text-[13px] ${t.done ? 'text-theme-soft' : 'text-theme-muted'}`}>{t.note}</p>
             </li>
           ))}
         </ol>
@@ -243,7 +243,7 @@ export default function OrderStatus() {
       {order.status === 'completed' && settings?.googleReviewUrl?.trim() && (
         <div className="mt-6 rounded-3xl border-2 border-ochre bg-ochre/10 p-6">
           <p className="font-display text-xl font-semibold">Did we get it right?</p>
-          <p className="mt-1 text-sm text-ink/65">
+          <p className="mt-1 text-sm text-theme-soft">
             A Google review is how the next person finds us. It takes a minute, and it genuinely helps.
           </p>
           <a
@@ -259,39 +259,45 @@ export default function OrderStatus() {
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1.3fr_1fr]">
         {/* Items */}
-        <div className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+        <div className="rounded-3xl border-2 border-theme/10 bg-surface p-6">
           <h2 className="font-display text-xl font-semibold">What you ordered</h2>
           <ul className="mt-4 divide-y divide-ink/8">
             {order.items.map((it, i) => (
               <li key={i} className="flex items-start justify-between gap-4 py-3">
                 <span>
                   <span className="block text-sm font-semibold">{it.qty} × {it.name}</span>
-                  {it.options.length > 0 && <span className="block text-xs text-ink/50">{it.options.map((o) => o.label).join(' · ')}</span>}
+                  {it.options.length > 0 && <span className="block text-xs text-theme-soft">{it.options.map((o) => o.label).join(' · ')}</span>}
                 </span>
                 <span className="font-mono text-sm">{zar(it.lineTotal)}</span>
               </li>
             ))}
           </ul>
-          <dl className="mt-4 space-y-1 border-t border-ink/10 pt-3 text-sm">
-            <div className="flex justify-between text-ink/60"><dt>Subtotal</dt><dd className="font-mono">{zar(order.totals.subtotal)}</dd></div>
-            {order.totals.delivery > 0 && <div className="flex justify-between text-ink/60"><dt>Delivery</dt><dd className="font-mono">{zar(order.totals.delivery)}</dd></div>}
-            {order.totals.discount > 0 && <div className="flex justify-between text-ochre-deep"><dt>Discount</dt><dd className="font-mono">−{zar(order.totals.discount)}</dd></div>}
-            <div className="flex justify-between border-t border-ink/10 pt-2 text-base font-bold"><dt>Total</dt><dd className="font-mono">{zar(order.totals.total)}</dd></div>
+          <dl className="mt-4 space-y-1 border-t border-theme/10 pt-3 text-sm">
+            <div className="flex justify-between text-theme-soft"><dt>Subtotal</dt><dd className="font-mono">{zar(order.totals.subtotal)}</dd></div>
+            {order.totals.delivery > 0 && <div className="flex justify-between text-theme-soft"><dt>Delivery</dt><dd className="font-mono">{zar(order.totals.delivery)}</dd></div>}
+            {order.totals.discount > 0 && <div className="flex justify-between text-accent"><dt>Discount</dt><dd className="font-mono">−{zar(order.totals.discount)}</dd></div>}
+            <div className="flex justify-between border-t border-theme/10 pt-2 text-base font-bold"><dt>Total</dt><dd className="font-mono">{zar(order.totals.total)}</dd></div>
           </dl>
         </div>
 
         {/* Actions */}
         <div className="space-y-4">
-          <div className="rounded-3xl border-2 border-ink/10 bg-white p-6">
+          <div className="rounded-3xl border-2 border-theme/10 bg-surface p-6">
             <h2 className="font-display text-xl font-semibold">Delivery details</h2>
             {/*
               An order placed before collection was removed still has to render.
               Its tracking page says plainly that it was a collection order
               rather than inventing a delivery address it never had.
+
+              Owner, 18 Nov 2026: "no collection". The old copy offered to
+              negotiate a meeting point — "the kitchen will confirm where to meet
+              you" — which reads as if a collection could still be arranged. If
+              one of these old orders is still open, the honest answer is that it
+              cannot, and the kitchen sorts it out in the chat.
             */}
-            <p className="mt-2 text-sm leading-relaxed text-ink/70">
+            <p className="mt-2 text-sm leading-relaxed text-theme-soft">
               {order.fulfilment === 'collection'
-                ? 'This order was placed for collection, before we moved to delivery only. The kitchen will confirm where to meet you on WhatsApp.'
+                ? 'This order was placed for collection, back when we offered it. We are delivery-only now — message the kitchen and they will sort out what happens to this order.'
                 : `Delivery to ${order.deliveryArea ?? 'your area'} — the address you entered at checkout.`}
             </p>
             {order.fulfilment === 'collection' && (
@@ -299,15 +305,15 @@ export default function OrderStatus() {
                 href={waHref(settings?.whatsapp, COLLECTION_POINT_ENQUIRY)}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-3 inline-flex min-h-11 items-center font-semibold text-ochre-deep hover:underline"
+                className="mt-3 inline-flex min-h-11 items-center font-semibold text-accent hover:underline"
               >
-                Ask the kitchen where to meet →
+                Ask the kitchen about this order →
               </a>
             )}
-            <p className="mt-3 text-sm text-ink/70">
+            <p className="mt-3 text-sm text-theme-soft">
               <strong>{order.customer.name}</strong>
               <br />
-              <a href={`tel:${order.customer.phone}`} className="font-mono text-xs hover:text-ochre-deep">{order.customer.phone}</a>
+              <a href={`tel:${order.customer.phone}`} className="font-mono text-xs hover:text-accent">{order.customer.phone}</a>
             </p>
           </div>
 
@@ -319,14 +325,14 @@ export default function OrderStatus() {
           */}
           {push && push.status !== 'unsupported' && push.status !== 'unconfigured' && (
             <div className="rounded-3xl border-2 border-ochre bg-ochre/10 p-5" aria-live="polite">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Alerts on this device</p>
-              <p className="mt-2 text-[13px] leading-relaxed text-ink/75">{push.message}</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Alerts on this device</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-theme-soft">{push.message}</p>
               {push.status === 'subscribed' ? (
                 <button
                   type="button"
                   onClick={disableAlerts}
                   disabled={pushBusy}
-                  className="mt-3 w-full rounded-full border-2 border-ink/25 px-4 py-2 text-xs font-semibold uppercase tracking-wide hover:border-ink disabled:opacity-50"
+                  className="mt-3 w-full rounded-full border-2 border-theme/25 px-4 py-2 text-xs font-semibold uppercase tracking-wide hover:border-theme disabled:opacity-50"
                 >
                   {pushBusy ? 'Turning off…' : 'Turn alerts off'}
                 </button>
@@ -352,8 +358,8 @@ export default function OrderStatus() {
             order — this page, or alerts turned on for this device — and is
             explicit that WhatsApp is a person replying, not a bot.
           */}
-          <div className="rounded-3xl border-2 border-ink/10 bg-ink p-6 text-bone">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre">Need an update?</p>
+          <div className="rounded-3xl border-2 border-theme/10 bg-ink p-6 text-bone">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Need an update?</p>
             <ul className="mt-2 space-y-1.5 text-sm text-bone/70">
               <li>
                 <strong className="text-bone">The kitchen knows.</strong> Your order ticket was sent to the kitchen the
@@ -376,7 +382,7 @@ export default function OrderStatus() {
               href={updateRequest}
               target="_blank"
               rel="noreferrer"
-              className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-ochre px-4 py-2.5 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"
+              className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full hb-gold px-4 py-2.5 text-xs font-semibold text-theme"
             >
               Request WhatsApp updates
             </a>
@@ -384,7 +390,7 @@ export default function OrderStatus() {
               href={order.whatsapp}
               target="_blank"
               rel="noreferrer"
-              className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-ochre"
+              className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-accent"
             >
               Message us about {order.code}
             </a>
@@ -392,11 +398,11 @@ export default function OrderStatus() {
               href={keepReceiptLink}
               target="_blank"
               rel="noreferrer"
-              className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-ochre"
+              className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-accent"
             >
               Keep this receipt on WhatsApp
             </a>
-            <a href={`tel:${order.phone.replace(/\s/g, '')}`} className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-ochre">
+            <a href={`tel:${order.phone.replace(/\s/g, '')}`} className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-bone/25 px-4 py-2.5 text-xs font-semibold hover:border-ochre hover:text-accent">
               Call {order.phone}
             </a>
           </div>
@@ -407,17 +413,17 @@ export default function OrderStatus() {
             </Button>
           )}
           {order.payment.status === 'approved' && order.status !== 'cancelled' && (
-            <p className="rounded-2xl border border-ochre/50 bg-ochre/10 p-4 text-sm text-ink/75">
+            <p className="rounded-2xl border border-ochre/50 bg-ochre/10 p-4 text-sm text-theme-soft">
               This order has been paid. To discuss a cancellation or refund, contact us by phone or WhatsApp; refunds are not processed automatically here.
             </p>
           )}
           {order.loyalty.pointsEarned > 0 && (
             <div className="rounded-3xl border-2 border-ochre bg-ochre/10 p-5">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Loyalty card</p>
-              <p className="mt-2 text-sm text-ink/70">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Loyalty card</p>
+              <p className="mt-2 text-sm text-theme-soft">
                 This order earned <strong>{order.loyalty.pointsEarned} stamp{order.loyalty.pointsEarned === 1 ? '' : 's'}</strong>.
               </p>
-              <Link to="/passport" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ochre-deep hover:underline">View your loyalty card</Link>
+              <Link to="/passport" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-accent hover:underline">View your loyalty card</Link>
             </div>
           )}
         </div>

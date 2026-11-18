@@ -9,7 +9,7 @@ import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateGroup, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
 import { DELIVERY_ZONES } from '../../shared/address.js';
-import { extraCost, maxPerExtra } from '../../shared/service.js';
+import { extraCost, maxPerExtra, maxPortions, portionCost } from '../../shared/service.js';
 import { currentSiteUrl, usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
 
@@ -323,17 +323,17 @@ export default function MenuPage() {
               <button
                 type="button"
                 onClick={() => setBuilder(plate)}
-                className="group flex w-full items-center gap-4 overflow-hidden rounded-3xl border-2 border-ink/10 bg-white p-4 text-left transition-all hover:-translate-y-0.5 hover:border-ink/30 max-sm:flex-wrap"
+                className="group flex w-full items-center gap-4 overflow-hidden rounded-3xl border-2 border-theme/10 bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:border-theme/30 max-sm:flex-wrap"
               >
                 <img src={plate.image} alt="" className="h-24 w-24 shrink-0 rounded-2xl object-cover" loading="lazy" />
                 <span className="min-w-0 flex-1 max-sm:order-last max-sm:basis-full">
-                  <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-ochre-deep">Build your plate</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent">Build your plate</span>
                   <span className="mt-0.5 block font-display text-xl font-semibold">{plate.name}</span>
-                  <span className="mt-1 block text-[13px] leading-snug text-ink/60">{plate.blurb}</span>
+                  <span className="mt-1 block text-[13px] leading-snug text-theme-soft">{plate.blurb}</span>
                 </span>
                 <span className="ml-auto flex shrink-0 flex-col items-end gap-1">
-                  <span className="font-mono text-lg font-bold text-ink">{zar(plate.price)}</span>
-                  <span className="rounded-full border-2 border-ink/15 px-3 py-1.5 text-xs font-bold uppercase tracking-wide group-hover:border-ink group-hover:bg-ink group-hover:text-bone">
+                  <span className="font-mono text-lg font-bold text-theme">{zar(plate.price)}</span>
+                  <span className="rounded-full border-2 border-theme/15 px-3 py-1.5 text-xs font-bold uppercase tracking-wide group-hover:border-theme group-hover:bg-ink group-hover:text-bone">
                     Build
                   </span>
                 </span>
@@ -344,7 +344,7 @@ export default function MenuPage() {
       </section>
 
       {/* Category navigation stays visible and follows the section being read. */}
-      <div className="sticky top-[var(--hb-header)] z-30 border-b-2 border-ink/10 bg-bone/95 backdrop-blur">
+      <div className="sticky top-[var(--hb-header)] z-30 border-b-2 border-theme/10 bg-canvas/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 py-3">
           {/*
             One line, and the order on it is the owner's (17 Nov 2026): "the sort
@@ -373,13 +373,13 @@ export default function MenuPage() {
               ))}
             </nav>
             <div className="ml-auto flex shrink-0 items-center gap-2">
-              <label className="flex min-h-11 items-center gap-2 text-xs text-ink/55">
+              <label className="flex min-h-11 items-center gap-2 text-xs text-theme-soft">
                 <span className="sr-only">Sort meals</span>
                 <span aria-hidden="true" className="hidden uppercase tracking-wide lg:inline">Sort</span>
                 <select
                   value={sort}
                   onChange={(event) => setSort(event.target.value as SortId)}
-                  className="min-h-11 max-w-[9.5rem] rounded-full border-2 border-ink/12 bg-white px-3 py-1.5 text-xs font-semibold text-ink outline-none focus:border-ochre"
+                  className="min-h-11 max-w-[9.5rem] rounded-full border-2 border-theme/12 bg-surface px-3 py-1.5 text-xs font-semibold text-theme outline-none focus:border-ochre"
                   aria-label="Sort meals"
                 >
                   {SORTS.map((option) => (
@@ -395,7 +395,7 @@ export default function MenuPage() {
               value={q}
               onChange={(event) => setQ(event.target.value)}
               placeholder="Search meals…"
-              className="min-h-11 w-full max-w-xs rounded-full border-2 border-ink/12 px-4 py-2 text-sm outline-none focus:border-ochre"
+              className="min-h-11 w-full max-w-xs rounded-full border-2 border-theme/12 px-4 py-2 text-sm outline-none focus:border-ochre"
               aria-label="Search meals"
             />
           </div>
@@ -404,9 +404,9 @@ export default function MenuPage() {
 
       <main className="mx-auto max-w-7xl space-y-16 px-4 py-12" aria-live="polite">
         {sections.length === 0 ? (
-          <div className="rounded-3xl border-2 border-dashed border-ink/20 p-12 text-center">
+          <div className="rounded-3xl border-2 border-dashed border-theme/20 p-12 text-center">
             <p className="font-display text-2xl">No meals match that search</p>
-            <p className="mt-2 text-sm text-ink/55">Try a different word.</p>
+            <p className="mt-2 text-sm text-theme-soft">Try a different word.</p>
             <Button className="mt-5" variant="outline" onClick={() => setQ('')}>Show all meals</Button>
           </div>
         ) : sections.map((section) => {
@@ -454,7 +454,7 @@ export default function MenuPage() {
                 >
                   <span className="min-w-0">
                     {section.name}{' '}
-                    <span className="whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-wider text-ink/45 tabular-nums">
+                    <span className="whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-wider text-theme-muted tabular-nums">
                       {count} {countLabel}
                     </span>
                   </span>
@@ -462,7 +462,7 @@ export default function MenuPage() {
                     aria-hidden="true"
                     focusable="false"
                     viewBox="0 0 24 24"
-                    className={`absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 text-ink/40 transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+                    className={`absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 text-theme-muted transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
@@ -473,9 +473,9 @@ export default function MenuPage() {
                   </svg>
                 </button>
               </h2>
-              <p className="mt-2 max-w-2xl text-sm text-ink/60">{section.blurb}</p>
+              <p className="mt-2 max-w-2xl text-sm text-theme-soft">{section.blurb}</p>
               {section.archived && (
-                <p className="mt-1 text-[12px] text-ink/50">
+                <p className="mt-1 text-[12px] text-theme-soft">
                   Not on sale yet, so nothing here can be added to a basket.
                 </p>
               )}
@@ -486,11 +486,23 @@ export default function MenuPage() {
                 /* The archive cards read like any other dish card but hold no
                    controls at all: no link, no button, no basket. The "Coming
                    soon" tag on the photo is the only thing that marks them, and
-                   the quest link below sits outside this wrapper. */
-                <ul data-coming-soon className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                   the quest link below sits outside this wrapper.
+                   Like the selling sections, these follow the list/grid choice:
+                   it used to be a hardcoded grid, so the Kasi Fast Food and
+                   Morning Heritage sections stayed four-up while every other
+                   section obeyed the toggle. */
+                <ul
+                  data-coming-soon
+                  data-view={view}
+                  className={
+                    view === 'grid'
+                      ? 'grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                      : 'grid gap-4'
+                  }
+                >
                   {section.items.map((item) => (
                     <li key={item.id}>
-                      <UpcomingCard item={item} />
+                      <UpcomingCard item={item} layout={view} />
                     </li>
                   ))}
                 </ul>
@@ -523,9 +535,9 @@ export default function MenuPage() {
                 all.
               */}
               {section.id === lastArchived?.id && (
-                <p className="mt-6 text-[13px] text-ink/70">
+                <p className="mt-6 text-[13px] text-theme-soft">
                   Want one of these back on the menu?{' '}
-                  <Link to="/quest" className="font-semibold text-ochre-deep underline">Send a customer request</Link>{' '}
+                  <Link to="/quest" className="font-semibold text-accent underline">Send a customer request</Link>{' '}
                   and we will come back to you on whether and when we can cook it.
                 </p>
               )}
@@ -540,19 +552,26 @@ export default function MenuPage() {
           answer, not a keyword.
         */}
         <section className="mx-auto mt-14 max-w-7xl px-4 pb-4">
-          <div className="rounded-3xl border-2 border-ink/10 bg-white p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
-            <p className="max-w-2xl text-sm leading-relaxed text-ink/70">
+          <div className="rounded-3xl border-2 border-theme/10 bg-surface p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
+            <p className="max-w-2xl text-sm leading-relaxed text-theme-soft">
               Every plate is cooked on a Thursday or a Friday, and any cooking day ahead can be booked. Delivery is
               included in {(catalog?.settings?.deliveryAreas ?? ['Rosebank', 'Sandton']).join(' and ')} and up to{' '}
               {catalog?.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm} km from the kitchen.{' '}
-              <Link to="/specials" className="font-semibold text-ochre-deep underline">
-                How delivery and collection work
+              {/*
+                "and collection" was wrong: collection was removed on 14 Nov
+                2026 and the specials page it links to now says so outright
+                ("We are a delivery-only kitchen"). Owner, 18 Nov 2026: "no
+                collection" — a link promising a policy the next page denies is
+                worse than no link.
+              */}
+              <Link to="/specials" className="font-semibold text-accent underline">
+                How delivery works
               </Link>
               .
             </p>
-            <p className="mt-3 shrink-0 text-sm text-ink/70 sm:mt-0">
+            <p className="mt-3 shrink-0 text-sm text-theme-soft sm:mt-0">
               Questions before you order?{' '}
-              <Link to="/contact" className="font-semibold text-ochre-deep underline">
+              <Link to="/contact" className="font-semibold text-accent underline">
                 Talk to us
               </Link>
             </p>
@@ -598,7 +617,7 @@ function ViewToggle({ value, onChange }: { value: 'grid' | 'list'; onChange: (ne
     );
 
   return (
-    <div className="inline-flex items-center rounded-full border-2 border-ink/12 bg-white p-0.5" role="group" aria-label="View meals as">
+    <div className="inline-flex items-center rounded-full border-2 border-theme/12 bg-surface p-0.5" role="group" aria-label="View meals as">
       {(['grid', 'list'] as const).map((kind) => (
         <button
           key={kind}
@@ -608,7 +627,7 @@ function ViewToggle({ value, onChange }: { value: 'grid' | 'list'; onChange: (ne
           aria-label={kind === 'grid' ? 'Show meals as a grid' : 'Show meals as a list'}
           /* 44px, not 40: this is a thumb control on a phone, and the mobile
              audit treats anything under 44 as a miss. */
-          className={`grid h-11 w-11 place-items-center rounded-full transition-colors ${value === kind ? 'bg-ink text-bone' : 'text-ink/50 hover:text-ink'}`}
+          className={`grid h-11 w-11 place-items-center rounded-full transition-colors ${value === kind ? 'bg-ink text-bone' : 'text-theme-soft hover:text-theme'}`}
         >
           {icon(kind)}
         </button>
@@ -630,10 +649,10 @@ function CatChip({ active, onClick, label, count, soon }: { active: boolean; onC
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${active ? 'bg-ink text-bone' : 'bg-white text-ink/70 hover:bg-white'} ${soon && !active ? 'border border-dashed border-ink/25' : ''}`}
+      className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${active ? 'bg-ink text-bone' : 'bg-surface text-theme-soft hover:bg-surface'} ${soon && !active ? 'border border-dashed border-theme/25' : ''}`}
     >
       {label}
-      <span className={`font-mono text-xs tabular-nums ${active ? 'text-ochre' : 'text-ink/40'}`}>{count}</span>
+      <span className={`font-mono text-xs tabular-nums ${active ? 'text-accent' : 'text-theme-muted'}`}>{count}</span>
     </button>
   );
 }
@@ -648,10 +667,26 @@ function CatChip({ active, onClick, label, count, soon }: { active: boolean; onC
  * no basket button, so the only way to order one is for the kitchen to put it
  * back on sale.
  */
-function UpcomingCard({ item }: { item: ComingSoonItem }) {
+/*
+ * An unreleased dish. It has to follow the same list/grid switch as the selling
+ * cards — a section that ignored the toggle looked broken next to the ones that
+ * obeyed it — so it takes the same `layout` prop and swaps to a row shape in
+ * list view: photo on the left at a fixed width, words beside it.
+ */
+function UpcomingCard({ item, layout = 'grid' }: { item: ComingSoonItem; layout?: 'grid' | 'list' }) {
+  const list = layout === 'list';
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-ink/5">
+    <article
+      data-layout={layout}
+      className={`flex h-full overflow-hidden rounded-3xl border-2 border-theme/10 bg-surface ${
+        list ? 'flex-row items-stretch' : 'flex-col'
+      }`}
+    >
+      <div
+        className={`relative shrink-0 overflow-hidden bg-ink/5 ${
+          list ? 'w-32 self-stretch sm:w-44' : 'aspect-[4/3] w-full'
+        }`}
+      >
         <img
           /* Catalogue images already carry the site base (see store/catalog.ts);
              prefixing again doubles it on Pages. */
@@ -661,7 +696,7 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
           className="h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-transparent to-transparent" />
-        <span className="absolute left-3 top-3 rounded-full bg-ink/85 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-bone">
+        <span className="absolute left-3 top-3 rounded-full bg-[#001938] px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[#f8f4ec]">
           Coming soon
         </span>
         {/*
@@ -671,13 +706,13 @@ function UpcomingCard({ item }: { item: ComingSoonItem }) {
           instead, as a short uppercase label so it reads at a glance.
         */}
         {item.price > 0 && (
-          <span className="absolute bottom-3 left-3 font-mono text-lg font-bold text-bone">{zar(item.price)}</span>
+          <span className="absolute bottom-3 left-3 rounded-md bg-[#001938]/90 px-1.5 font-mono text-lg font-bold text-[#f8f4ec]">{zar(item.price)}</span>
         )}
       </div>
-      <div className="flex flex-1 flex-col p-4">
+      <div className={`flex flex-1 flex-col ${list ? 'justify-center p-4' : 'p-4'}`}>
         <h3 className="font-display text-lg font-semibold leading-tight">{item.name}</h3>
-        <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink/60">{item.description}</p>
-        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-ink/40">
+        <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-theme-soft">{item.description}</p>
+        <p className="mt-auto pt-3 font-mono text-[11px] uppercase tracking-wider text-theme-muted">
           {item.price > 0 ? 'Not on sale yet' : 'Included in a plate'}
         </p>
       </div>
@@ -704,12 +739,18 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
    */
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   /*
-   * How many of a priced extra, keyed by "groupId:itemId".
+   * How many portions of a choice, keyed by "groupId:itemId".
    *
    * Kept apart from `picked` because `picked` is a map of *which* choice fills a
-   * slot, and a slot holds one. The bottle count is a second question — how many
-   * of the thing in the slot — and mixing the two would mean a vegetable side
+   * slot, and a slot holds one. The portion count is a second question — how
+   * many of the thing in the slot — and mixing the two would mean a protein
    * could claim a count it has no business having.
+   *
+   * Two different things end up in here: the soft drink (a `priced` extra,
+   * charged from the first bottle) and the starch and vegetable sides (which
+   * include their first portion and charge only the portions after it). The
+   * arithmetic differs, so which rule applies is a property of the choice, not
+   * of this map.
    */
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [qty, setQty] = useState(1);
@@ -717,15 +758,31 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   /**
    * Tap an item: add it if it is not there, remove it if it is.
    *
-   * The difference between a group that holds several and one that holds a
-   * single answer is the group's own `max`:
+   * **Anything selected can be deselected, in every group** (owner, 19 Nov
+   * 2026: "if a user click customise and select pap they must be able to
+   * deselect that applies to everything they select").
    *
-   *   - `max > 1` (starch, vegetable side) — ticking a second adds it. Tapping a
-   *     ticked one removes it, unless it is the last one in a required group,
-   *     where removing it would leave the plate incomplete.
-   *   - `max === 1` (protein, the drink) — a new choice REPLACES the old one,
-   *     and tapping the chosen one clears it, which is how an optional single is
-   *     declined.
+   * That was not true before. Two guards used to refuse the tap and do nothing
+   * at all, which is indistinguishable from a broken button:
+   *
+   *   - unticking the last item of a required group was refused, to keep the
+   *     plate from being incomplete;
+   *   - a required single-choice group (the protein) could not be cleared once
+   *     chosen, because picking was the only way out of "nothing chosen".
+   *
+   * Both were protecting an invariant that is already protected in the right
+   * place: `missing` below counts required groups with nothing picked, and the
+   * Add-plate button is disabled and reads "Pick a starch" until they are filled.
+   * So the plate can never be added half-built — the customer is simply allowed
+   * to change their mind on the way there, which is what a tap means.
+   *
+   * The difference between a group that holds several and one that holds a
+   * single answer is still the group's own `max`:
+   *
+   *   - `max > 1` (starch, vegetable side) — ticking a second adds it; ticking a
+   *     ticked one removes just that one.
+   *   - `max === 1` (protein) — a new choice REPLACES the old one, and tapping
+   *     the chosen one clears it.
    */
   const toggle = (group: PlateGroup, itemId: string) =>
     setPicked((prev) => {
@@ -734,36 +791,56 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       const several = Number(group.max) > 1;
 
       if (!several) {
-        if (on) return { ...prev, [group.id]: group.required ? current : [] };
+        if (on) return { ...prev, [group.id]: [] };
         return { ...prev, [group.id]: [itemId] };
       }
 
-      if (on) {
-        /* Never leave a required group empty by unticking its last item. */
-        if (group.required && current.length === 1) return prev;
-        return { ...prev, [group.id]: current.filter((id) => id !== itemId) };
-      }
+      if (on) return { ...prev, [group.id]: current.filter((id) => id !== itemId) };
       if (current.length >= Number(group.max)) return prev;
       return { ...prev, [group.id]: [...current, itemId] };
     });
+
+  /*
+   * What one extra portion of anything in this group costs.
+   *
+   * Read off the choices rather than a constant, so the label above the group
+   * and the amount the till charges can never drift apart. Zero means the group
+   * has no extra-portion rule and every choice in it is simply included.
+   */
+  const extraPortionPrice = (g: PlateGroup) => {
+    const priced = g.items.map((i) => Number((i as { extraPrice?: number }).extraPrice) || 0);
+    return Math.max(0, ...priced);
+  };
 
   const missing = plate.groups.filter((g) => g.required && (picked[g.id]?.length ?? 0) === 0);
   const missingLabel = missing[0]?.label.replace(/^choose your\s+/i, '') ?? '';
 
   /*
-   * The drink is the only choice that adds money (owner, 14 Nov 2026 — ginger
-   * gemere, 500 ml, after the vegetable side). Every other group is included in
-   * the plate price, so `extras` is a sum over `priced` groups only and the
-   * total is the plate price plus whatever was chosen there.
+   * What the plate costs, and what has been added to it.
+   *
+   * Two rules, priced per choice so a group can no longer be described by a
+   * single flag:
+   *
+   *   - a `priced` extra — the soft drink — is sold *alongside* the plate, so
+   *     every bottle is charged at its own price;
+   *   - a starch or a vegetable side includes its first portion in the plate
+   *     price, and only the portions past the first are charged. Owner,
+   *     19 Nov 2026: "when they add more than 1 pap or any the price goes up."
+   *     Two pap is one extra portion; three pap is two.
+   *
+   * `portionCost` returns 0 for a choice with no extra-portion rule, so a
+   * protein contributes nothing here whatever its count.
    */
   const extras = plate.groups.reduce((sum, g) => {
-    if (!g.priced) return sum;
-    const it = g.items.find((i) => i.id === (picked[g.id] ?? [])[0]);
-    if (!it) return sum;
-    /* Price × how many. The clamp is the catalogue's, so the button cannot add a
-       fifth bottle the server would refuse. */
-    const count = Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
-    return sum + extraCost(Number(it.price) || 0, count);
+    return sum + (picked[g.id] ?? []).reduce((groupSum, id) => {
+      const it = g.items.find((i) => i.id === id);
+      if (!it) return groupSum;
+      /* The clamp is the catalogue's, so the buttons cannot add a portion the
+         server would refuse. */
+      const cap = g.priced ? maxPerExtra(g, it) : maxPortions(it);
+      const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
+      return groupSum + (g.priced ? extraCost(Number(it.price) || 0, count) : portionCost(it, count));
+    }, 0);
   }, 0);
   const total = Math.round((plate.price + extras) * 100) / 100;
 
@@ -778,14 +855,20 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       return (picked[g.id] ?? []).flatMap((id) => {
         const it = g.items.find((i) => i.id === id);
         if (!it) return [];
-        /* A priced group carries its amount, so the basket line explains the
-           difference between the plate price and what is being charged. */
-        const count = g.priced ? Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1)) : 1;
+        /*
+         * A choice that adds money carries its amount, so the cart line
+         * explains the difference between the plate price and what is being
+         * charged. The same rule as the running total above — two pap shows
+         * `2 × Pap` against R30, so the customer can see what the second bowl
+         * cost without doing the subtraction themselves.
+         */
+        const cap = g.priced ? maxPerExtra(g, it) : maxPortions(it);
+        const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
         return [{
           optionId: g.id,
           choiceId: `${g.id}:${id}`,
           label: it.label,
-          priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : 0,
+          priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : portionCost(it, count),
           ...(count > 1 ? { qty: count } : {}),
         }];
       });
@@ -809,14 +892,14 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
   return (
     <div className="fixed inset-0 z-[75] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={plate.name}>
       <button type="button" className="absolute inset-0 bg-ink/70 backdrop-blur-sm" onClick={onClose} aria-label="Close builder" />
-      <div className="animate-rise relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-bone shadow-2xl sm:rounded-3xl">
+      <div className="animate-rise relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-canvas shadow-2xl sm:rounded-3xl">
         <header className="flex items-start justify-between gap-4 bg-ink p-6 text-bone">
           <div>
             <SectionLabel onDark>{zar(plate.price)} a plate · delivered</SectionLabel>
             <h2 className="font-display text-3xl font-semibold">{plate.name}</h2>
             <p className="mt-2 max-w-xl text-sm text-bone/65">{plate.blurb}</p>
           </div>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-bone/25 hover:bg-bone hover:text-ink" aria-label="Close builder">
+          <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-bone/25 hover:bg-canvas hover:text-theme" aria-label="Close builder">
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
         </header>
@@ -826,7 +909,7 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
             {plate.groups.map((g) => (
               <fieldset key={g.id}>
                 <legend className="mb-2 text-sm font-semibold">
-                  {g.label} {g.required ? <span className="text-ochre-deep">*</span> : null}
+                  {g.label} {g.required ? <span className="text-accent">*</span> : null}
                   {/*
                     Say that more than one is allowed. The rule has always been
                     there — `max` is 3 for starch and vegetable side — but a group
@@ -836,8 +919,16 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                     the rule visible before anything is tapped.
                   */}
                   {!g.priced && Number(g.max) > 1 && (
-                    <span className="ml-2 text-xs font-normal text-ink/45">
+                    <span className="ml-2 text-xs font-normal text-theme-muted">
                       pick up to {Number(g.max)}
+                      {/*
+                        Say what a second portion costs *here*, before it is
+                        tapped. A stepper that only reveals the price after the
+                        customer has pressed + is a price they agreed to without
+                        reading it; the owner's rule is that the price goes up
+                        when you ask for more, so that has to be legible first.
+                      */}
+                      {extraPortionPrice(g) > 0 && <> · extra portion + {zar(extraPortionPrice(g))}</>}
                     </span>
                   )}
                 </legend>
@@ -851,12 +942,21 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                      * plain toggle. Starch and vegetable side now hold several, so a
                      * second tick adds rather than replaces.
                      */
-                    const cap = maxPerExtra(g, it);
+                    const cap = g.priced ? maxPerExtra(g, it) : maxPortions(it);
                     const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
                     const setCount = (next: number) =>
                       setCounts((prev) => ({ ...prev, [`${g.id}:${it.id}`]: Math.min(cap, Math.max(1, next)) }));
+                    /*
+                     * At one portion the minus removes the choice outright, even
+                     * in a required group — anything selected can be deselected.
+                     * An incomplete plate is caught by `missing`, which keeps the
+                     * Add-plate button disabled and says what is still needed, so
+                     * disabling this button only strands the customer with a
+                     * choice they cannot take back.
+                     */
+                    const delta = g.priced ? extraCost(Number(it.price) || 0, count) : portionCost(it, count);
 
-                    if (g.priced && cap > 1 && on) {
+                    if (cap > 1 && on) {
                       return (
                         <div
                           key={it.id}
@@ -864,12 +964,22 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                         >
                           <span className="min-w-0">
                             <span className="block truncate font-semibold">{it.label}</span>
-                            <span className="font-mono text-xs text-ink/60">
-                              + {zar(extraCost(Number(it.price) || 0, count))}
-                              {count > 1 && <span className="text-ink/40"> · {zar(Number(it.price) || 0)} each</span>}
+                            <span className="font-mono text-xs text-theme-soft">
+                              {count === 1 ? (
+                                /* The first portion is inside the plate price,
+                                   so R0 would be a strange thing to print. */
+                                g.priced ? `+ ${zar(0)}` : 'Included'
+                              ) : (
+                                <>
+                                  + {zar(delta)}
+                                  <span className="text-theme-muted">
+                                    {' '}· {zar(g.priced ? Number(it.price) || 0 : extraPortionPrice(g))} each
+                                  </span>
+                                </>
+                              )}
                             </span>
                           </span>
-                          <span className="inline-flex shrink-0 items-center rounded-full border-2 border-ink/20 bg-white">
+                          <span className="inline-flex shrink-0 items-center rounded-full border-2 border-theme/20 bg-surface">
                             <button
                               type="button"
                               onClick={() => (count <= 1 ? toggle(g, it.id) : setCount(count - 1))}
@@ -910,21 +1020,29 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                         role={isChoice ? 'radio' : 'checkbox'}
                         aria-checked={on}
                         onClick={() => toggle(g, it.id)}
-                        className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'}`}
+                        className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-theme/12 hover:border-theme/30'}`}
                       >
                         <span className="flex min-w-0 items-center gap-2">
                           <span
                             aria-hidden="true"
-                            className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'}`}
+                            className={`grid h-4 w-4 shrink-0 place-items-center border-2 ${isChoice ? 'rounded-full' : 'rounded-[4px]'} ${on ? 'border-ochre bg-ochre' : 'border-theme/30 bg-surface'}`}
                           >
                             {on && (isChoice
                               ? <span className="h-1.5 w-1.5 rounded-full bg-ink" />
-                              : <svg viewBox="0 0 12 12" className="h-3 w-3 text-ink" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
+                              : <svg viewBox="0 0 12 12" className="h-3 w-3 text-theme" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m2 6.5 2.5 2.5L10 3.5" /></svg>)}
                           </span>
                           <span className="min-w-0">{it.label}</span>
                         </span>
-                        <span className={`shrink-0 font-mono text-xs ${g.priced ? 'font-semibold text-ink/70' : 'text-ink/40'}`}>
+                        <span className={`shrink-0 font-mono text-xs ${g.priced ? 'font-semibold text-theme-soft' : 'text-theme-muted'}`}>
                           {g.priced ? `+ ${zar(Number(it.price) || 0)}` : 'Included'}
+                          {/*
+                            A second one costs money, so "Included" on its own
+                            would read as "all of it is free". The + shows what
+                            the tap that follows will cost.
+                          */}
+                          {!g.priced && extraPortionPrice(g) > 0 && (
+                            <span className="text-theme-muted"> · 2nd + {zar(extraPortionPrice(g))}</span>
+                          )}
                         </span>
                       </button>
                     );
@@ -935,13 +1053,13 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
           </div>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-ink/10 bg-bone p-5">
+        <footer className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-theme/10 bg-canvas p-5">
           <div>
-            <p className="font-mono text-xs uppercase tracking-wider text-ink/45">Plate price · delivery included in Sandton &amp; Rosebank</p>
+            <p className="font-mono text-xs uppercase tracking-wider text-theme-muted">Plate price · delivery included in Sandton &amp; Rosebank</p>
             <p className="font-display text-3xl font-bold">{zar(total)}</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="inline-flex items-center rounded-full border-2 border-ink/12">
+            <div className="inline-flex items-center rounded-full border-2 border-theme/12">
               <button type="button" onClick={() => setQty((n) => Math.max(1, n - 1))} className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone" aria-label="Fewer plates">−</button>
               <span className="w-8 text-center font-mono text-sm font-semibold">{qty}</span>
               <button type="button" onClick={() => setQty((n) => Math.min(10, n + 1))} className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone" aria-label="More plates">+</button>

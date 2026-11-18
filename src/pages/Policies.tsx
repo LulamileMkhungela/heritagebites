@@ -40,7 +40,7 @@ export default function Policies() {
           <SectionLabel onDark>Policies</SectionLabel>
           <h1 className="max-w-3xl font-display text-5xl font-semibold md:text-6xl">Delivery, refunds and privacy, in plain language</h1>
           <p className="mt-4 max-w-2xl text-bone/70">
-            Privacy, terms of use, delivery and collection, refunds and cancellations — the policies that apply when you
+            Privacy, terms of use, delivery, refunds and cancellations — the policies that apply when you
             order from Heritage Bites.
           </p>
         </div>
@@ -55,14 +55,14 @@ export default function Policies() {
           */}
           <div className="lg:sticky lg:top-28 lg:self-start">
           <nav aria-label="Policies">
-            <p className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">On this page</p>
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-accent">On this page</p>
             <ul className="space-y-1">
               {policies.map((p) => (
                 <li key={p.id}>
                   <a
                     href={`#${p.id}`}
                     onClick={() => setActive(p.id)}
-                    className={`flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${active === p.id ? 'bg-ink text-bone' : 'text-ink/65 hover:bg-ink/5'}`}
+                    className={`flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${active === p.id ? 'bg-ink text-bone' : 'text-theme-soft hover:bg-ink/5'}`}
                   >
                     {p.title}
                   </a>
@@ -72,7 +72,7 @@ export default function Policies() {
           </nav>
           {/* The number and the address are links here too: this note is the one
               place a reader is most likely to act on them. */}
-          <p className="mt-4 rounded-xl border border-ink/10 bg-white p-3 text-xs leading-relaxed text-ink/50">
+          <p className="mt-4 rounded-xl border border-theme/10 bg-surface p-3 text-xs leading-relaxed text-theme-soft">
             <ContactText>
               {`Questions about any of this? Call or WhatsApp ${settings?.phoneDisplay ?? '+27 67 013 7587'}, or email ${settings?.email ?? 'heritagebitesfood@gmail.com'}.`}
             </ContactText>
@@ -84,19 +84,19 @@ export default function Policies() {
               <section
                 key={policy.id}
                 id={policy.id}
-                className="scroll-mt-28 rounded-[2rem] border-2 border-ink/10 bg-white p-6 md:p-9"
+                className="scroll-mt-28 rounded-[2rem] border-2 border-theme/10 bg-surface p-6 md:p-9"
                 aria-labelledby={`policy-${policy.id}`}
               >
                 <h2 id={`policy-${policy.id}`} className="font-display text-3xl font-semibold">{policy.title}</h2>
-                <p className="mt-1 font-mono text-xs uppercase tracking-wider text-ink/40">
+                <p className="mt-1 font-mono text-xs uppercase tracking-wider text-theme-muted">
                   Last updated {new Date(policy.updated).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
-                <p className="mt-4 text-[15px] leading-relaxed text-ink/75">{policy.intro}</p>
+                <p className="mt-4 text-[15px] leading-relaxed text-theme-soft">{policy.intro}</p>
                 <div className="mt-5 space-y-4">
                   {policy.sections.map((section) => (
                     <div key={section.heading}>
-                      <h3 className="text-sm font-bold uppercase tracking-wide text-ink">{section.heading}</h3>
-                      <p className="mt-1 text-[14px] leading-relaxed text-ink/70">{section.body}</p>
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-theme">{section.heading}</h3>
+                      <p className="mt-1 text-[14px] leading-relaxed text-theme-soft">{section.body}</p>
                     </div>
                   ))}
                 </div>

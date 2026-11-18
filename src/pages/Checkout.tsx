@@ -291,13 +291,11 @@ function LiveCheckout() {
   }, []);
 
   /*
-   * Card and cash are both accepted on collection *and* on delivery.
+   * Card and cash are both accepted, on the one way food leaves this kitchen.
    *
-   * The kitchen takes card either way — there is a Yoco card machine at the
-   * collection point, and the driver brings one to a delivery — so restricting
-   * cash to collection only forced a delivery customer into an online payment
-   * they may not have been able to make. The choice on screen is now simply the
-   * customer's, and it is honoured.
+   * The driver carries a Yoco card machine, so card is not the only route a
+   * delivery customer has and cash is not a collection-only relic. The choice on
+   * screen is simply the customer's, and it is honoured.
    */
   const method2: PayMethod = method;
 
@@ -386,7 +384,7 @@ function LiveCheckout() {
    * rule is now one flag both paths read, so neither can be pressed while the
    * basket is short, and neither explains it differently.
    *
-   * An empty basket never gets this far (the page shows "Your basket is empty"),
+   * An empty basket never gets this far (the page shows "Your cart is empty"),
    * so this really is only about a basket that holds too little.
    */
   const belowMinimum = localSubtotal < Number(settings?.minDeliveryOrder ?? 100);
@@ -477,7 +475,7 @@ function LiveCheckout() {
         setQuote({ subtotal: r.totals.subtotal, delivery: r.totals.delivery, total: r.totals.total });
         setFatal(null);
       } catch (e) {
-        setFatal(e instanceof ApiError ? e.errors.join(' ') : 'Could not price your basket.');
+        setFatal(e instanceof ApiError ? e.errors.join(' ') : 'Could not price your cart.');
       } finally {
         setState('idle');
       }
@@ -611,23 +609,23 @@ function LiveCheckout() {
       <section className="mx-auto max-w-lg px-4 py-20 text-center">
         <p className="text-4xl">🧾</p>
         <h1 className="mt-4 font-display text-3xl font-semibold">Order {redirect.orderCode} is saved</h1>
-        <p className="mt-3 text-ink/65">
+        <p className="mt-3 text-theme-soft">
           The last step is the payment, on Yoco&apos;s secure page. Nothing is cooked until it is paid, and the order
           stays reserved while you pay.
         </p>
         <a
           href={redirect.url}
-          className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
+          className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full hb-gold px-6 py-3 text-sm font-bold uppercase tracking-wide text-theme"
         >
           Continue to Yoco payment
         </a>
         <Link
           to={`/order/${redirect.orderCode}`}
-          className="mt-3 inline-flex min-h-11 items-center justify-center text-sm font-semibold text-ochre-deep underline"
+          className="mt-3 inline-flex min-h-11 items-center justify-center text-sm font-semibold text-accent underline"
         >
           I have paid — show my order
         </Link>
-        <p className="mt-4 text-xs leading-relaxed text-ink/50">
+        <p className="mt-4 text-xs leading-relaxed text-theme-soft">
           Yoco confirms the payment to us directly, so this page will show it as paid even if you close the tab now.
         </p>
       </section>
@@ -645,7 +643,7 @@ function LiveCheckout() {
           height={96}
           className="mx-auto h-24 w-24 object-contain opacity-85"
         />
-        <h1 className="mt-4 font-display text-4xl font-semibold">Your basket is empty</h1>
+        <h1 className="mt-4 font-display text-4xl font-semibold">Your cart is empty</h1>
         {/*
           Say what a checkout needs, not just that this one is empty.
 
@@ -657,19 +655,19 @@ function LiveCheckout() {
           and finding that out only at the end of the form is the same dead end
           in a later costume.
         */}
-        <p className="mt-3 text-ink/60">
+        <p className="mt-3 text-theme-soft">
           A checkout needs something in it. Pick a plate or a side from the menu — delivery orders start at{' '}
           {zar(Number(settings?.minDeliveryOrder ?? 100))}.
         </p>
         <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link to="/menu" className="inline-flex min-h-11 items-center rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone">
+          <Link to="/menu" className="inline-flex min-h-11 items-center rounded-full hb-gold px-6 py-3 text-sm font-bold uppercase tracking-wide text-theme">
             Browse the menu
           </Link>
           <a
             href={waHref(settings?.whatsapp, 'Hi Heritage Bites! I would like to place an order — what can you cook for me?')}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-11 items-center rounded-full border-2 border-ink px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+            className="inline-flex min-h-11 items-center rounded-full border-2 border-theme px-6 py-3 text-sm font-bold uppercase tracking-wide text-theme transition-colors hover:bg-ink hover:text-bone"
           >
             Order on WhatsApp
           </a>
@@ -699,7 +697,7 @@ function LiveCheckout() {
       <BackToWhereIWas />
       <div className="flex items-center justify-between gap-4">
         <SectionLabel>Checkout</SectionLabel>
-        <HeritageMark className="h-7 w-7 text-ink/70" />
+        <HeritageMark className="h-7 w-7 text-theme-soft" />
       </div>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Almost there</h1>
 
@@ -715,15 +713,15 @@ function LiveCheckout() {
       */}
       {closed && service && (
         <div className="mt-4 rounded-2xl border-2 border-ochre bg-ochre/10 p-4">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-ochre-deep">{service.headline}</p>
-          <p className="mt-1 text-[13px] font-medium text-ink">{service.message}</p>
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-accent">{service.headline}</p>
+          <p className="mt-1 text-[13px] font-medium text-theme">{service.message}</p>
           {/*
             The panel only appears when nothing later is booked, so it never has
             to explain a booking — the day picker below is the way out, and it
             is the honest one: the kitchen cannot cook today, but it can cook
             next Thursday and will say so.
           */}
-          <p className="mt-2 text-[13px] leading-relaxed text-ink/70">
+          <p className="mt-2 text-[13px] leading-relaxed text-theme-soft">
             We have stopped taking orders for today, but you can book any cooking day below and check out normally. If
             you need food sooner, message us — the kitchen will tell you whether it can prepare it anyway.
           </p>
@@ -753,21 +751,21 @@ function LiveCheckout() {
             first choice is "the next cooking day", which is what an order
             placed today means when the customer does not think about it.
           */}
-          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
-            <p className="mt-1 text-xs leading-snug text-ink/55">
+          <fieldset className="rounded-3xl border-2 border-theme/10 bg-surface p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">Which day?</legend>
+            <p className="mt-1 text-xs leading-snug text-theme-soft">
               This is the cooking week. Order today and choose any Thursday or Friday ahead — including several weeks
               from now — so nothing has to wait for the next one.
             </p>
             {bookable.length === 0 ? (
-              <p className="mt-3 text-sm text-ink/60">
+              <p className="mt-3 text-sm text-theme-soft">
                 The kitchen has not opened its diary yet. Add the basket and send it on WhatsApp — we will confirm a day
                 with you.
               </p>
             ) : (
               <WeekSchedule settings={settings} bookable={bookable} chosen={plannedDate} onChoose={setPlannedDate} />
             )}
-            <p className="mt-3 text-[12px] leading-relaxed text-ink/50">
+            <p className="mt-3 text-[12px] leading-relaxed text-theme-soft">
               {planned
                 ? `Booked for ${planned.label}. The order leaves today and the kitchen cooks it on that day — the WhatsApp message says so in as many words.`
                 : 'Leave this alone and the kitchen cooks it on the next cooking day, the same way an order placed on the day always has.'}
@@ -775,8 +773,8 @@ function LiveCheckout() {
           </fieldset>
 
           {/* Details */}
-          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Your details</legend>
+          <fieldset className="rounded-3xl border-2 border-theme/10 bg-surface p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">Your details</legend>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <Field label="Full name" error={errors.name}>
                 <input className={inputCls} value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} autoComplete="name" placeholder="Thabo Mahlangu" />
@@ -929,7 +927,7 @@ function LiveCheckout() {
                 {geo.status === 'asking' ? 'Finding your address…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
               </Button>
               {zone.zone !== 'unknown' && (
-                <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-ochre-deep' : 'text-emerald-700'}`} role="status">
+                <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-accent' : 'text-emerald-700'}`} role="status">
                   {tooFar
                     ? `${zone.distanceKm} km away — outside our ${rules.maxKm} km delivery area`
                     : zone.zone === 'surcharge'
@@ -944,10 +942,10 @@ function LiveCheckout() {
                 Silence reads as a broken button.
               */}
               {geo.status === 'denied' && (
-                <span className="text-xs leading-relaxed text-ink/50">{deniedMessage(geo.reason)}</span>
+                <span className="text-xs leading-relaxed text-theme-soft">{deniedMessage(geo.reason)}</span>
               )}
               {geo.status === 'ok' && !geo.precise && (
-                <span className="text-xs text-ink/45">
+                <span className="text-xs text-theme-muted">
                   Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
                 </span>
               )}
@@ -959,31 +957,22 @@ function LiveCheckout() {
               </p>
             )}
             {/*
-              No "get the collection point" button here. The order now finishes
-              on WhatsApp, and the collection address is sent in that same chat,
-              so a button that opens a second conversation only loses the one
-              message the kitchen needs.
-            */}
-
-            {/*
               Payment belongs to the same question — how the food arrives and how
               it is paid for is one decision, made together at the top of the
               form rather than in its own section at the bottom.
             */}
-            <div className="mt-6 border-t-2 border-ink/10 pt-5">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</p>
+            <div className="mt-6 border-t-2 border-theme/10 pt-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">How do you want to pay?</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {([
                   {
                     id: 'card' as PayMethod,
                     label: 'Card',
                     /*
-                     * Card is always offered, because the business can always
-                     * take it: on collection there is a Yoco card machine at the
-                     * counter, and on delivery the kitchen brings one. When the
-                     * online checkout is wired up the customer pays before the
-                     * food is cooked instead; that is a difference in *when*, not
-                     * in whether card is accepted.
+                     * Card is always offered: on delivery the driver carries a
+                     * Yoco card machine. When the online checkout is wired up the
+                     * customer pays before the food is cooked instead; that is a
+                     * difference in *when*, not in whether card is accepted.
                      */
                     /*
                      * The card blurb follows the fulfilment. Saying "at your
@@ -1006,14 +995,14 @@ function LiveCheckout() {
                     type="button"
                     onClick={() => setMethod(m.id)}
                     aria-pressed={method2 === m.id}
-                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method2 === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
+                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method2 === m.id ? 'border-ochre bg-ochre/10' : 'border-theme/12 hover:border-theme/30'}`}
                   >
-                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method2 === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
+                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method2 === m.id ? 'border-ochre bg-ochre' : 'border-theme/25'}`}>
                       {method2 === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
                     </span>
                     <span>
                       <span className="block text-sm font-semibold">{m.label}</span>
-                      <span className="block text-xs text-ink/55">{m.blurb}</span>
+                      <span className="block text-xs text-theme-soft">{m.blurb}</span>
                     </span>
                   </button>
                 ))}
@@ -1026,12 +1015,12 @@ function LiveCheckout() {
                 Yoco card machine. No paragraph about what is not connected.
               */}
               {method2 === 'card' && online && (
-                <p className="mt-3 text-xs leading-relaxed text-ink/55">
+                <p className="mt-3 text-xs leading-relaxed text-theme-soft">
                   You&apos;ll pay on Yoco&apos;s secure page. We send the payment link on WhatsApp.
                 </p>
               )}
               {!online && (
-                <p className="mt-3 text-xs leading-relaxed text-ink/55">
+                <p className="mt-3 text-xs leading-relaxed text-theme-soft">
                   Secure Yoco payment — card or instant EFT — is sent as a link in your WhatsApp chat.
                 </p>
               )}
@@ -1046,25 +1035,25 @@ function LiveCheckout() {
 
         {/* Summary */}
         <aside className="lg:sticky lg:top-28 lg:self-start">
-          <div className="overflow-hidden rounded-3xl border-2 border-ink/10 bg-white">
-            <div className="border-b-2 border-ink/10 px-5 py-4">
+          <div className="overflow-hidden rounded-3xl border-2 border-theme/10 bg-surface">
+            <div className="border-b-2 border-theme/10 px-5 py-4">
               <h2 className="font-display text-xl font-semibold">Order summary</h2>
-              <p className="text-xs text-ink/50">
+              <p className="text-xs text-theme-soft">
                 {lines.reduce((n, l) => n + l.qty, 0)} {lines.reduce((n, l) => n + l.qty, 0) === 1 ? 'item' : 'items'} · {fulfilment}
               </p>
             </div>
 
             <div className="max-h-72 overflow-y-auto px-5 py-3">
               {lines.map((l) => (
-                <div key={l.key} className="flex items-start gap-3 border-b border-ink/8 py-3 last:border-0">
+                <div key={l.key} className="flex items-start gap-3 border-b border-theme/8 py-3 last:border-0">
                   <img src={l.image} alt="" className="h-12 w-12 rounded-lg object-cover" loading="lazy" />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px] font-semibold leading-tight">{l.name}</p>
-                    {l.picks.length > 0 && <p className="text-xs leading-snug text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</p>}
+                    {l.picks.length > 0 && <p className="text-xs leading-snug text-theme-soft">{l.picks.map((p) => p.label).join(' · ')}</p>}
                     <div className="mt-1 flex items-center gap-2">
-                      <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="grid h-11 w-11 place-items-center rounded-full border border-ink/20 text-sm hover:bg-ink hover:text-bone" aria-label="Decrease">−</button>
+                      <button type="button" onClick={() => setQty(l.key, l.qty - 1)} className="grid h-11 w-11 place-items-center rounded-full border border-theme/20 text-sm hover:bg-ink hover:text-bone" aria-label="Decrease">−</button>
                       <span className="font-mono text-xs">{l.qty}</span>
-                      <button type="button" onClick={() => setQty(l.key, l.qty + 1)} className="grid h-11 w-11 place-items-center rounded-full border border-ink/20 text-sm hover:bg-ink hover:text-bone" aria-label="Increase">+</button>
+                      <button type="button" onClick={() => setQty(l.key, l.qty + 1)} className="grid h-11 w-11 place-items-center rounded-full border border-theme/20 text-sm hover:bg-ink hover:text-bone" aria-label="Increase">+</button>
                     </div>
                   </div>
                   <span className="font-mono text-[13px] font-semibold">{zar(l.unitPrice * l.qty)}</span>
@@ -1072,21 +1061,21 @@ function LiveCheckout() {
               ))}
             </div>
 
-            <div className="border-t-2 border-ink/10 px-5 py-4">
+            <div className="border-t-2 border-theme/10 px-5 py-4">
               <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between text-ink/60">
-                  <span>Subtotal {state === 'quoting' && <span className="text-ink/30">· updating…</span>}</span>
+                <div className="flex justify-between text-theme-soft">
+                  <span>Subtotal {state === 'quoting' && <span className="text-theme/30">· updating…</span>}</span>
                   <span className="font-mono">{zar(shown.subtotal)}</span>
                 </div>
                 {fulfilment === 'delivery' && (
-                  <div className="flex justify-between text-ink/60">
+                  <div className="flex justify-between text-theme-soft">
                     <span>Delivery</span>
                     <span className="font-mono">
                       {shown.delivery > 0 ? zar(shown.delivery) : 'Free'}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between border-t border-ink/10 pt-2 text-lg font-bold">
+                <div className="flex justify-between border-t border-theme/10 pt-2 text-lg font-bold">
                   <span>Total</span>
                   <span className="font-mono">{zar(shown.total)}</span>
                 </div>
@@ -1099,7 +1088,7 @@ function LiveCheckout() {
                   below R100 — this is the sentence that explains the grey button.
                 */}
                 {belowMinimum && (
-                  <p id="hb-checkout-minimum" className="mt-3 rounded-xl border-2 border-ochre bg-ochre/10 p-3 text-[12px] font-medium text-ink/75">
+                  <p id="hb-checkout-minimum" className="mt-3 rounded-xl border-2 border-ochre bg-ochre/10 p-3 text-[12px] font-medium text-theme-soft">
                     {minimumProblem}
                   </p>
                 )}
@@ -1120,7 +1109,7 @@ function LiveCheckout() {
                 One primary action, and a second way out that always works.
                 The order finishes on WhatsApp, so the second button is not a
                 fallback bolted on afterwards — it is the same order, sent to the
-                chat where the Yoco link and the collection address arrive.
+                chat where the Yoco link and the delivery details arrive.
               */}
               <Button
                 type="submit"
@@ -1147,7 +1136,7 @@ function LiveCheckout() {
                   target="_blank"
                   rel="noreferrer"
                   onClick={rememberWhatsAppDetails}
-                  className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-ink bg-white px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-bone"
+                  className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-theme bg-surface px-6 py-3 text-sm font-bold uppercase tracking-wide text-theme transition-colors hover:bg-ink hover:text-bone"
                 >
                   {closed ? 'Ask on WhatsApp if we can cook it' : 'Complete order on WhatsApp'}
                 </a>
@@ -1161,24 +1150,24 @@ function LiveCheckout() {
                   type="button"
                   onClick={() => setErrors(waProblems)}
                   aria-disabled="true"
-                  className="mt-2 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border-2 border-ink/25 bg-ink/5 px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink/40"
+                  className="mt-2 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border-2 border-theme/25 bg-ink/5 px-6 py-3 text-sm font-bold uppercase tracking-wide text-theme-muted"
                 >
                   Complete order on WhatsApp
                 </button>
               )}
 
-              <p className={`mt-3 text-xs leading-relaxed ${waReady ? 'text-ink/55' : 'font-medium text-chili'}`}>
+              <p className={`mt-3 text-xs leading-relaxed ${waReady ? 'text-theme-soft' : 'font-medium text-chili'}`}>
                 {closed
-                  ? 'The window has closed, so this sends your basket as a question rather than an order. If the kitchen can still prepare it, someone will reply and arrange payment with you.'
+                  ? 'The window has closed, so this sends your cart as a question rather than an order. If the kitchen can still prepare it, someone will reply and arrange payment with you.'
                   : waReady
                     ? `Your order goes to WhatsApp with every detail already filled in — name, number, the basket, the delivery address, and your notes. Send it and we confirm, then pay ${method2 === 'cash' ? 'cash to the driver' : 'by secure Yoco link or card'}.`
                     : `${waBlocked}. Fill that in above and this button opens WhatsApp with the whole order.`}
               </p>
-              <p className="mt-2 text-xs leading-relaxed text-ink/45">
+              <p className="mt-2 text-xs leading-relaxed text-theme-muted">
                 By ordering you agree to our{' '}
-                <Link to="/policies" className="font-semibold text-ochre-deep underline">terms, delivery and refund policies</Link>.
+                <Link to="/policies" className="font-semibold text-accent underline">terms, delivery and refund policies</Link>.
               </p>
-              <WovenRule className="mt-4 h-1.5 w-24 text-ink/60" />
+              <WovenRule className="mt-4 h-1.5 w-24 text-theme-soft" />
             </div>
           </div>
 
@@ -1234,7 +1223,7 @@ function BackToWhereIWas({ to = '/menu', label = 'Back to the menu' }: { to?: st
     <button
       type="button"
       onClick={goBack}
-      className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-ink/60 transition-colors hover:text-ink"
+      className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-theme-soft transition-colors hover:text-theme"
     >
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="m15 18-6-6 6-6" />
@@ -1314,15 +1303,15 @@ function WeekSchedule({
           const inner = (
             <span className="flex w-full items-center justify-between gap-3">
               <span className="min-w-0">
-                <span className={`block text-sm ${open ? 'font-semibold' : 'text-ink/45'}`}>{label}</span>
-                <span className="block font-mono text-[11px] text-ink/45">
+                <span className={`block text-sm ${open ? 'font-semibold' : 'text-theme-muted'}`}>{label}</span>
+                <span className="block font-mono text-[11px] text-theme-muted">
                   {open && next ? `Next: ${next.label.replace(`${label} `, '')}` : open ? 'Open — dates coming' : 'Not a cooking day'}
                 </span>
               </span>
               <span
                 aria-hidden="true"
                 className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${
-                  !open ? 'border-ink/15' : on ? 'border-ochre bg-ochre' : 'border-ink/30 bg-white'
+                  !open ? 'border-theme/15' : on ? 'border-ochre bg-ochre' : 'border-theme/30 bg-surface'
                 }`}
               >
                 {on && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
@@ -1336,7 +1325,7 @@ function WeekSchedule({
                 key={label}
                 data-weekday={label}
                 aria-disabled="true"
-                className="flex items-center rounded-xl border-2 border-dashed border-ink/10 bg-bone-2/40 px-3 py-2.5"
+                className="flex items-center rounded-xl border-2 border-dashed border-theme/10 bg-surface-2/40 px-3 py-2.5"
               >
                 {inner}
               </li>
@@ -1351,7 +1340,7 @@ function WeekSchedule({
                 onClick={() => onChoose(on ? '' : next.date)}
                 aria-pressed={on}
                 className={`flex w-full items-center rounded-xl border-2 px-3 py-2.5 text-left transition-all ${
-                  on ? 'border-ochre bg-ochre/15' : 'border-ink/12 hover:border-ink/30'
+                  on ? 'border-ochre bg-ochre/15' : 'border-theme/12 hover:border-theme/30'
                 }`}
               >
                 {inner}
@@ -1364,7 +1353,7 @@ function WeekSchedule({
       {/* The other dates inside the booking horizon, so a specific week is pickable. */}
       {bookable.length > 2 && (
         <details className="mt-3">
-          <summary className="cursor-pointer text-sm font-semibold text-ochre-deep">
+          <summary className="cursor-pointer text-sm font-semibold text-accent">
             Or pick a specific date
           </summary>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -1377,14 +1366,14 @@ function WeekSchedule({
                   onClick={() => onChoose(on ? '' : d.date)}
                   aria-pressed={on}
                   className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2 text-left text-sm transition-all ${
-                    on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-ink/12 hover:border-ink/30'
+                    on ? 'border-ochre bg-ochre/15 font-semibold' : 'border-theme/12 hover:border-theme/30'
                   }`}
                 >
                   <span className="min-w-0">
                     <span className="block">{d.label}</span>
-                    <span className="font-mono text-[11px] text-ink/50">
+                    <span className="font-mono text-[11px] text-theme-soft">
                       {d.open}–{d.close}
-                      {d.isToday && <span className="text-ochre-deep"> · today</span>}
+                      {d.isToday && <span className="text-accent"> · today</span>}
                     </span>
                   </span>
                   {on && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink" />}
@@ -1485,7 +1474,7 @@ function PreviewCheckout() {
    */
   const problem =
     !lines.length
-      ? 'Your basket is empty.'
+      ? 'Your cart is empty.'
       : !customer.name.trim()
         ? 'Add your full name first'
         : !customer.phone.trim()
@@ -1514,7 +1503,7 @@ function PreviewCheckout() {
       <BackToWhereIWas />
       <SectionLabel>Checkout</SectionLabel>
       <h1 className="font-display text-4xl font-semibold md:text-5xl">Finish your order</h1>
-      <p className="mt-3 max-w-2xl text-ink/65">
+      <p className="mt-3 max-w-2xl text-theme-soft">
         Give us your details and where to deliver, then send the order on WhatsApp. The kitchen confirms the total and
         the cooking day before anything is paid.
       </p>
@@ -1522,14 +1511,14 @@ function PreviewCheckout() {
       <form onSubmit={(e) => e.preventDefault()} className="mt-8 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <div className="space-y-6">
           {/* Which cooking day — the same choices the live checkout offers. */}
-          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Which day?</legend>
-            <p className="mt-1 text-xs leading-snug text-ink/55">
+          <fieldset className="rounded-3xl border-2 border-theme/10 bg-surface p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">Which day?</legend>
+            <p className="mt-1 text-xs leading-snug text-theme-soft">
               This is the cooking week. Order today and choose any Thursday or Friday ahead — including several weeks
               from now — so nothing has to wait for the next one.
             </p>
             {bookable.length === 0 ? (
-              <p className="mt-3 text-sm text-ink/60">
+              <p className="mt-3 text-sm text-theme-soft">
                 The diary is not open for booking on this build. Add the basket and send it on WhatsApp — we will confirm
                 a day with you.
               </p>
@@ -1537,7 +1526,7 @@ function PreviewCheckout() {
               <WeekSchedule settings={settings} bookable={bookable} chosen={plannedDate} onChoose={setPlannedDate} />
             )}
             {planned && (
-              <p className="mt-3 text-[12px] leading-relaxed text-ink/50">
+              <p className="mt-3 text-[12px] leading-relaxed text-theme-soft">
                 Your WhatsApp message will open with “order placed today, for {planned.label}”, so the kitchen knows
                 which day to cook it for.
               </p>
@@ -1545,8 +1534,8 @@ function PreviewCheckout() {
           </fieldset>
 
           {/* Details */}
-          <fieldset className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">Your details</legend>
+          <fieldset className="rounded-3xl border-2 border-theme/10 bg-surface p-6">
+            <legend className="px-1 font-mono text-xs uppercase tracking-[0.2em] text-accent">Your details</legend>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <Field label="Full name">
                 <input className={inputCls} value={customer.name} autoComplete="name" placeholder="Thabo Mahlangu" onChange={(e) => setCustomer({ ...customer, name: e.target.value })} />
@@ -1626,7 +1615,7 @@ function PreviewCheckout() {
                 {geo.status === 'asking' ? 'Checking…' : geo.status === 'ok' ? 'Location checked ✓' : 'Use my current location'}
               </Button>
               {zone.zone !== 'unknown' && (
-                <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-ochre-deep' : 'text-emerald-700'}`} role="status">
+                <span className={`text-xs font-semibold ${tooFar ? 'text-red-700' : zone.zone === 'surcharge' ? 'text-accent' : 'text-emerald-700'}`} role="status">
                   {tooFar
                     ? `${zone.distanceKm} km away — outside our ${rules.maxKm} km delivery area`
                     : zone.zone === 'surcharge'
@@ -1637,10 +1626,10 @@ function PreviewCheckout() {
               {/* Same two notes as the live checkout: a refused button must say
                   why, and a coarse fix must be labelled as coarse. */}
               {geo.status === 'denied' && (
-                <span className="text-xs leading-relaxed text-ink/50">{deniedMessage(geo.reason)}</span>
+                <span className="text-xs leading-relaxed text-theme-soft">{deniedMessage(geo.reason)}</span>
               )}
               {geo.status === 'ok' && !geo.precise && (
-                <span className="text-xs text-ink/45">
+                <span className="text-xs text-theme-muted">
                   Approximate fix (±{Math.round(geo.accuracyM / 100) / 10} km) — pick your address above for an exact check.
                 </span>
               )}
@@ -1653,8 +1642,8 @@ function PreviewCheckout() {
             )}
             {/* Payment sits in the same section as the details, not in a fieldset
                 of its own — one form, one place to fill it in. */}
-            <div className="mt-6 border-t-2 border-ink/10 pt-5">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-ochre-deep">How do you want to pay?</p>
+            <div className="mt-6 border-t-2 border-theme/10 pt-5">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">How do you want to pay?</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {([
                   { id: 'link' as const, label: 'Payment link', blurb: 'We send a Yoco link in the chat' },
@@ -1665,14 +1654,14 @@ function PreviewCheckout() {
                     type="button"
                     onClick={() => setMethod(m.id)}
                     aria-pressed={method === m.id}
-                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method === m.id ? 'border-ochre bg-ochre/10' : 'border-ink/12 hover:border-ink/30'}`}
+                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-all ${method === m.id ? 'border-ochre bg-ochre/10' : 'border-theme/12 hover:border-theme/30'}`}
                   >
-                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method === m.id ? 'border-ochre bg-ochre' : 'border-ink/25'}`}>
+                    <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${method === m.id ? 'border-ochre bg-ochre' : 'border-theme/25'}`}>
                       {method === m.id && <span className="h-1.5 w-1.5 rounded-full bg-ink" />}
                     </span>
                     <span>
                       <span className="block text-sm font-semibold">{m.label}</span>
-                      <span className="block text-xs text-ink/55">{m.blurb}</span>
+                      <span className="block text-xs text-theme-soft">{m.blurb}</span>
                     </span>
                   </button>
                 ))}
@@ -1683,7 +1672,7 @@ function PreviewCheckout() {
                 the payment and a webhook to confirm it. Saying so beats a greyed
                 out button nobody explains.
               */}
-              <p className="mt-3 text-xs leading-relaxed text-ink/50">
+              <p className="mt-3 text-xs leading-relaxed text-theme-soft">
                 No card is taken on this page. Online card payment switches on with the live site; until then we send you a
                 secure Yoco link in the chat, and you pay there.
               </p>
@@ -1693,10 +1682,10 @@ function PreviewCheckout() {
 
         {/* Basket */}
         <aside className="lg:sticky lg:top-28 lg:self-start">
-          <div className="rounded-3xl border-2 border-ink/10 bg-white p-6">
-            <h2 className="font-display text-2xl font-semibold">Your basket</h2>
+          <div className="rounded-3xl border-2 border-theme/10 bg-surface p-6">
+            <h2 className="font-display text-2xl font-semibold">Your cart</h2>
             {lines.length === 0 ? (
-              <p className="mt-3 text-sm text-ink/60">Nothing in the basket yet.</p>
+              <p className="mt-3 text-sm text-theme-soft">Nothing in the cart yet.</p>
             ) : (
               <ul className="mt-4 divide-y divide-ink/10">
                 {lines.map((l) => (
@@ -1704,7 +1693,7 @@ function PreviewCheckout() {
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold">{l.qty} × {l.name}</span>
                       {l.picks.length > 0 && (
-                        <span className="mt-0.5 block text-[12px] text-ink/50">{l.picks.map((p) => p.label).join(' · ')}</span>
+                        <span className="mt-0.5 block text-[12px] text-theme-soft">{l.picks.map((p) => p.label).join(' · ')}</span>
                       )}
                     </span>
                     <span className="font-mono text-sm tabular-nums">{zar(l.unitPrice * l.qty)}</span>
@@ -1714,26 +1703,26 @@ function PreviewCheckout() {
             )}
 
             {lines.length > 0 && (
-              <p className="mt-4 flex items-baseline justify-between border-t-2 border-ink/10 pt-4">
+              <p className="mt-4 flex items-baseline justify-between border-t-2 border-theme/10 pt-4">
                 <span className="text-sm font-semibold">Subtotal · delivery</span>
-                <span className="font-display text-2xl font-bold text-ochre-deep">{zar(subtotal)}</span>
+                <span className="font-display text-2xl font-bold text-accent">{zar(subtotal)}</span>
               </p>
             )}
 
-            <p className="mt-3 text-xs leading-relaxed text-ink/45">
+            <p className="mt-3 text-xs leading-relaxed text-theme-muted">
               Delivery is included in Sandton and Rosebank; outside them a fee applies, and we deliver up to{' '}
               {rules.maxKm} km. The kitchen confirms the total with you before anything is charged.
             </p>
 
             <div className="mt-5 flex flex-col gap-3">
               {problem ? (
-                <span className="inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-full border-2 border-ink/25 bg-ink/5 px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink/40">
+                <span className="inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-full border-2 border-theme/25 bg-ink/5 px-6 py-3 text-sm font-bold uppercase tracking-wide text-theme-muted">
                   Order on WhatsApp
                 </span>
               ) : (
                 <LinkButton href={wa} variant="primary">Order on WhatsApp</LinkButton>
               )}
-              <p className={`text-xs leading-relaxed ${problem ? 'font-medium text-chili' : 'text-ink/55'}`}>{problem ?? 'Opens WhatsApp with your order, details and payment choice already written out.'}</p>
+              <p className={`text-xs leading-relaxed ${problem ? 'font-medium text-chili' : 'text-theme-soft'}`}>{problem ?? 'Opens WhatsApp with your order, details and payment choice already written out.'}</p>
               <LinkButton to="/menu" variant="outline">Back to the menu</LinkButton>
             </div>
           </div>

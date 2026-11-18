@@ -9,7 +9,7 @@ import 'dotenv/config';
 import express from 'express';
 import compression from 'compression';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { store, has } from './lib/store.js';
@@ -44,6 +44,8 @@ import {
   extraLabel,
   isOutsideAreaChoice,
   maxPerExtra,
+  maxPortions,
+  portionCost,
   mergeSpecialServiceDays,
   parseSpecialServiceDays,
   serviceStatus,
@@ -414,8 +416,27 @@ function priceLines(clientLines) {
            * asking for four hundred gets four, and the price follows the clamped
            * number rather than the requested one.
            */
-          const qty = group.priced ? Math.min(maxPerExtra(group, item), Math.max(1, Math.floor(Number(raw.extraQty?.[`${group.id}:${id}`] ?? raw.extraQty?.[id]) || 1))) : 1;
-          const delta = group.priced ? extraCost(Number(item?.price) || 0, qty) : 0;
+          /*
+           * How many portions of this one choice, and what that costs.
+           *
+           * Two different rules meet here, and they must not be confused:
+           *
+           *   - a `priced` group (the soft drink) is sold *alongside* the plate,
+           *     so every unit is charged at the item's own price;
+           *   - a starch or a side (a `portioned` choice) is *included* in the
+           *     plate, so its first portion is free and only the ones after it
+           *     are charged, at the extra-portion price.
+           *
+           * Both counts are clamped against the catalogue, never trusted as
+           * sent: a hand-made request for four hundred pap gets four, and the
+           * price follows the clamped number.
+           */
+          const sentQty = raw.extraQty?.[`${group.id}:${id}`] ?? raw.extraQty?.[id];
+          const cap = group.priced ? maxPerExtra(group, item) : maxPortions(item);
+          const qty = Math.min(cap, Math.max(1, Math.floor(Number(sentQty) || 1)));
+          const delta = group.priced
+            ? extraCost(Number(item?.price) || 0, qty)
+            : portionCost(item, qty);
           extras += delta;
           /*
            * The label carries the quantity, because the kitchen packs from this
@@ -789,9 +810,9 @@ async function forwardQuest(entry) {
       name: entry.name,
       phone: entry.phone,
       email: entry.email,
-      subject: `Meal quest — ${entry.dish}`.slice(0, 120),
+      subject: `Meal request — ${entry.dish}`.slice(0, 120),
       message: summary,
-      _subject: `Heritage Bites meal quest — ${entry.name}`.slice(0, 120),
+      _subject: `Heritage Bites meal request — ${entry.name}`.slice(0, 120),
       source: 'heritagebites.co.za/quest',
     },
     'quest',
@@ -1702,7 +1723,37 @@ if (existsSync(DIST)) {
    * crawlers index a page whose entire content is an apology.
    */
   const shellPath = join(DIST, 'index.html');
-  const renderShell = shellRenderer(readFileSync(shellPath, 'utf8'));
+
+  /*
+   * The shell is re-read whenever the file on disk changes, not once at boot.
+   *
+   * `index.html` names the hashed bundle (`/assets/index-<hash>.js`), so caching
+   * it for the life of the process means a `npm run build` is invisible until
+   * someone restarts the server — and the symptom is vicious: the page loads,
+   * looks fine, and is simply an older version of the app. That is exactly how
+   * the back-to-top button appeared to be missing after it had shipped: the
+   * build was correct, the served HTML pointed at a bundle from before it.
+   *
+   * One `statSync` per request is cheap next to rendering the head, and the
+   * parse only repeats when the file actually changes.
+   */
+  let shell = { mtimeMs: -1, size: -1, render: null };
+  const renderShell = (path, origin) => {
+    try {
+      const stat = statSync(shellPath);
+      if (stat.mtimeMs !== shell.mtimeMs || stat.size !== shell.size) {
+        shell = {
+          mtimeMs: stat.mtimeMs,
+          size: stat.size,
+          render: shellRenderer(readFileSync(shellPath, 'utf8')),
+        };
+      }
+      return shell.render(path, origin);
+    } catch (error) {
+      console.error(`[web] could not render the shell: ${String(error?.message ?? error).slice(0, 160)}`);
+      return null;
+    }
+  };
 
   const KNOWN_ROUTES = new Set([
     '/', '/menu', '/specials', '/about', '/contact', '/policies', '/checkout', '/passport', '/quest', '/alerts',

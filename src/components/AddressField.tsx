@@ -209,14 +209,14 @@ export function AddressField({
       </Field>
 
       {shownNote && !shownError && (
-        <p className="mt-1 flex items-start gap-1.5 text-[12px] leading-snug text-ochre-deep" role="status">
+        <p className="mt-1 flex items-start gap-1.5 text-[12px] leading-snug text-accent" role="status">
           <span aria-hidden="true">!</span>
           <span>{shownNote}</span>
         </p>
       )}
 
       {open && (busy || suggestions.length > 0 || searched) && (
-        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-2xl border-2 border-ink/12 bg-white shadow-xl">
+        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-2xl border-2 border-theme/12 bg-surface shadow-xl">
           <ul id={listId} role="listbox" aria-label="Address suggestions" className="max-h-64 overflow-y-auto">
             {suggestions.map((suggestion, index) => (
               <li key={suggestion.id} role="option" aria-selected={index === active} id={`${listId}-${index}`}>
@@ -231,17 +231,17 @@ export function AddressField({
                   onMouseEnter={() => setActive(index)}
                   className={`flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm hover:bg-ochre/10 ${index === active ? 'bg-ochre/10' : ''}`}
                 >
-                  <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink/40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-theme-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 21s-7-5.5-7-11a7 7 0 1 1 14 0c0 5.5-7 11-7 11Z" />
                     <circle cx="12" cy="10" r="2.5" />
                   </svg>
                   <span className="min-w-0">
                     {/* The whole line, with the house number the customer typed. */}
                     <span className="block truncate font-medium">{suggestion.line}</span>
-                    <span className="block truncate text-[12px] text-ink/50">
+                    <span className="block truncate text-[12px] text-theme-soft">
                       {suggestion.detail}
                       {suggestion.area && (
-                        <span className="ml-1 font-semibold text-ochre-deep">· {suggestion.area} delivery</span>
+                        <span className="ml-1 font-semibold text-accent">· {suggestion.area} delivery</span>
                       )}
                     </span>
                   </span>
@@ -249,7 +249,7 @@ export function AddressField({
               </li>
             ))}
           </ul>
-          <p className="border-t border-ink/8 px-3 py-1.5 text-[11px] text-ink/40">
+          <p className="border-t border-theme/8 px-3 py-1.5 text-[11px] text-theme-muted">
             {busy && !suggestions.length
               ? 'Looking up addresses…'
               : searched && !suggestions.length
@@ -260,7 +260,7 @@ export function AddressField({
               href="https://www.openstreetmap.org/copyright"
               target="_blank"
               rel="noreferrer"
-              className="underline hover:text-ink/70"
+              className="underline hover:text-theme-soft"
             >
               © OpenStreetMap
             </a>

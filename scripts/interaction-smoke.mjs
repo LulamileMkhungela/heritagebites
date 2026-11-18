@@ -115,7 +115,25 @@ function boot(path, { seedCart, offline } = {}) {
     observe(target) { this.targets.push(target); }
     disconnect() { this.targets = []; }
   };
-  w.scrollTo = (o) => scrolls.push({ kind: 'scrollTo', arg: o });
+  /*
+   * Scroll position, simulated.
+   *
+   * jsdom has no layout and pins `scrollY` at 0, but the back-to-top button's
+   * whole contract is "hidden at the top, visible once you have scrolled", so
+   * the suite needs a scroll position it can move. `__scrollTo(y)` sets it and
+   * fires the event a real browser would; the patched `scrollTo` moves it too,
+   * so a successful jump to the top is observable in both directions.
+   */
+  let scrollY = 0;
+  Object.defineProperty(w, 'scrollY', { configurable: true, get: () => scrollY });
+  w.__scrollTo = (y) => {
+    scrollY = y;
+    w.dispatchEvent(new w.Event('scroll'));
+  };
+  w.scrollTo = (o) => {
+    scrolls.push({ kind: 'scrollTo', arg: o });
+    if (o && typeof o === 'object' && typeof o.top === 'number') scrollY = o.top;
+  };
   w.HTMLElement.prototype.scrollIntoView = function () {
     scrolls.push({ kind: 'scrollIntoView', id: this.id || this.tagName });
     for (const observer of observers) {
@@ -201,6 +219,19 @@ function boot(path, { seedCart, offline } = {}) {
   const text = () => doc.body.textContent ?? '';
   const all = () => [...doc.querySelectorAll('*')];
   const byText = (sel, re) => all().filter((el) => el.matches?.(sel) && re.test(el.textContent ?? ''));
+  /*
+   * The *label* of an option row, without the price copy beside it.
+   *
+   * A row used to read "Pap Included"; now a starch or a side reads
+   * "Pap Included · 2nd + R30,00" and, once ticked, becomes a stepper reading
+   * "Pap Included − 1 +". Matching on `textContent` therefore stopped finding
+   * "Pap" and started finding the whole row — so the name is read off the label
+   * span, which is the only part that is actually the dish's name.
+   */
+  const optionLabel = (el) =>
+    (el.querySelector('span.flex.min-w-0 > span.min-w-0')?.textContent ?? el.textContent ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
   /** Matches on aria-label, which for icon cards is NOT in textContent. */
   const byLabel = (sel, re) => all().filter((el) => el.matches?.(sel) && re.test(el.getAttribute('aria-label') ?? ''));
   const click = (el) => {
@@ -237,7 +268,7 @@ function boot(path, { seedCart, offline } = {}) {
     return d ? d.contains(doc.activeElement) : false;
   };
 
-  return { w, doc, text, all, byText, byLabel, click, waitFor, setInput, scrolls, press, dialogs, focusInsideDialog, errors, seedCart, close: () => w.close() };
+  return { w, doc, text, all, byText, byLabel, optionLabel, click, waitFor, setInput, scrolls, press, dialogs, focusInsideDialog, errors, seedCart, close: () => w.close() };
 }
 
 /* ------------------------------------------------------------------ */
@@ -331,13 +362,13 @@ await step('the sides are priced, open their details, and go in the basket', asy
   const chakalaka = cards.find((c) => /Chakalaka/i.test(c.textContent ?? ''));
   if (!chakalaka) throw new Error('no chakalaka card to tap');
   s1.click([...chakalaka.querySelectorAll('button')].find((b) => /Details/i.test(b.getAttribute('aria-label') ?? '')));
-  await s1.waitFor(() => /Add to basket/i.test(s1.text()), 'the side details sheet', 6000);
+  await s1.waitFor(() => /Add to cart/i.test(s1.text()), 'the side details sheet', 6000);
   const sheet = s1.doc.querySelector('[role="dialog"]')?.textContent ?? '';
   if (!/Spicy carrot, bean and pepper relish/i.test(sheet)) throw new Error('the side details do not describe the dish');
   if (!/R\d/.test(sheet)) throw new Error('the side details do not show a price');
 
   /* Add it, and it lands in the basket at its own price. */
-  const addBtn = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to basket/i.test(b.textContent ?? ''));
+  const addBtn = [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to cart/i.test(b.textContent ?? ''));
   s1.click(addBtn);
   await sleep(400);
   if (!/Chakalaka/i.test(s1.text())) throw new Error('the side never reached the basket');
@@ -460,7 +491,7 @@ await step('with a basket, "Order online" opens the basket instead of a page', a
   await shopper.waitFor(() => /A taste of South African heritage/i.test(shopper.text()), 'the home page', 20000);
   const btn = [...shopper.doc.querySelectorAll('button')].find((b) => /^Order online$/i.test((b.textContent ?? '').trim()));
   shopper.click(btn);
-  await shopper.waitFor(() => shopper.doc.querySelector('[role="dialog"][aria-label="Your basket"]'), 'the basket drawer', 8000);
+  await shopper.waitFor(() => shopper.doc.querySelector('[role="dialog"][aria-label="Your cart"]'), 'the basket drawer', 8000);
   if (!/Traditional Plate/.test(shopper.doc.querySelector('[role="dialog"]')?.textContent ?? '')) {
     throw new Error('the drawer opened without the plate in it');
   }
@@ -562,8 +593,8 @@ await step('the checkout door is shut while the basket is under R100, and open o
   }
 
   /* The drawer is the same door, so it is shut the same way. */
-  short.click([...short.doc.querySelectorAll('button')].find((b) => /basket/i.test(b.getAttribute('aria-label') ?? '')));
-  await short.waitFor(() => short.doc.querySelector('[role="dialog"][aria-label="Your basket"]'), 'the basket drawer', 6000);
+  short.click([...short.doc.querySelectorAll('button')].find((b) => /cart/i.test(b.getAttribute('aria-label') ?? '')));
+  await short.waitFor(() => short.doc.querySelector('[role="dialog"][aria-label="Your cart"]'), 'the basket drawer', 6000);
   const drawerShut = [...short.doc.querySelectorAll('[role="dialog"] button')].find((b) => /^Checkout$/i.test((b.textContent ?? '').trim()));
   if (!drawerShut) throw new Error('the drawer lost its checkout button');
   if (!drawerShut.disabled) throw new Error('the drawer lets a R30 basket through while the bar does not');
@@ -606,7 +637,7 @@ await step('nothing selected cannot be added: the order and add buttons say what
   if (!cardBtn) throw new Error('no Mala-Mogodu card');
   s1.click(cardBtn);
   await s1.waitFor(() => s1.dialogs().length > 0, 'the dish sheet', 8000);
-  const addDish = [...s1.doc.querySelectorAll('[role="dialog"] footer button')].find((el) => /Add to basket|Pick a/i.test(el.textContent ?? ''));
+  const addDish = [...s1.doc.querySelectorAll('[role="dialog"] footer button')].find((el) => /Add to cart|Pick a/i.test(el.textContent ?? ''));
   if (!addDish) throw new Error('the dish sheet has no add button');
   if (!addDish.disabled) throw new Error('a dish with nothing chosen can still be added');
   if (!/Pick a/i.test(addDish.textContent ?? '')) throw new Error(`the sheet's add button does not name the missing choice: ${addDish.textContent}`);
@@ -771,7 +802,7 @@ await step('picking a search result opens that dish on the menu', async () => {
   s1.click(result);
   await s1.waitFor(() => s1.w.location.pathname === '/menu', 'navigation to /menu', 10000);
   // The deep link opens the dish sheet; assert the sheet actually opened.
-  await s1.waitFor(() => /Add to basket|Choose|Serves/i.test(s1.text()), 'dish sheet to open', 10000);
+  await s1.waitFor(() => /Add to cart|Customise|Serves/i.test(s1.text()), 'dish sheet to open', 10000);
   return s1.w.location.pathname + s1.w.location.search;
 });
 
@@ -795,11 +826,11 @@ await step('overlays trap focus and close on Escape', async () => {
 
   // 2. basket drawer
   const basket = [...s1.doc.querySelectorAll('button, a')].find((e) =>
-    /Basket/i.test(e.getAttribute('aria-label') ?? ''),
+    /\bCart\b/i.test(e.getAttribute('aria-label') ?? ''),
   );
   if (!basket) throw new Error('no basket control');
   s1.click(basket);
-  await s1.waitFor(() => s1.dialogs().some((d) => d.getAttribute('aria-label') === 'Your basket'), 'basket to open', 8000);
+  await s1.waitFor(() => s1.dialogs().some((d) => d.getAttribute('aria-label') === 'Your cart'), 'basket to open', 8000);
   await s1.waitFor(() => s1.focusInsideDialog(), 'focus to move into the basket', 8000);
   s1.press('Escape');
   await s1.waitFor(() => s1.dialogs().length === 0, 'basket to close on Escape', 8000);
@@ -921,7 +952,7 @@ await step('every vegetable side a plate offers is also sold on Sides & Relishes
     .find((el) => /Choose your vegetable side/i.test(el.querySelector('legend')?.textContent ?? ''));
   if (!group) throw new Error('the plate builder has no vegetable-side group');
   const options = [...group.querySelectorAll('button[role="checkbox"]')]
-    .map((el) => (el.textContent ?? '').replace(/\s*Included\s*$/i, '').replace(/\s+/g, ' ').trim())
+    .map((el) => arch.optionLabel(el))
     .filter(Boolean);
   if (options.length < 5) throw new Error(`expected the vegetable sides, saw ${options.length}: ${options.slice(0, 6)}`);
 
@@ -1053,11 +1084,20 @@ await step('choosing required options then adding puts the line in the basket', 
    * expose aria-checked. Accept either attribute: the payment-method buttons are
    * still toggles and this helper is used for both.
    */
-  await s1.waitFor(() => s1.byText('button[aria-checked], button[aria-pressed]', /^Pap$/)[0], 'the starch options to mount', 15000);
+  await s1.waitFor(
+    () => s1.all().find((el) => el.matches?.('button[aria-checked], button[aria-pressed]') && /^Pap$/.test(s1.optionLabel(el))),
+    'the starch options to mount',
+    15000,
+  );
   const groups = [...s1.doc.querySelectorAll('[role="dialog"] fieldset')];
   let chosen = 0;
   for (const fs of groups) {
-    if (!fs.querySelector('.text-ochre-deep')) continue;
+    /*
+     * A required group is marked by an asterisk. That used to be found by its
+     * colour class, which was renamed when the gold became theme-aware — so the
+     * selector is now the marker itself, which does not change with the palette.
+     */
+    if (!fs.textContent.includes('*')) continue;
     const opt = fs.querySelector('button[aria-checked], button[aria-pressed]');
     if (!opt) throw new Error('required group has no options');
     s1.click(opt);
@@ -1070,7 +1110,7 @@ await step('choosing required options then adding puts the line in the basket', 
    * also the label on every side card behind the dialog, and an unscoped match
    * clicks the menu instead of the sheet.
    */
-  const sheetAdd = () => [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to basket/i.test(b.textContent ?? ''));
+  const sheetAdd = () => [...s1.doc.querySelectorAll('[role="dialog"] button')].find((b) => /Add to cart/i.test(b.textContent ?? ''));
   await s1.waitFor(sheetAdd, 'the add button to mount', 15000);
   s1.click(sheetAdd());
   /*
@@ -1078,13 +1118,13 @@ await step('choosing required options then adding puts the line in the basket', 
    * ordering several plates was interrupted between each one. The pinned basket
    * bar is the feedback now, and the drawer opens when it is asked for.
    */
-  await s1.waitFor(() => /added to basket/i.test(s1.text()), 'the basket bar to confirm the add', 8000);
+  await s1.waitFor(() => /added to cart/i.test(s1.text()), 'the basket bar to confirm the add', 8000);
   const openBasket = [...s1.doc.querySelectorAll('button, a')].find((e) =>
-    /Your basket|Open your basket|^Basket/i.test(`${e.getAttribute('aria-label') ?? ''} ${e.textContent ?? ''}`),
+    /Your cart|Open your cart|^Cart/i.test(`${e.getAttribute('aria-label') ?? ''} ${e.textContent ?? ''}`),
   );
   if (!openBasket) throw new Error('no basket control');
   s1.click(openBasket);
-  await s1.waitFor(() => /Your basket/i.test(s1.text()), 'basket drawer');
+  await s1.waitFor(() => /Your cart/i.test(s1.text()), 'basket drawer');
   if (!/Mala-Mogodu/.test(s1.text())) throw new Error('added item not in basket');
   if (!/Pap/.test(s1.text()) || !/Braised cabbage/.test(s1.text())) {
     throw new Error('chosen starch and side are not carried into the basket line');
@@ -2387,7 +2427,12 @@ await step('only the asterisk on a required field is red', async () => {
   if (/\*/.test([...head.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(''))) {
     throw new Error('the asterisk is still part of the label text');
   }
-  if (!/text-ink\b/.test(head.className)) throw new Error(`the label is not ink-coloured: "${head.className}"`);
+  /*
+   * Body text is `text-theme` now — the token that resolves to ink in light
+   * mode and paper in dark. Pinning the literal `text-ink` would pin the old
+   * palette; what matters is that the label is not carrying the red.
+   */
+  if (!/text-theme\b/.test(head.className)) throw new Error(`the label is not theme-coloured: "${head.className}"`);
   /* The asterisk is decoration; a screen reader gets the word instead. */
   if (![...head.querySelectorAll('span')].some((el) => /sr-only/.test(el.className) && /required/i.test(el.textContent))) {
     throw new Error('the required marker is not announced to screen readers');
@@ -2729,7 +2774,7 @@ await step('the plate builder requires its mandatory groups before adding', asyn
   const groups = [...(builderDialog()?.querySelectorAll('fieldset') ?? [])];
   let chosen = 0;
   for (const fs of groups) {
-    const required = Boolean(fs.querySelector('.text-ochre-deep'));
+    const required = fs.textContent.includes('*');
     if (!required) continue;
     const opt = [...fs.querySelectorAll('button[aria-checked], button[aria-pressed]')][0];
     if (!opt) throw new Error('required group has no options');
@@ -2791,19 +2836,50 @@ await step('starch and vegetable side take more than one; the drink is an add-on
   /* Two starches, held at once. The plate price must not move: a starch is
      inside the plate price, not an extra on top of it. */
   const groupFor = (needle) => fieldsets.find((fs) => needle.test(fs.querySelector('legend')?.textContent ?? ''));
+  /*
+   * Rows that can be *ticked* — a plain checkbox or radio. Once ticked, a
+   * starch or a side becomes a stepper and drops `aria-checked` for its − / +
+   * controls, so a query restricted to `button[aria-checked]` no longer sees the
+   * rows it just turned into steppers. The group is read whole and the steppers
+   * count as ticked below.
+   */
   const options = (fs) => [...(fs?.querySelectorAll('button[aria-checked]') ?? [])];
+  /*
+   * A ticked starch or side is no longer a button: the row becomes a stepper — a
+   * div holding "One fewer …" and "One more …". Counting the "One more" controls
+   * is the only way to see how many starches the customer actually holds.
+   */
+  const steppers = (fs) =>
+    [...(fs?.querySelectorAll('button') ?? [])].filter((b) => /^One more /i.test(b.getAttribute('aria-label') ?? ''));
 
-  const starchGroup = groupFor(/starch/i);
-  const [firstStarch, secondStarch] = options(starchGroup);
-  if (!firstStarch || !secondStarch) throw new Error('the starch group does not offer two options');
-  firstStarch.click();
-  await sleep(120);
-  secondStarch.click();
-  await sleep(160);
+  /*
+   * Re-query the group before every click.
+   *
+   * Ticking a starch now turns its row into a stepper, so the node captured
+   * before the first click is gone by the time the second is wanted — clicking
+   * it does nothing and the count reads zero. Reading the group fresh each time
+   * is what the drink test below already does for the same reason.
+   */
+  const starchGroup = () => groupFor(/starch/i);
+  const unticked = () =>
+    options(starchGroup()).filter((b) => b.getAttribute('aria-checked') !== 'true' && b.querySelector('span.min-w-0'));
 
-  const ticked = options(starchGroup).filter((b) => b.getAttribute('aria-checked') === 'true');
-  if (ticked.length !== 2) {
-    throw new Error(`two starches should be ticked at once, found ${ticked.length}: ${ticked.map((b) => b.textContent).join(', ')}`);
+  /*
+   * Earlier steps in this run have already ticked one starch, so the assertion
+   * is about the *increase*, not an absolute count: two more ticks must leave two
+   * more steppers standing. Ticking a second starch must add it beside the first
+   * rather than replacing it — that is the whole behaviour under test.
+   */
+  const before = steppers(starchGroup()).length;
+  if (unticked().length < 2) throw new Error('the starch group does not offer two options');
+  s5.click(unticked()[0]);
+  await sleep(200);
+  s5.click(unticked()[0]);
+  await sleep(200);
+
+  const ticked = steppers(starchGroup());
+  if (ticked.length !== before + 2) {
+    throw new Error(`two more starches should join the first, found ${ticked.length - before} more: ${ticked.map((b) => b.getAttribute('aria-label')).join(', ')}`);
   }
   const price = (builderAdd()?.textContent ?? '').match(/R\s?([\d\s]+[.,]\d{2})/)?.[1]?.replace(/\s/g, '').replace(',', '.');
   if (Number(price) > 200) throw new Error(`two starches changed the plate price to R${price}`);
@@ -2868,6 +2944,180 @@ await step('the soft drink takes a quantity, and prices per bottle', async () =>
   s5.click(findMinus());
   await s5.waitFor(() => priceOn() === before + 50, 'two bottles', 6000);
   return `R${before} plate, +R25 per bottle, capped at four`;
+});
+
+await step('a second portion of pap costs money, the first does not', async () => {
+  /*
+   * Owner, 19 Nov 2026: "on choose a starch, choose vegetables, can we have
+   * similar functionality like we have on add soft drink so the user can set if
+   * they want more than 1 pap, etc but when they add more than 1 pap or any the
+   * price goes up".
+   *
+   * The starch and the vegetable side now behave like the drink, with one
+   * difference that matters: their first portion is already inside the plate
+   * price, so only the portions *after* the first are charged. Charging from the
+   * first would bill the customer for the pap the R100 plate is supposed to
+   * include — the bug this step exists to prevent.
+   *
+   * The price is read from the Add-plate button, which is the number the customer
+   * pays, not from a running total somewhere in the modal.
+   */
+  const priceOn = () => {
+    const label = builderAdd()?.textContent ?? '';
+    return Number((label.match(/R\s?([\d\s]+)[.,](\d{2})/) ?? [])[1]?.replace(/\s/g, ''));
+  };
+  const plusFor = (name) =>
+    [...(builderDialog()?.querySelectorAll('button') ?? [])].find((b) =>
+      new RegExp(`One more ${name}`, 'i').test(b.getAttribute('aria-label') ?? ''),
+    );
+
+  /* Pap is already ticked by an earlier step. */
+  if (!plusFor('Pap')) throw new Error('the ticked starch row has no stepper');
+
+  const before = priceOn();
+  s5.click(plusFor('Pap'));
+  await s5.waitFor(() => priceOn() === before + 30, 'the second portion to be priced', 6000);
+
+  /*
+   * A second portion costs the same as the bowl sold on its own in Sides &
+   * Relishes — a menu that charged one price for a bowl and another for the
+   * identical second bowl inside a plate would be contradicting itself.
+   */
+  const afterSecond = priceOn();
+
+  /* The vegetable side follows the same rule. */
+  const vegPlus = [...(builderDialog()?.querySelectorAll('button') ?? [])].find((b) =>
+    /One more (Braised cabbage|Spinach|Morogo|Salsa|Chakalaka|Atchaar|Green salad)/i.test(b.getAttribute('aria-label') ?? ''),
+  );
+  if (!vegPlus) throw new Error('the ticked vegetable side has no stepper');
+  s5.click(vegPlus);
+  await s5.waitFor(() => priceOn() === afterSecond + 30, 'the second vegetable portion to be priced', 6000);
+
+  /* And the label says so before anything is tapped. */
+  const legends = [...(builderDialog()?.querySelectorAll('legend') ?? [])].map((l) => l.textContent ?? '');
+  const perGroup = legends.filter((l) => /extra portion\s*\+\s*R\s?30/i.test(l));
+  if (perGroup.length < 2) {
+    throw new Error(`starch and side should both state the extra-portion price, found ${perGroup.length}`);
+  }
+
+  /* Back to one of each, so the steps after this one start where they expect. */
+  const minusFor = (name) =>
+    [...(builderDialog()?.querySelectorAll('button') ?? [])].find((b) =>
+      new RegExp(`One fewer ${name}`, 'i').test(b.getAttribute('aria-label') ?? ''),
+    );
+  s5.click(minusFor('Pap'));
+  await sleep(140);
+  s5.click(minusFor(vegPlus.getAttribute('aria-label').replace(/^One more /i, '')));
+  await s5.waitFor(() => priceOn() === before, 'the plate back at its base price', 6000);
+
+  return `first portion included, each one after it +R30 — starch and side both`;
+});
+
+await step('anything selected can be deselected, in every group', async () => {
+  /*
+   * Owner, 19 Nov 2026: "if a user click customise and select pap they must be
+   * able to deselect that applies to everything they select."
+   *
+   * Two guards used to refuse the tap and do nothing at all — unticking the last
+   * item of a required group, and clearing a required single choice such as the
+   * protein. A tap that does nothing is indistinguishable from a broken button,
+   * and it left the customer holding a choice they could not take back.
+   *
+   * The safety that those guards were protecting is asserted here too: an
+   * incomplete plate still cannot be added, because the Add button is disabled
+   * and names what is missing.
+   */
+  const dlg = () => builderDialog();
+  const tickedRows = () =>
+    [...(dlg()?.querySelectorAll('fieldset') ?? [])].map((fs) => ({
+      legend: (fs.querySelector('legend')?.textContent ?? '').slice(0, 24),
+      ticked: [...fs.querySelectorAll('[aria-checked="true"]')].length,
+      steppers: [...fs.querySelectorAll('button[aria-label^="One more "]')].length,
+    }));
+  const minus = (name) =>
+    [...(dlg()?.querySelectorAll('button') ?? [])].find((b) =>
+      new RegExp(`^(Remove|One fewer) ${name}`, 'i').test(b.getAttribute('aria-label') ?? ''),
+    );
+
+  /* --- the protein: chosen, replaced, then cleared entirely --- */
+  const proteinName = (tickedRows().find((r) => /protein/i.test(r.legend)) && 'Tshotlo') || 'Mogodu';
+  const proteinRow = [...(dlg()?.querySelectorAll('fieldset') ?? [])]
+    .find((fs) => /protein/i.test(fs.querySelector('legend')?.textContent ?? ''))
+    ?.querySelectorAll('button[aria-checked]');
+  if (!proteinRow?.length) throw new Error('the protein group has no rows');
+
+  /* Pick one that is not already chosen, so the click is a selection. */
+  const fresh = [...proteinRow].find((b) => b.getAttribute('aria-checked') !== 'true');
+  if (!fresh) throw new Error('every protein is already chosen');
+  s5.click(fresh);
+  await sleep(150);
+  s5.click(fresh);
+  await sleep(150);
+  const proteinAfter = tickedRows().find((r) => /protein/i.test(r.legend));
+  if (proteinAfter.ticked !== 0) {
+    throw new Error(`a required single choice cannot be deselected: ${proteinAfter.ticked} still ticked`);
+  }
+
+  /*
+   * With the protein cleared, the plate is incomplete and the Add button must
+   * refuse — the guard the deselect used to perform, done where it belongs.
+   */
+  const addAfterClear = builderAdd();
+  if (!addAfterClear?.disabled) throw new Error('an incomplete plate can still be added');
+  if (!/pick a/i.test(addAfterClear.textContent ?? '')) {
+    throw new Error(`the Add button does not say what is missing: "${addAfterClear.textContent}"`);
+  }
+
+  /* Put it back so the following steps have a complete plate. */
+  s5.click([...proteinRow].find((b) => b.getAttribute('aria-checked') !== 'true'));
+  await sleep(200);
+
+  /* --- the last starch in a required group --- */
+  const starchFs = () =>
+    [...(dlg()?.querySelectorAll('fieldset') ?? [])].find((fs) => /starch/i.test(fs.querySelector('legend')?.textContent ?? ''));
+  const anyRemove = () =>
+    [...(starchFs()?.querySelectorAll('button') ?? [])].find((b) => /^(Remove|One fewer) /i.test(b.getAttribute('aria-label') ?? ''));
+
+  const steppersBefore = [...(starchFs()?.querySelectorAll('button[aria-label^="One more "]') ?? [])];
+  if (!steppersBefore.length) throw new Error('no starch is ticked to deselect');
+  const name = steppersBefore[0].getAttribute('aria-label').replace(/^One more /i, '');
+
+  /* Walk it down: two portions -> one -> gone. */
+  s5.click(anyRemove());
+  await sleep(200);
+  s5.click(anyRemove());
+  await sleep(250);
+  const stillTicked = [...(starchFs()?.querySelectorAll('button[aria-label^="One more "]') ?? [])].some(
+    (b) => b.getAttribute('aria-label') === `One more ${name}`,
+  );
+  if (stillTicked) throw new Error(`the last portion did not deselect ${name}`);
+
+  /* And the vegetable side, the other required multiple group. */
+  const vegFs = () =>
+    [...(dlg()?.querySelectorAll('fieldset') ?? [])].find((fs) => /vegetable side/i.test(fs.querySelector('legend')?.textContent ?? ''));
+  const vegRemove = [...(vegFs()?.querySelectorAll('button') ?? [])].find((b) =>
+    /^(Remove|One fewer) /i.test(b.getAttribute('aria-label') ?? ''),
+  );
+  if (!vegRemove) throw new Error('no vegetable side is ticked to deselect');
+  const vegName = vegRemove.getAttribute('aria-label').replace(/^(Remove|One fewer) /i, '');
+  s5.click(vegRemove);
+  await sleep(250);
+  const vegStillOn = [...(vegFs()?.querySelectorAll('button[aria-label^="One more "]') ?? [])].some(
+    (b) => b.getAttribute('aria-label') === `One more ${vegName}`,
+  );
+  if (vegStillOn) throw new Error(`the vegetable side ${vegName} could not be deselected`);
+
+  /* Restore one of each so the next step can add the plate. */
+  for (const [fs, label] of [[starchFs(), 'starch'], [vegFs(), 'vegetable side']]) {
+    if (![...fs.querySelectorAll('button[aria-label^="One more "]')].length) {
+      const row = [...fs.querySelectorAll('button[aria-checked]')][0];
+      if (!row) throw new Error(`no ${label} row to re-select`);
+      s5.click(row);
+      await sleep(200);
+    }
+  }
+
+  return 'protein, starch and vegetable side all deselect; an incomplete plate cannot be added';
 });
 
 await step('a configured plate lands in the basket at the fixed plate price', async () => {
@@ -3423,9 +3673,9 @@ await step('the basket bar states the one arrangement there is: delivery', async
     throw new Error('the old collection price line is still in the basket bar');
   }
 
-  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your cart/i.test(b.getAttribute('aria-label') ?? ''));
   s8.click(open);
-  await s8.waitFor(() => /Your basket/i.test(s8.text()), 'the basket drawer', 15000);
+  await s8.waitFor(() => /Your cart/i.test(s8.text()), 'the basket drawer', 15000);
 
   /* There is no switch left to click: one option is not a choice. */
   const switchBtn = [...s8.doc.querySelectorAll('button')].find((b) => /^collection$/i.test((b.textContent ?? '').trim()));
@@ -3444,12 +3694,12 @@ await step('the basket bar states the one arrangement there is: delivery', async
 
 await step('the basket can be cleared from the bottom of the drawer', async () => {
   /* Open the drawer from the bar. */
-  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  const open = [...s8.doc.querySelectorAll('button')].find((b) => /Open your cart/i.test(b.getAttribute('aria-label') ?? ''));
   if (!open) throw new Error('no basket bar to open');
   s8.click(open);
-  await s8.waitFor(() => /Your basket/i.test(s8.text()), 'the basket drawer', 15000);
+  await s8.waitFor(() => /Your cart/i.test(s8.text()), 'the basket drawer', 15000);
 
-  const clearButton = () => [...s8.doc.querySelectorAll('button')].find((b) => /Clear basket|Tap again to clear/i.test(b.textContent ?? ''));
+  const clearButton = () => [...s8.doc.querySelectorAll('button')].find((b) => /Clear cart|Tap again to clear/i.test(b.textContent ?? ''));
   if (!clearButton()) throw new Error('the drawer has no way to clear the basket');
 
   /*
@@ -3466,7 +3716,7 @@ await step('the basket can be cleared from the bottom of the drawer', async () =
   s8.click(clearButton());
   await s8.waitFor(() => /Nothing in the pot yet/i.test(s8.text()), 'the empty basket', 15000);
   await sleep(200);
-  if (/Open your basket/i.test(s8.text())) throw new Error('the bar is still showing for an empty basket');
+  if (/Open your cart/i.test(s8.text())) throw new Error('the bar is still showing for an empty basket');
   return 'two taps, and the basket is empty';
 });
 
@@ -3522,9 +3772,9 @@ await step('a page load still shows the plates that were already picked', async 
   if (!/3 items · delivery/.test(s9.text())) throw new Error(`the bar lost the items or kept the retired collection mode: ${s9.text().slice(0, 200)}`);
   if (!/R330/.test(s9.text())) throw new Error(`the bar lost the running total: ${s9.text().slice(0, 200)}`);
 
-  const open = [...s9.doc.querySelectorAll('button')].find((b) => /Open your basket/i.test(b.getAttribute('aria-label') ?? ''));
+  const open = [...s9.doc.querySelectorAll('button')].find((b) => /Open your cart/i.test(b.getAttribute('aria-label') ?? ''));
   s9.click(open);
-  await s9.waitFor(() => /Your basket/i.test(s9.text()), 'the basket drawer after a reload', 15000);
+  await s9.waitFor(() => /Your cart/i.test(s9.text()), 'the basket drawer after a reload', 15000);
   if (!/Mogodu/.test(s9.text()) || !/Short Rib/i.test(s9.text())) {
     throw new Error('the drawer does not list both plates that were picked before the reload');
   }
@@ -3535,12 +3785,12 @@ await step('a page load still shows the plates that were already picked', async 
 });
 
 await step('the bar can empty the whole basket without opening it', async () => {
-  const clearOnBar = () => [...s9.doc.querySelectorAll('button')].find((b) => /^Clear the basket/i.test(b.getAttribute('aria-label') ?? ''));
+  const clearOnBar = () => [...s9.doc.querySelectorAll('button')].find((b) => /^Clear the cart/i.test(b.getAttribute('aria-label') ?? ''));
   if (!clearOnBar()) throw new Error('the basket bar has no clear button');
   s9.click(clearOnBar());
   await sleep(400);
 
-  if (/Open your basket/i.test(s9.text())) throw new Error('the bar is still showing after clearing');
+  if (/Open your cart/i.test(s9.text())) throw new Error('the bar is still showing after clearing');
   const stored = JSON.parse(s9.w.localStorage.getItem('hb.cart') ?? '{}');
   const lines = stored?.state?.lines ?? [];
   if (lines.length) throw new Error(`${lines.length} line(s) survived the clear button`);
@@ -3606,6 +3856,248 @@ await step('the footer keeps ordering behind one "Meals" toggle', async () => {
   await sleep(150);
   if (toggle.getAttribute('aria-expanded') !== 'false') throw new Error('the toggle does not close again');
   return 'closed by default, four ordering links inside, loyalty and quest outside';
+});
+
+await step('the back-to-top button appears only after scrolling, and returns the page to the top', async () => {
+  /*
+   * Owner, 18 Nov 2026: "add back to top floating button".
+   *
+   * The pages here are long — eight plates, ten sides, five policy documents —
+   * and the header is where search, navigation and the basket live, so getting
+   * back to it meant flicking up the whole document. What has to be true:
+   *
+   *   - it is not there on arrival (a button that does nothing is noise);
+   *   - it appears once the customer is genuinely down the page;
+   *   - it clears the basket bar when that bar is on screen, rather than hiding
+   *     behind it;
+   *   - tapping it actually scrolls to the top;
+   *   - it stays off the checkout and the order page, where scrolling away from
+   *     the submit control could cost an order.
+   */
+  const top = boot('/about');
+  await top.waitFor(() => /About/i.test(top.text()), 'about page', 20000);
+  await sleep(200);
+
+  const button = (page) => [...page.doc.querySelectorAll('button')]
+    .find((el) => /back to the top/i.test(el.getAttribute('aria-label') ?? ''));
+
+  if (button(top)) throw new Error('the button is showing at the top of the page, where it would do nothing');
+
+  /* One phone screen of scrolling: far enough that the top is lost. */
+  top.w.__scrollTo(900);
+  await sleep(200);
+  const shown = button(top);
+  if (!shown) throw new Error('the button did not appear after scrolling down 900px');
+
+  /* 44px minimum, like every other thumb control on the site. */
+  const size = shown.className.match(/\bh-(\d+)\b/)?.[1];
+  if (size !== '11') throw new Error(`the button is ${size ? `${size} units` : 'not sized'} tall, not the 44px minimum`);
+
+  for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) {
+    shown.dispatchEvent(new top.w.MouseEvent(type, { bubbles: true }));
+  }
+  await sleep(200);
+  const jump = top.scrolls.at(-1);
+  if (!jump || jump.kind !== 'scrollTo' || jump.arg?.top !== 0) {
+    throw new Error(`clicking it did not scroll to the top: ${JSON.stringify(jump)}`);
+  }
+  if (top.w.scrollY !== 0) throw new Error('the page did not end up at the top');
+  if (button(top)) throw new Error('the button is still floating over the top of the page after being used');
+
+  /* With a basket, the bar owns the bottom edge — the button must sit above it. */
+  const basketLine = {
+    key: 'plate::traditional',
+    itemId: 'plate-traditional',
+    plateId: 'traditional',
+    name: 'Traditional Plate',
+    image: '/img/plate-mogodu.jpg',
+    unitPrice: 100,
+    qty: 1,
+    picks: [],
+    kind: 'plate',
+  };
+  const shopper = boot('/menu', { seedCart: { state: { fulfilment: 'delivery', lines: [basketLine] }, version: 2 } });
+  await shopper.waitFor(() => /Menu/i.test(shopper.text()), 'menu', 20000);
+  shopper.w.__scrollTo(900);
+  await sleep(200);
+  const raised = button(shopper);
+  if (!raised) throw new Error('the button is missing on a page with a basket in it');
+  if (!/\bbottom-32\b/.test(raised.className)) throw new Error('the button does not clear the basket bar');
+
+  /* The checkout is a form in progress; no way out of it from here. */
+  const paying = boot('/checkout', { seedCart: CHECKOUT_CART });
+  await paying.waitFor(() => /Almost there/i.test(paying.text()), 'checkout', 20000);
+  paying.w.__scrollTo(900);
+  await sleep(200);
+  if (button(paying)) throw new Error('the button is offered on the checkout, mid-form');
+
+  top.close();
+  shopper.close();
+  paying.close();
+  return 'hidden at the top, appears after scrolling, clears the basket bar, returns to the top, absent from the checkout';
+});
+
+await step('nothing a customer can read calls a request a "quest"', async () => {
+  /*
+   * Owner, 19 Nov 2026: "no quest wording but request (eg Start a quest into
+   * Start a request)".
+   *
+   * "/quest" is the route and stays — it is a URL, not a word anyone reads.
+   * What must not survive is the *label*: the button on the loyalty page said
+   * "Start a quest", and the page's own search description said "every quest is
+   * read by a person". Both are read by customers and by search engines.
+   *
+   * The check is deliberately on rendered text and accessible names rather than
+   * on source, because the same word appears legitimately in code comments and
+   * in the word "question" — matching source would either miss the label or
+   * fail on prose that is correct.
+   */
+  const routes = ['/', '/menu', '/quest', '/passport', '/about', '/contact'];
+  const offenders = [];
+  for (const route of routes) {
+    const page = boot(route);
+    await page.waitFor(() => page.text().length > 120, route, 20000);
+    await sleep(200);
+
+    /*
+     * Word boundaries on BOTH sides. `\bquest` alone is not enough: it matches
+     * the prefix of "question", which is ordinary English on the menu and
+     * contact pages and must not be flagged. What is being caught is the word
+     * "quest" / "quests" standing alone.
+     */
+    const bad = /\bquests?\b/i;
+
+    const walker = page.doc.createTreeWalker(page.doc.body, 4 /* SHOW_TEXT */);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (bad.test(n.textContent)) offenders.push(`${route} text: "${n.textContent.trim().slice(0, 40)}"`);
+    }
+    for (const el of page.doc.querySelectorAll('[aria-label],[title],[alt],[placeholder]')) {
+      for (const attr of ['aria-label', 'title', 'alt', 'placeholder']) {
+        const v = el.getAttribute(attr);
+        if (v && bad.test(v)) offenders.push(`${route} ${attr}: "${v.slice(0, 40)}"`);
+      }
+    }
+    const desc = page.doc.querySelector('meta[name="description"]')?.getAttribute('content') ?? '';
+    if (bad.test(desc)) offenders.push(`${route} meta description: "${desc.slice(0, 60)}"`);
+
+    page.close();
+  }
+  if (offenders.length) throw new Error(`quest wording still visible: ${offenders.slice(0, 4).join(' | ')}`);
+  return `${routes.length} routes carry no quest wording in text, labels or metadata`;
+});
+
+await step('the heritage band carries white as one of its painted pigments', async () => {
+  /*
+   * Owner, 19 Nov 2026: "the heritage vector must also have a white color".
+   *
+   * The band's ground is chalk (#f7f2e6), so white has to be a *painted* chevron
+   * rather than the surface showing through — otherwise the register reads as
+   * four colours on a cream stripe instead of a five-shape cloth repeat.
+   *
+   * Asserted against the rendered SVG so it catches the pigment being dropped
+   * from the cycle, which is a one-word edit that leaves everything else intact.
+   */
+  const page = boot('/menu');
+  await page.waitFor(() => /The full menu/i.test(page.text()), 'menu', 20000);
+  await sleep(300);
+
+  const band = [...page.doc.querySelectorAll('svg')].find((svg) => svg.querySelector('pattern'));
+  if (!band) throw new Error('no heritage band on the page');
+
+  const fills = [...band.querySelectorAll('path')].map((p) => p.getAttribute('fill'));
+  if (!fills.length) throw new Error('the band has no painted shapes');
+
+  const unique = [...new Set(fills)];
+  if (!unique.includes('#ffffff')) {
+    throw new Error(`white is not in the band: ${unique.join(', ')}`);
+  }
+  /* One shape per pigment in the tile, or the cycle is not whole. */
+  const cycle = ['var(--color-ochre)', '#ffffff', '#a33b26', '#1f4e79', '#2f6b4f'];
+  for (const pigment of cycle) {
+    if (!unique.includes(pigment)) throw new Error(`the band is missing ${pigment}`);
+  }
+
+  page.close();
+  return `${fills.length} chevrons in ${unique.length} pigments, white included`;
+});
+
+await step('the appearance control cycles light, dark and back to the device', async () => {
+  /*
+   * Owner, 19 Nov 2026: "can i have dark and light mode".
+   *
+   * Three states, not a switch: "follow my phone" is a preference in its own
+   * right, and a two-way toggle silently discards it the first time it is
+   * touched. jsdom has no CSS engine, so what is asserted here is the contract
+   * the styling depends on — the attribute that `light-dark()` resolves
+   * against, and the value persisted so the pre-paint script in index.html can
+   * restore it before React mounts.
+   */
+  const page = boot('/');
+  await page.waitFor(() => /Heritage/i.test(page.text()), 'home', 20000);
+
+  const control = () => [...page.doc.querySelectorAll('button')]
+    .find((el) => /^Appearance:/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!control()) throw new Error('there is no appearance control in the header');
+  if (!/Device/i.test(control().getAttribute('aria-label'))) {
+    throw new Error(`the control did not start on "follow the device": ${control().getAttribute('aria-label')}`);
+  }
+
+  const root = page.doc.documentElement;
+  if (root.dataset.theme) throw new Error('a theme attribute is set before the customer has chosen one');
+
+  page.click(control());
+  await sleep(150);
+  if (root.dataset.theme !== 'light') throw new Error('the first press did not select light');
+  if (page.w.localStorage.getItem('hb.theme') !== 'light') throw new Error('the light choice was not persisted');
+
+  page.click(control());
+  await sleep(150);
+  if (root.dataset.theme !== 'dark') throw new Error('the second press did not select dark');
+  if (page.w.localStorage.getItem('hb.theme') !== 'dark') throw new Error('the dark choice was not persisted');
+
+  /* Third press returns to the device: no attribute, nothing stored. */
+  page.click(control());
+  await sleep(150);
+  if (root.dataset.theme) throw new Error('the third press did not return to following the device');
+  if (page.w.localStorage.getItem('hb.theme')) throw new Error('the device choice left a stored override behind');
+  if (!/Device/i.test(control().getAttribute('aria-label'))) throw new Error('the label did not follow the state');
+
+  page.close();
+  return 'starts on the device, cycles light -> dark -> device, persists only explicit choices';
+});
+
+await step('the archive sections follow the list/grid choice too', async () => {
+  /*
+   * The Kasi Fast Food and Morning Heritage sections were a hardcoded grid, so
+   * switching to list view left them four-up while every selling section
+   * obeyed — it read as a broken page rather than a preference.
+   */
+  const page = boot('/menu');
+  await page.waitFor(() => /The full menu/i.test(page.text()), 'menu', 20000);
+  await sleep(400);
+
+  const toggle = [...page.doc.querySelectorAll('button')]
+    .find((el) => /Show meals as a list/i.test(el.getAttribute('aria-label') ?? ''));
+  if (!toggle) throw new Error('there is no list/grid toggle on the menu');
+  page.click(toggle);
+  await sleep(300);
+
+  const archive = page.doc.querySelector('[data-coming-soon]');
+  if (!archive) throw new Error('the archive section is missing');
+  if (archive.getAttribute('data-view') !== 'list') {
+    throw new Error(`the archive section ignored the list choice: data-view=${archive.getAttribute('data-view')}`);
+  }
+  if (!/grid gap-4/.test(archive.className)) {
+    throw new Error(`the archive section is still laid out as a grid: ${archive.className}`);
+  }
+  const cards = [...archive.querySelectorAll('article')];
+  if (!cards.length) throw new Error('the archive section has no cards');
+  if (cards.some((c) => c.getAttribute('data-layout') !== 'list')) {
+    throw new Error('an archive card did not switch to the row layout');
+  }
+
+  page.close();
+  return `${cards.length} archive cards follow the toggle into list view`;
 });
 
 /* ------------------------------------------------------------------ */
