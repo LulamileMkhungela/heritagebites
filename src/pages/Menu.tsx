@@ -291,8 +291,8 @@ export default function MenuPage() {
             which stops being true as soon as one plate is priced differently.
           */}
           <p className="mt-4 max-w-2xl text-bone/70">
-            Two plate menus, each at a fixed price. Choose a protein, then as many starches and vegetable sides as you
-            like, and delivery is included.
+            Two plate menus, each at a fixed price. Choose a protein, then up to three starches and three vegetable
+            sides — the first of each is included, and an extra portion is charged. Delivery is included.
             {catalog.plateMenus.length > 0 && (
               <>
                 {' '}
@@ -476,7 +476,7 @@ export default function MenuPage() {
               <p className="mt-2 max-w-2xl text-sm text-theme-soft">{section.blurb}</p>
               {section.archived && (
                 <p className="mt-1 text-[12px] text-theme-soft">
-                  Not on sale yet, so nothing here can be added to a basket.
+                  Not on sale yet, so nothing here can be added to your cart.
                 </p>
               )}
             </div>

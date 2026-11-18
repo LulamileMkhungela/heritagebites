@@ -115,22 +115,34 @@
             {
               "id": "pap",
               "label": "Pap",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "mabele",
               "label": "Mabele (sorghum)",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "samp",
               "label": "Samp",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "dumpling",
               "label": "Dumpling",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -144,37 +156,58 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "morogo",
               "label": "Morogo",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "chakalaka",
               "label": "Chakalaka",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "atchaar",
               "label": "Atchaar",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -226,22 +259,34 @@
             {
               "id": "pap",
               "label": "Pap",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "mabele",
               "label": "Mabele (sorghum)",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "samp",
               "label": "Samp",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "dumpling",
               "label": "Dumpling",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -255,37 +300,58 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "morogo",
               "label": "Morogo",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "chakalaka",
               "label": "Chakalaka",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "atchaar",
               "label": "Atchaar",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -337,22 +403,34 @@
             {
               "id": "pap",
               "label": "Pap",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "mabele",
               "label": "Mabele (sorghum)",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "samp",
               "label": "Samp",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "dumpling",
               "label": "Dumpling",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -366,37 +444,58 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "morogo",
               "label": "Morogo",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "chakalaka",
               "label": "Chakalaka",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "atchaar",
               "label": "Atchaar",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -448,22 +547,34 @@
             {
               "id": "pap",
               "label": "Pap",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "mabele",
               "label": "Mabele (sorghum)",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "samp",
               "label": "Samp",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "dumpling",
               "label": "Dumpling",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -477,37 +588,58 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "morogo",
               "label": "Morogo",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "chakalaka",
               "label": "Chakalaka",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "atchaar",
               "label": "Atchaar",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -559,22 +691,34 @@
             {
               "id": "pap",
               "label": "Pap",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "mabele",
               "label": "Mabele (sorghum)",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "samp",
               "label": "Samp",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "dumpling",
               "label": "Dumpling",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -588,37 +732,58 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "morogo",
               "label": "Morogo",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "chakalaka",
               "label": "Chakalaka",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "atchaar",
               "label": "Atchaar",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -688,27 +853,42 @@
             {
               "id": "potato-mash",
               "label": "Potato mash",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "savoury-rice",
               "label": "Savoury rice",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "baby-potatoes",
               "label": "Baby potatoes",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "cous-cous",
               "label": "Cous cous",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "garlic-bread",
               "label": "Garlic bread",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -722,32 +902,50 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "corn-ribs",
               "label": "Corn ribs",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "glazed-carrots",
               "label": "Glazed carrots",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -800,27 +998,42 @@
             {
               "id": "potato-mash",
               "label": "Potato mash",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "savoury-rice",
               "label": "Savoury rice",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "baby-potatoes",
               "label": "Baby potatoes",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "cous-cous",
               "label": "Cous cous",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "garlic-bread",
               "label": "Garlic bread",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -834,32 +1047,50 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "corn-ribs",
               "label": "Corn ribs",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "glazed-carrots",
               "label": "Glazed carrots",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -912,27 +1143,42 @@
             {
               "id": "potato-mash",
               "label": "Potato mash",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "savoury-rice",
               "label": "Savoury rice",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "baby-potatoes",
               "label": "Baby potatoes",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "cous-cous",
               "label": "Cous cous",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "garlic-bread",
               "label": "Garlic bread",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -946,32 +1192,50 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "corn-ribs",
               "label": "Corn ribs",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "glazed-carrots",
               "label": "Glazed carrots",
-              "priceDelta": 0
+              "priceDelta": 0,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -1239,7 +1503,7 @@
       "id": "traditional",
       "name": "Traditional Plate",
       "price": 100,
-      "blurb": "One protein, and as many starches and vegetable sides as you like (up to three of each), from the traditional kitchen.",
+      "blurb": "One protein, and up to three starches and three vegetable sides — the first of each is included, and an extra portion is charged, from the traditional kitchen.",
       "image": "/img/plate-mogodu.jpg",
       "groups": [
         {
@@ -1284,22 +1548,34 @@
             {
               "id": "pap",
               "label": "Pap",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "mabele",
               "label": "Mabele (sorghum)",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "samp",
               "label": "Samp",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "dumpling",
               "label": "Dumpling",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -1312,37 +1588,58 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "morogo",
               "label": "Morogo",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "chakalaka",
               "label": "Chakalaka",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "atchaar",
               "label": "Atchaar",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "price": 100
+              "price": 100,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -1367,7 +1664,7 @@
       "id": "contemporary",
       "name": "Contemporary Plate",
       "price": 130,
-      "blurb": "One protein, and as many starches and vegetable sides as you like (up to three of each), from the contemporary kitchen.",
+      "blurb": "One protein, and up to three starches and three vegetable sides — the first of each is included, and an extra portion is charged, from the contemporary kitchen.",
       "image": "/img/plate-short-rib.jpg",
       "groups": [
         {
@@ -1402,27 +1699,42 @@
             {
               "id": "potato-mash",
               "label": "Potato mash",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "savoury-rice",
               "label": "Savoury rice",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "baby-potatoes",
               "label": "Baby potatoes",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "cous-cous",
               "label": "Cous cous",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "garlic-bread",
               "label": "Garlic bread",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -1435,32 +1747,50 @@
             {
               "id": "braised-cabbage",
               "label": "Braised cabbage",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "spinach",
               "label": "Spinach",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "salsa",
               "label": "Salsa",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "green-salad",
               "label": "Green salad",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "corn-ribs",
               "label": "Corn ribs",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             },
             {
               "id": "glazed-carrots",
               "label": "Glazed carrots",
-              "price": 130
+              "price": 130,
+              "extraAfter": 1,
+              "extraPrice": 30,
+              "max": 4
             }
           ]
         },
@@ -1707,13 +2037,13 @@
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
     "dayLabel": "Wednesday",
-    "timeLabel": "13:25",
+    "timeLabel": "15:43",
     "windowLabel": "12:00–13:30",
     "todayLabel": "Wednesday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
     "headline": "Wednesday is a rest day",
-    "message": "The pots are resting today — and honestly, so are we. We cook on Thursdays and Fridays, 12:00–13:30, and we are working towards being open every day. We are back Thursday 12:00–13:30.",
-    "shortMessage": "We cook Thursdays and Fridays, 12:00–13:30. Your order goes in first on Thursday.",
+    "message": "We are not cooking today. The kitchen cooks on Thursdays and Fridays, 12:00–13:30. The next one is Thursday 12:00–13:30. You can still order — nothing is blocked. Pick any cooking day ahead when you check out, and schedule as far forward as you like. Please order a day or two before the day you want, and at least 24 hours ahead, so the kitchen has time to buy and prep. Catering for an event? Ask us on WhatsApp.",
+    "shortMessage": "Not cooking today — the kitchen cooks Thursdays and Fridays, 12:00–13:30. You can still schedule any cooking day ahead; please order at least 24 hours before it. Catering? Ask us on WhatsApp.",
     "serviceDays": [
       "Thursday",
       "Friday"

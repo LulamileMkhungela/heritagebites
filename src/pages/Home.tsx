@@ -418,7 +418,7 @@ function HowItWorks() {
   const maxKm = catalog?.settings?.maxDeliveryKm ?? DELIVERY_ZONES.maxKm;
 
   const steps = [
-    { n: '01', t: 'Pick your plate', d: 'Choose a protein, then as many starches and vegetable sides as you like. The plate price includes everything.' },
+    { n: '01', t: 'Pick your plate', d: 'Choose a protein, then up to three starches and three vegetable sides. The first of each is in the plate price; an extra portion is charged.' },
     { n: '02', t: 'Pay your way', d: 'Pay by card through Yoco before we cook, or in cash to the driver at the door.' },
     { n: '03', t: 'We bring it to you', d: `Delivery is included in Sandton and Rosebank. Further out a delivery fee applies, up to ${maxKm} km.` },
     {
@@ -509,8 +509,8 @@ function ServiceRules() {
           */}
           <p className="mt-3 text-theme-soft">
             We cook on Thursdays and Fridays, and we are working towards being open every day. Any cooking day ahead can
-            be booked now — you are not limited to the next one. On a day we are not cooking you can still send us a
-            basket and the kitchen will confirm whether it can cook it.
+            be booked now — you are not limited to the next one. On a day we are not cooking you can still send us your
+            cart and the kitchen will confirm whether it can cook it.
           </p>
           <p className="mt-3 text-sm text-theme-soft">
             Every order is delivered. Inside Sandton and Rosebank the plate price is the whole price.

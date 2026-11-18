@@ -72,7 +72,7 @@ export const PAGES = {
   '/menu': {
     title: 'The Menu & Prices',
     description:
-      'The full Heritage Bites menu and prices: traditional plates at R100, contemporary at R130, with as many starches and vegetable sides as you like.',
+      'The full Heritage Bites menu and prices: traditional plates at R100, contemporary at R130, with up to three starches and three vegetable sides.',
     priority: 0.9,
     changefreq: 'weekly',
   },
