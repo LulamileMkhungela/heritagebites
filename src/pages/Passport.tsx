@@ -184,7 +184,7 @@ export default function Passport() {
             — no payment, no order placed.
           </p>
         </div>
-        <LinkButton to="/quest">Start a quest</LinkButton>
+        <LinkButton to="/quest">Start a request</LinkButton>
       </div>
 
       <div className="mt-10">

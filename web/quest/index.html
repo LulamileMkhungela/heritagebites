@@ -21,14 +21,14 @@
     -->
     <!--seo:start-->
     <title>Ask Us to Cook It — Heritage Bites</title>
-    <meta name="description" content="Ask the Heritage Bites kitchen to cook a dish you miss, or tell us how the food was. Every quest is read by a person and answered by a person." />
+    <meta name="description" content="Ask the Heritage Bites kitchen to cook a dish you miss, or tell us how the food was. Every request is read by a person and answered by a person." />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <link rel="canonical" href="https://lulamilemkhungela.github.io/heritagebites/web/quest" />
     <meta property="og:site_name" content="Heritage Bites" />
     <meta property="og:locale" content="en_ZA" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Ask Us to Cook It — Heritage Bites" />
-    <meta property="og:description" content="Ask the Heritage Bites kitchen to cook a dish you miss, or tell us how the food was. Every quest is read by a person and answered by a person." />
+    <meta property="og:description" content="Ask the Heritage Bites kitchen to cook a dish you miss, or tell us how the food was. Every request is read by a person and answered by a person." />
     <meta property="og:url" content="https://lulamilemkhungela.github.io/heritagebites/web/quest" />
     <meta property="og:image" content="https://lulamilemkhungela.github.io/heritagebites/web/img/social-card.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -38,7 +38,7 @@
     <meta name="twitter:image" content="https://lulamilemkhungela.github.io/heritagebites/web/img/social-card.jpg" />
     <meta name="twitter:image:alt" content="The Heritage Bites logo: a cooking pot on an engraved badge, with the words Heritage Bites and Every Bite Tells a Story." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:description" content="Ask the Heritage Bites kitchen to cook a dish you miss, or tell us how the food was. Every quest is read by a person and answered by a person." />
+    <meta name="twitter:description" content="Ask the Heritage Bites kitchen to cook a dish you miss, or tell us how the food was. Every request is read by a person and answered by a person." />
     <meta name="twitter:title" content="Ask Us to Cook It — Heritage Bites" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Restaurant","@id":"https://lulamilemkhungela.github.io/heritagebites/web/#restaurant","name":"Heritage Bites","alternateName":"Heritage Bites South African Kitchen","slogan":"Every Bite Tells a Story","description":"Traditional and contemporary South African plates — mogodu, tshotlo, tlhakwana, smiley, wings and short rib — cooked in small batches on Thursdays and Fridays, delivered in Sandton and Rosebank and up to 15 km from the kitchen.","url":"https://lulamilemkhungela.github.io/heritagebites/web/","hasMenu":"https://lulamilemkhungela.github.io/heritagebites/web/menu","image":"https://lulamilemkhungela.github.io/heritagebites/web/img/social-card.jpg","telephone":"+27670137587","email":"heritagebitesfood@gmail.com","servesCuisine":["South African","African","Traditional"],"priceRange":"R100–R130","currenciesAccepted":"ZAR","paymentAccepted":"Cash, Credit Card","foundingDate":"2025","keywords":"South African food, traditional South African plates, mogodu, tshotlo, tlhakwana, smiley, kota, African food delivery, Rosebank food delivery, Sandton food delivery, Rosebank and Sandton restaurants","hasDeliveryMethod":"http://purl.org/goodrelations/v1#DeliveryModeOwnFleet","areaServed":[{"@type":"City","name":"Rosebank"},{"@type":"City","name":"Sandton"},{"@type":"City","name":"Johannesburg"}],"openingHoursSpecification":[{"@type":"OpeningHoursSpecification","dayOfWeek":["Thursday","Friday"],"opens":"12:00","closes":"13:30"}],"hasOfferCatalog":{"@type":"OfferCatalog","name":"Plates","itemListElement":[{"@type":"Offer","name":"Traditional plate","price":"100.00","priceCurrency":"ZAR","url":"https://lulamilemkhungela.github.io/heritagebites/web/menu","eligibleQuantity":{"@type":"QuantitativeValue","minValue":100}},{"@type":"Offer","name":"Contemporary plate","price":"130.00","priceCurrency":"ZAR","url":"https://lulamilemkhungela.github.io/heritagebites/web/menu"}]},"potentialAction":{"@type":"OrderAction","target":"https://lulamilemkhungela.github.io/heritagebites/web/checkout","deliveryMethod":"http://purl.org/goodrelations/v1#DeliveryModeOwnFleet"},"additionalProperty":{"@type":"PropertyValue","name":"Minimum order","value":"R100"}}</script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://lulamilemkhungela.github.io/heritagebites/web/#website","url":"https://lulamilemkhungela.github.io/heritagebites/web/","name":"Heritage Bites","inLanguage":"en-ZA","publisher":{"@id":"https://lulamilemkhungela.github.io/heritagebites/web/#restaurant"}}</script>
@@ -79,10 +79,33 @@
     -->
     <link rel="preload" href="../fonts/fraunces-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="../fonts/manrope-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <script type="module" crossorigin src="../assets/index-Dw6vpz6G.js"></script>
-    <link rel="stylesheet" crossorigin href="../assets/index-m7fnQFB5.css">
+    <script type="module" crossorigin src="../assets/index-DCiXv88L.js"></script>
+    <link rel="stylesheet" crossorigin href="../assets/index-CPmSGNNA.css">
   </head>
   <body>
+    <!--
+      Theme, before first paint.
+
+      This has to be inline and synchronous: React mounts after the browser has
+      already painted, so a theme applied by a component shows a dark-mode
+      customer the light palette for as long as the bundle takes to parse. It is
+      six lines and no network cost.
+
+      No stored value means "follow the device", which is what `color-scheme:
+      light dark` in the stylesheet already does — so the common case sets no
+      attribute at all and the `light-dark()` tokens resolve themselves.
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('hb.theme');
+          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+          var dark = t === 'dark' || (t !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', dark ? '#071120' : '#001938');
+        } catch (e) {}
+      })();
+    </script>
     <!--
       Boot loader.
 

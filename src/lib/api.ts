@@ -359,9 +359,9 @@ export const api = {
         name: entry.name ?? '',
         phone: entry.phone ?? '',
         email: entry.email ?? '',
-        subject: `Meal quest — ${entry.dish ?? ''}`.slice(0, 120),
+        subject: `Meal request — ${entry.dish ?? ''}`.slice(0, 120),
         message: summary,
-        _subject: `Heritage Bites meal quest — ${entry.name ?? ''}`.slice(0, 120),
+        _subject: `Heritage Bites meal request — ${entry.name ?? ''}`.slice(0, 120),
         source: 'heritagebites.co.za/quest',
       });
     }

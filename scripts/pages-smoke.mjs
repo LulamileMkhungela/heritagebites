@@ -304,17 +304,24 @@ await check('the enquiry and quest forms really submit from the static build', a
     await page.setRequestInterception(false);
   }
 
-  if (posted.length !== 2) throw new Error(`expected 2 inbox posts (quest + contact), saw ${posted.length}`);
-  const quest = posted.find((p) => /Meal quest/i.test(p.body));
+  if (posted.length !== 2) throw new Error(`expected 2 inbox posts (request + contact), saw ${posted.length}`);
+  /*
+   * The subject is "Meal request", not "Meal quest": the owner asked for the
+   * customer-facing wording to say request everywhere, and this subject is what
+   * the kitchen sees in its inbox. Matching the old string here would hide a
+   * regression in either direction, so it is pinned to the current wording.
+   */
+  const request = posted.find((p) => /Meal request/i.test(p.body));
   const contact = posted.find((p) => /website enquiry/i.test(p.body));
-  if (!quest) throw new Error('the quest was not posted to the inbox');
-  if (!/Dombolo with extra morogo/.test(quest.body)) throw new Error('the quest post is missing the dish');
-  if (!/Preview Test/.test(quest.body) || !/555 0000/.test(quest.body)) throw new Error('the quest post is missing the contact details');
+  if (!request) throw new Error('the meal request was not posted to the inbox');
+  if (/Meal quest/i.test(request.body)) throw new Error('the inbox subject still says "quest"');
+  if (!/Dombolo with extra morogo/.test(request.body)) throw new Error('the request post is missing the dish');
+  if (!/Preview Test/.test(request.body) || !/555 0000/.test(request.body)) throw new Error('the request post is missing the contact details');
   if (!contact) throw new Error('the enquiry was not posted to the inbox');
   if (!/cater 30 plates/.test(contact.body)) throw new Error('the enquiry post is missing the message');
   if (!/Preview Enquiry/.test(contact.body)) throw new Error('the enquiry post is missing the name');
 
-  return `${posted.length} real inbox posts (quest + enquiry), nothing refused`;
+  return `${posted.length} real inbox posts (request + enquiry), nothing refused`;
 });
 
 await check('the loyalty lookup is replaced by guidance, not a dead form', async () => {

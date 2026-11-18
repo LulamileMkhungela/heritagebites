@@ -3715,6 +3715,55 @@ await step('the back-to-top button appears only after scrolling, and returns the
   return 'hidden at the top, appears after scrolling, clears the basket bar, returns to the top, absent from the checkout';
 });
 
+await step('nothing a customer can read calls a request a "quest"', async () => {
+  /*
+   * Owner, 19 Nov 2026: "no quest wording but request (eg Start a quest into
+   * Start a request)".
+   *
+   * "/quest" is the route and stays — it is a URL, not a word anyone reads.
+   * What must not survive is the *label*: the button on the loyalty page said
+   * "Start a quest", and the page's own search description said "every quest is
+   * read by a person". Both are read by customers and by search engines.
+   *
+   * The check is deliberately on rendered text and accessible names rather than
+   * on source, because the same word appears legitimately in code comments and
+   * in the word "question" — matching source would either miss the label or
+   * fail on prose that is correct.
+   */
+  const routes = ['/', '/menu', '/quest', '/passport', '/about', '/contact'];
+  const offenders = [];
+  for (const route of routes) {
+    const page = boot(route);
+    await page.waitFor(() => page.text().length > 120, route, 20000);
+    await sleep(200);
+
+    /*
+     * Word boundaries on BOTH sides. `\bquest` alone is not enough: it matches
+     * the prefix of "question", which is ordinary English on the menu and
+     * contact pages and must not be flagged. What is being caught is the word
+     * "quest" / "quests" standing alone.
+     */
+    const bad = /\bquests?\b/i;
+
+    const walker = page.doc.createTreeWalker(page.doc.body, 4 /* SHOW_TEXT */);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (bad.test(n.textContent)) offenders.push(`${route} text: "${n.textContent.trim().slice(0, 40)}"`);
+    }
+    for (const el of page.doc.querySelectorAll('[aria-label],[title],[alt],[placeholder]')) {
+      for (const attr of ['aria-label', 'title', 'alt', 'placeholder']) {
+        const v = el.getAttribute(attr);
+        if (v && bad.test(v)) offenders.push(`${route} ${attr}: "${v.slice(0, 40)}"`);
+      }
+    }
+    const desc = page.doc.querySelector('meta[name="description"]')?.getAttribute('content') ?? '';
+    if (bad.test(desc)) offenders.push(`${route} meta description: "${desc.slice(0, 60)}"`);
+
+    page.close();
+  }
+  if (offenders.length) throw new Error(`quest wording still visible: ${offenders.slice(0, 4).join(' | ')}`);
+  return `${routes.length} routes carry no quest wording in text, labels or metadata`;
+});
+
 await step('the heritage band carries white as one of its painted pigments', async () => {
   /*
    * Owner, 19 Nov 2026: "the heritage vector must also have a white color".

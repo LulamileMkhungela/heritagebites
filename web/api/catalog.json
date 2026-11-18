@@ -1706,12 +1706,12 @@
     "isServiceDay": false,
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Tuesday",
-    "timeLabel": "21:26",
+    "dayLabel": "Wednesday",
+    "timeLabel": "13:25",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Tuesday: closed",
+    "todayLabel": "Wednesday: closed",
     "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Tuesday is a rest day",
+    "headline": "Wednesday is a rest day",
     "message": "The pots are resting today — and honestly, so are we. We cook on Thursdays and Fridays, 12:00–13:30, and we are working towards being open every day. We are back Thursday 12:00–13:30.",
     "shortMessage": "We cook Thursdays and Fridays, 12:00–13:30. Your order goes in first on Thursday.",
     "serviceDays": [
@@ -1895,5 +1895,5 @@
   "notifications": {
     "push": false
   },
-  "today": 2
+  "today": 3
 }
