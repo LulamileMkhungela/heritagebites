@@ -11,6 +11,7 @@
  *   npm run preview:pages &
  *   HB_BASE=http://127.0.0.1:5055/heritagebites/ node scripts/pages-smoke.mjs
  */
+import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 import { prepareRuntime } from './lib/chromium-runtime.mjs';
@@ -70,6 +71,64 @@ await check('the catalogue snapshot loads and the site paints', async () => {
   if (!/Mogodu/i.test(body)) throw new Error('no dishes rendered — the catalogue snapshot is missing');
   if (!/R100,00/.test(body)) throw new Error('plate prices are missing from the preview');
   return 'catalogue + prices present';
+});
+
+await check('About Us keeps the supplied copy in the original layout', async () => {
+  await goto('about');
+  await page.waitForSelector('main #story');
+  const copy = await page.$$eval('main :is(h1, h2, h3, p, span)', (blocks) =>
+    blocks.map((block) => block.textContent.replace(/\s+/g, ' ').trim()),
+  );
+  for (const block of [
+    'Our Story',
+    'Every great meal begins with love. For us, it started around the Sunday table and in the lunch boxes packed with care, because food has always been how we bring people together.',
+    'Heritage Bites is the dream of a mother and daughter, Keneilwe and Regomoditswe Moremedi. Together they bring years of experience in catering and running a food and pub business, along with a deep love of cooking and an instinct for how ingredients come together. That combination is the heart of everything we do.',
+    'We want to share the taste of traditional Setswana food with you, served alongside modern, contemporary dishes. It’s the food of our heritage, made for the way you live today.',
+    'Why We Began',
+    'Heritage Bites officially opened its doors in 2025. We started because we love to cook, and because we saw people who needed us: busy professionals with little time to cook, and a growing weariness with the same old canteen meals. We wanted to offer something better, a home-cooked meal that tastes like it was made just for you.',
+    'Heritage Bites is a proudly registered private company (CIPC).',
+    'Our Mission',
+    'Preserve and share our heritage: to bring authentic, high-quality traditional African meals to your table, fresh or frozen, in a way that is convenient and easy to enjoy.',
+    'Celebrate African cuisine: to serve meals rich in culture, flavour and story.',
+    'Grow with our community: to create jobs and build lasting partnerships with local suppliers.',
+    'Our Vision',
+    'To become South Africa’s most loved brand in traditional cuisine.',
+    'What’s Next',
+    'We’re looking for a place to call home, a stable location where you can always find us. From there, we’ll introduce our frozen Tshotlo and Mogodu to homes across the country, while continuing to serve daily traditional meals to everyone who needs a good plate of food, from the office to the worksite.',
+    'Come hungry. Leave feeling at home.',
+  ]) assert.ok(copy.includes(block), `missing exact copy: ${block}`);
+
+  const layout = await page.evaluate(() => {
+    const main = document.querySelector('main');
+    const read = (selector) => [...main.querySelectorAll(selector)].map((el) => el.textContent.trim());
+    const leftOf = (left, right) =>
+      main.querySelector(left).getBoundingClientRect().left < main.querySelector(right).getBoundingClientRect().left;
+    return {
+      hero: read(':scope > header h1'),
+      intro: read('#story h2'),
+      photoOnRight: leftOf('#story h2', '#story img'),
+      badge: read('#story img + div p'),
+      storyActions: read('#story a'),
+      visionOnLeft: leftOf('#vision', '#mission'),
+      missionNumbers: read('#mission li > [aria-hidden="true"]'),
+      values: read('#about-values h3'),
+      timeline: read('#about-timeline li h3'),
+      closing: read('#about-timeline > div > p').at(-1),
+    };
+  });
+  assert.deepEqual(layout, {
+    hero: ['Every bite tells a story'],
+    intro: ['A mother, a daughter, and a Sunday table'],
+    photoOnRight: true,
+    badge: ['Established', '2025', 'Our beginning'],
+    storyActions: ['Browse our meals', 'Contact us'],
+    visionOnLeft: true,
+    missionNumbers: ['01', '02', '03'],
+    values: ['Authentic flavours', 'Cooked to order', 'Order your way', 'Real value'],
+    timeline: ['Family kitchens', 'Heritage Bites begins', 'Two plate menus', 'What’s Next'],
+    closing: 'Come hungry. Leave feeling at home.',
+  });
+  return 'word-for-word story, original hero, photo and badge, story actions, vision and mission, values, and timeline';
 });
 
 /*

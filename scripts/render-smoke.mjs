@@ -278,7 +278,13 @@ const ROUTES = [
   { path: '/menu', expect: [/The full menu/i, /Traditional Plates/, /Contemporary Plates/], title: /^The Menu & Prices — Heritage Bites$/, description: /^The full Heritage Bites menu and prices/ },
   { path: '/specials', expect: [/Thursdays & Fridays/i, /R100|R130/], title: /^This Week's Cooking & Delivery — Heritage Bites$/, description: /^What is cooking this week/ },
   { path: '/policies', expect: [/Privacy Policy/i, /Refund Policy/i, /Order Cancellation Policy/i], title: /^Policies & Terms — Heritage Bites$/, description: /^Delivery, refunds/ },
-  { path: '/about', expect: [/Every bite tells a story/i, /Vision/i, /Mission/i, /How we started/i], title: /^Our Story, Vision & Mission — Heritage Bites$/, description: /^Heritage Bites began in a family kitchen/ },
+  {
+    path: '/about',
+    heading: 'Every bite tells a story',
+    expect: [/Why We Began/, /Our Mission/, /Our Vision/, /More than just a meal/, /The road so far/, /What’s Next/, /Come hungry\. Leave feeling at home\./],
+    title: /^Our Story, Vision & Mission — Heritage Bites$/,
+    description: /^Heritage Bites began in a family kitchen/,
+  },
   { path: '/contact', expect: [/Talk to a human/i], title: /^Contact, WhatsApp & Directions — Heritage Bites$/, description: /^Call or WhatsApp \+27 67 013 7587/ },
   { path: '/checkout', expect: [/cart is empty/i], title: /^Checkout — Heritage Bites$/, noindex: true },
   { path: '/passport', expect: [/Your loyalty card/i], title: /^Loyalty Card — Heritage Bites$/, description: /^Look up your Heritage Bites loyalty card/ },
@@ -360,8 +366,12 @@ for (const route of ROUTES) {
       throw new Error(`${route.path} has ${headings.length} <h1> elements, expected 1`);
     }
     const heading = (headings[0].textContent ?? '').replace(/\s+/g, ' ').trim();
+    /* Where a heading is supplied, check the exact wording instead of its length. */
+    if (route.heading && heading !== route.heading) {
+      throw new Error(`${route.path}'s <h1> is "${heading}", expected "${route.heading}"`);
+    }
     /* A private screen may head itself with an order code; a public page may not. */
-    if (!route.noindex && heading.length < 12) {
+    if (!route.heading && !route.noindex && heading.length < 12) {
       throw new Error(`${route.path}'s <h1> says very little: "${heading}"`);
     }
 
