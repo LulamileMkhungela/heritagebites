@@ -1,6 +1,6 @@
 # What I still need from Heritage Bites
 
-*Heritage Bites website · outstanding items after the 27 October 2026 answers, updated 28 October 2026 with the notification sign-off*
+*Heritage Bites website · outstanding items after the 27 October 2026 answers, updated 19 November 2026 with the extra-portion price*
 
 Your answers are in and the site has been updated to match them. The full response — what changed, why, and how production card payments work — is in [`regomoditswe-answers-2026-10.md`](regomoditswe-answers-2026-10.md). This page is only the short list of what is still open.
 
@@ -13,7 +13,21 @@ Your answers are in and the site has been updated to match them. The full respon
    tray-and-plate style as the others, and I will swap them. Do not send a photo
    of a different dish to fill the gap.
 2. **Drinks, if you sell them online.** Names and prices. They are not on the site at the moment because no drinks were signed off.
-3. **Add-ons, if they exist.** For example an extra starch or an extra side, with the price. The old R18–R65 add-ons were invented, so they were removed rather than guessed.
+3. **The price of a second portion of pap — a number only you have.**
+   A customer can now ask for two pap, or two chakalaka, the same way they ask
+   for two ginger beers: tap **+** on the row. The *first* portion of each is
+   already inside the R100 / R130 plate, so it costs nothing extra; each portion
+   after that is charged.
+
+   That charge is currently **R30**, which is a **placeholder, not your price**.
+   R30 is what a bowl costs on its own in Sides & Relishes, so it is at least a
+   price the menu does not contradict — but if a second helping of pap costs you
+   less than a whole bowl, tell me the real number and I will change it in one
+   place. Say it however you like: "R20 for an extra starch", "R30 for any extra
+   portion", or a different price for starch than for vegetables.
+
+   (This replaces the old note about add-ons in general. That one was a guess at
+   a whole add-on menu; this is one price, on a feature you asked for.)
 4. ~~The exact collection point at Standard Bank, Rosebank and Sandton.~~ **No
    longer needed.** Collection was removed on 14 November 2026 — the kitchen is
    delivery-only — so there is no collection point to publish. The policies, the

@@ -44,6 +44,8 @@ import {
   extraLabel,
   isOutsideAreaChoice,
   maxPerExtra,
+  maxPortions,
+  portionCost,
   mergeSpecialServiceDays,
   parseSpecialServiceDays,
   serviceStatus,
@@ -414,8 +416,27 @@ function priceLines(clientLines) {
            * asking for four hundred gets four, and the price follows the clamped
            * number rather than the requested one.
            */
-          const qty = group.priced ? Math.min(maxPerExtra(group, item), Math.max(1, Math.floor(Number(raw.extraQty?.[`${group.id}:${id}`] ?? raw.extraQty?.[id]) || 1))) : 1;
-          const delta = group.priced ? extraCost(Number(item?.price) || 0, qty) : 0;
+          /*
+           * How many portions of this one choice, and what that costs.
+           *
+           * Two different rules meet here, and they must not be confused:
+           *
+           *   - a `priced` group (the soft drink) is sold *alongside* the plate,
+           *     so every unit is charged at the item's own price;
+           *   - a starch or a side (a `portioned` choice) is *included* in the
+           *     plate, so its first portion is free and only the ones after it
+           *     are charged, at the extra-portion price.
+           *
+           * Both counts are clamped against the catalogue, never trusted as
+           * sent: a hand-made request for four hundred pap gets four, and the
+           * price follows the clamped number.
+           */
+          const sentQty = raw.extraQty?.[`${group.id}:${id}`] ?? raw.extraQty?.[id];
+          const cap = group.priced ? maxPerExtra(group, item) : maxPortions(item);
+          const qty = Math.min(cap, Math.max(1, Math.floor(Number(sentQty) || 1)));
+          const delta = group.priced
+            ? extraCost(Number(item?.price) || 0, qty)
+            : portionCost(item, qty);
           extras += delta;
           /*
            * The label carries the quantity, because the kitchen packs from this

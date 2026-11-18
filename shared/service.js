@@ -650,6 +650,47 @@ export function maxPerExtra(group, choice) {
 }
 
 /**
+ * The money a *second portion* of a starch or a vegetable side adds.
+ *
+ * This is a different rule from `extraCost`, and the difference is the whole
+ * point: `extraCost` prices every unit of a priced extra (a drink, where nothing
+ * is included), whereas a starch or side inside a plate already includes its
+ * first portion in the plate price. Asking R30 for the pap that the R100 plate
+ * is supposed to come with would be a second charge for the same food.
+ *
+ * So the count is split. Portions up to `extraAfter` are free; each one beyond
+ * it costs `extraPrice`. One pap is 0, two pap is 30, three is 60 — and the same
+ * rule applies to every side, so a plate with double pap and double chakalaka is
+ * plate + 60.
+ *
+ * @param {{ extraAfter?: number, extraPrice?: number, price?: number } | null | undefined} choice
+ * @param {number} [count]
+ * @returns {number}
+ */
+export function portionCost(choice, count) {
+  const n = Math.max(1, Math.min(20, Math.floor(Number(count) || 1)));
+  const included = Math.max(0, Math.floor(Number(choice?.extraAfter) || 0));
+  const charged = Math.max(0, n - included);
+  if (!charged) return 0;
+  const unit = Number(choice?.extraPrice);
+  return Math.round((Number.isFinite(unit) ? unit : 0) * charged * 100) / 100;
+}
+
+/**
+ * How many portions of this choice one line may carry.
+ *
+ * A portioned extra goes to four — two for the plate, two more on request —
+ * which is what the catalogue's `max` says. Everything else is one.
+ *
+ * @param {{ max?: number } | null | undefined} choice
+ * @returns {number}
+ */
+export function maxPortions(choice) {
+  const n = Math.floor(Number(choice?.max ?? 1));
+  return Math.max(1, Math.min(20, n));
+}
+
+/**
  * The money one priced extra adds to a line: unit price × how many.
  *
  * Kept here, rather than inline in the two pricing paths, because the browser and

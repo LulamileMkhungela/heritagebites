@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import type { CartOptionPick, MenuItem } from '../lib/types';
+import type { CartOptionPick, MenuItem, MenuOption } from '../lib/types';
 import { zar } from '../lib/format';
 import { Button, HeritageBand, Qty } from './ui';
 import { buildLine, useCart } from '../store/cart';
 import { useOverlay } from '../lib/useOverlay';
-import { extraCost, maxPerExtra } from '../../shared/service.js';
+import { extraCost, maxPerExtra, maxPortions, portionCost } from '../../shared/service.js';
 
 export function MealCard({
   item,
@@ -218,18 +218,36 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
       const c = o.choices.find((x) => x.id === id);
       if (!c) continue;
       /*
-       * Only a priced extra carries a count. A starch picked "twice" is still one
-       * starch — and its delta is zero, so a count there would be a number with
-       * no meaning that still showed up in the key and split the basket line.
+       * A choice that can be taken more than once carries its count, so the cart
+       * line can say `2 × Pap` rather than leaving the kitchen to work the
+       * extras out from the plate price.
+       *
+       * Both kinds of counted choice end up here. A priced extra (the soft
+       * drink) is charged for every one; a starch or a side includes its first
+       * portion and charges only the rest. Which rule applies is decided by the
+       * two helpers from the choice itself, never by a flag on the group.
        */
-      const qty = o.priced ? Math.min(maxPerExtra(o, c), Math.max(1, counts[`${o.id}:${c.id}`] ?? 1)) : 1;
-      picks.push({ optionId: o.id, choiceId: c.id, label: c.label, priceDelta: c.priceDelta, ...(qty > 1 ? { qty } : {}) });
+      const cap = o.priced ? maxPerExtra(o, c) : maxPortions(c);
+      const qty = Math.min(cap, Math.max(1, counts[`${o.id}:${c.id}`] ?? 1));
+      const delta = o.priced ? extraCost(c.priceDelta, qty) : portionCost(c, qty);
+      picks.push({ optionId: o.id, choiceId: c.id, label: c.label, priceDelta: delta, ...(qty > 1 ? { qty } : {}) });
     }
   }
 
   /* The count multiplies the extra, not the plate: 2 beers beside one plate is
-     R100 + R50, never 2 × R125. */
-  const unitPrice = item.price + picks.reduce((n, p) => n + extraCost(p.priceDelta || 0, p.qty), 0);
+     R100 + R50, never 2 × R125. Each pick already carries the amount for its
+     own count, so this adds it once rather than multiplying it again. */
+  const unitPrice = item.price + picks.reduce((n, p) => n + (p.priceDelta || 0), 0);
+
+  /*
+   * What one extra portion of anything in this option costs.
+   *
+   * Read off the choices rather than a constant, so the label above the group
+   * and the amount the till charges cannot drift apart. Zero means no choice in
+   * the group has an extra-portion rule.
+   */
+  const extraPortionPrice = (o: MenuOption) =>
+    Math.max(0, ...o.choices.map((c) => Number(c.extraPrice) || 0));
 
   const missing = item.options.filter((o) => o.required && !picked[o.id]);
 
@@ -328,7 +346,15 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                   catalogue, so this can never promise a fourth one.
                 */}
                 {o.multiple && o.required && (
-                  <span className="text-xs font-normal text-theme-muted">· pick up to {Math.max(1, Math.min(20, Number(o.max) || 1))}</span>
+                  <span className="text-xs font-normal text-theme-muted">
+                    · pick up to {Math.max(1, Math.min(20, Number(o.max) || 1))}
+                    {/*
+                      What a second portion costs, before it is tapped. A
+                      stepper that only shows its price after the customer has
+                      pressed + is a price they agreed to without reading it.
+                    */}
+                    {extraPortionPrice(o) > 0 && <> · extra portion + {zar(extraPortionPrice(o))}</>}
+                  </span>
                 )}
               </legend>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -345,11 +371,28 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                    * beers had to add the whole plate four times — four plates they
                    * did not order.
                    */
-                  const cap = maxPerExtra(o, c);
+                  const cap = o.priced ? maxPerExtra(o, c) : maxPortions(c);
                   const count = Math.min(cap, Math.max(1, counts[`${o.id}:${c.id}`] ?? 1));
-                  const steppable = Boolean(o.priced) && cap > 1;
+                  /*
+                   * Any choice the catalogue lets a customer take twice gets a
+                   * stepper: the soft drink, and now the starch and the
+                   * vegetable side. Owner, 19 Nov 2026: "on choose a starch,
+                   * choose vegetables, can we have similar functionality like we
+                   * have on add soft drink so the user can set if they want more
+                   * than 1 pap, etc but when they add more than 1 pap or any the
+                   * price goes up."
+                   */
+                  const steppable = cap > 1;
                   const setCount = (next: number) =>
                     setCounts((prev) => ({ ...prev, [`${o.id}:${c.id}`]: Math.min(cap, Math.max(1, next)) }));
+                  /* Removing the only tick in a required group would leave the
+                     plate incomplete, so the minus is disabled rather than dead. */
+                  const canRemove =
+                    !o.required ||
+                    !o.multiple ||
+                    ((Array.isArray(picked[o.id]) ? picked[o.id] : []) as string[]).length > 1;
+                  const delta = o.priced ? extraCost(c.priceDelta, count) : portionCost(c, count);
+                  const eachPrice = o.priced ? c.priceDelta : Number(c.extraPrice) || 0;
 
                   if (steppable && isOn) {
                     return (
@@ -363,15 +406,25 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                         <span className="min-w-0">
                           <span className="block font-semibold leading-snug">{c.label}</span>
                           <span className="font-mono text-xs text-theme-soft">
-                            + {zar(extraCost(c.priceDelta, count))}
-                            {count > 1 && <span className="text-theme-muted"> · {zar(c.priceDelta)} each</span>}
+                            {count === 1 ? (
+                              /* The first portion of a starch or a side is
+                                 inside the plate price; R0 would be a strange
+                                 thing to print. A drink is charged from one. */
+                              o.priced ? `+ ${zar(delta)}` : 'Included'
+                            ) : (
+                              <>
+                                + {zar(delta)}
+                                <span className="text-theme-muted"> · {zar(eachPrice)} each</span>
+                              </>
+                            )}
                           </span>
                         </span>
                         <span className="inline-flex shrink-0 items-center rounded-full border-2 border-theme/20 bg-surface">
                           <button
                             type="button"
                             onClick={() => (count <= 1 ? toggle(o.id, c.id, o.multiple, Boolean(o.required), o.max) : setCount(count - 1))}
-                            className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
+                            disabled={count <= 1 && !canRemove}
+                            className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-inherit"
                             aria-label={count <= 1 ? `Remove ${c.label}` : `One fewer ${c.label}`}
                           >
                             −
@@ -430,6 +483,14 @@ export function ItemModal({ item, onClose }: { item: MenuItem; onClose: () => vo
                         <span className="min-w-0">{c.label}</span>
                       </span>
                       {c.priceDelta > 0 && <span className="shrink-0 font-mono text-xs text-theme-soft">+ {zar(c.priceDelta)}</span>}
+                      {/*
+                        A second portion costs money, so "Included" alone would
+                        read as "all of it is free". Show what the tap after this
+                        one will cost, on the row, before it is tapped.
+                      */}
+                      {!o.priced && extraPortionPrice(o) > 0 && (
+                        <span className="shrink-0 font-mono text-xs text-theme-muted">2nd + {zar(extraPortionPrice(o))}</span>
+                      )}
                     </button>
                   );
                 })}

@@ -7,8 +7,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { serviceStatus, deliveryAreaFor, deliveryAreasLabel, serviceWindowFor, sastNow, windowLabel, parseSpecialServiceDays, specialServiceDayFor, mergeSpecialServiceDays, extraCost, extraLabel, maxPerExtra, bookableDates, bookableDateFor } from './service.js';
-import { plateMenus, menu } from '../seed.js';
+import { serviceStatus, deliveryAreaFor, deliveryAreasLabel, serviceWindowFor, sastNow, windowLabel, parseSpecialServiceDays, specialServiceDayFor, mergeSpecialServiceDays, extraCost, extraLabel, maxPerExtra, maxPortions, portionCost, bookableDates, bookableDateFor } from './service.js';
+import { plateMenus, menu, sides } from '../seed.js';
 
 const settings = {
   hours: [
@@ -341,13 +341,112 @@ test('the drink in the seed allows four bottles on one plate', () => {
   const protein = plateMenus[0].groups.find((g) => g.id === 'protein');
   assert.equal(maxPerExtra(protein, protein.items[0]), 1, 'protein must stay a single choice');
 
-  /* Starch and vegetable side take up to three each, and each item is still one
-     portion — the cap is on selections, not on portions of one thing. */
-  for (const id of ['starch', 'veg']) {
-    const g = plateMenus[0].groups.find((x) => x.id === id);
-    assert.equal(g.max, 3, `${id} allows three selections`);
-    assert.equal(g.items[0].max, undefined, `${id} items carry no count of their own`);
+  /*
+   * Starch and vegetable side take up to three *selections* each, and now also
+   * up to four *portions* of any one of them (owner, 19 Nov 2026: "can we have
+   * similar functionality like we have on add soft drink so the user can set if
+   * they want more than 1 pap, etc but when they add more than 1 pap or any the
+   * price goes up").
+   *
+   * The two caps are different questions and live on different objects. The
+   * group's `max` counts how many different choices fit; the item's own `max`
+   * counts portions of one choice, and is what turns the row into a stepper. If
+   * the item cap were left to fall back to the group's, three helpings of pap
+   * would pass for free — the exact bug this asserts against.
+   */
+  for (const plate of plateMenus) {
+    for (const id of ['starch', 'veg']) {
+      const g = plate.groups.find((x) => x.id === id);
+      assert.equal(g.max, 3, `${plate.id}/${id} allows three selections`);
+      assert.equal(g.items[0].max, 4, `${plate.id}/${id} items carry their own portion cap`);
+      assert.ok(maxPortions(g.items[0]) > g.max, `${plate.id}/${id} portions are not capped by the selection cap`);
+    }
   }
+});
+
+test('the first portion of a starch or side is included, the rest are charged', () => {
+  /*
+   * The rule the owner asked for, stated as arithmetic.
+   *
+   * One pap is part of the R100 plate — it is what the plate price buys — so it
+   * must cost nothing. Two pap is one extra bowl of food the kitchen cooks and
+   * packs separately, so it is charged; three is two bowls.
+   */
+  const pap = plateMenus[0].groups.find((g) => g.id === 'starch').items[0];
+  assert.equal(pap.extraAfter, 1, 'one portion is included');
+  assert.ok(pap.extraPrice > 0, 'a further portion is charged');
+
+  assert.equal(portionCost(pap, 1), 0, 'one pap is inside the plate price');
+  assert.equal(portionCost(pap, 2), pap.extraPrice, 'two pap is one extra portion');
+  assert.equal(portionCost(pap, 3), pap.extraPrice * 2, 'three pap is two extra portions');
+  assert.equal(portionCost(pap, 4), pap.extraPrice * 3);
+
+  /*
+   * Nothing may be charged beyond the cap the UI allows — and the cap is applied
+   * by clamping the count first, exactly as every caller does (`Math.min(cap,
+   * …)`). `portionCost` itself only enforces the same 1..20 sanity ceiling that
+   * `extraCost` does, so a hand-made request cannot run away; it does not know
+   * about the catalogue's cap. Asserting the composition is what the customer
+   * actually gets.
+   */
+  const capped = Math.min(maxPortions(pap), 99);
+  assert.equal(capped, pap.max, 'four is the ceiling the catalogue sets');
+  assert.equal(portionCost(pap, capped), pap.extraPrice * 3, 'four pap is three extra portions');
+  /* Even uncapped it stops at the shared ceiling rather than pricing 98 bowls. */
+  assert.equal(portionCost(pap, 99), pap.extraPrice * 19);
+
+  /* A protein has no extra-portion rule, so it can never add money however it
+     is counted. */
+  const protein = plateMenus[0].groups.find((g) => g.id === 'protein').items[0];
+  assert.equal(portionCost(protein, 3), 0, 'a protein carries no portion rule');
+
+  /*
+   * An extra portion costs the same as the bowl sold on its own. A menu that
+   * charged one amount for a bowl of pap and another for the identical second
+   * bowl inside a plate would be contradicting itself.
+   */
+  /* Chakalaka is sold both ways: inside a plate, and by the bowl in Sides &
+     Relishes. Both prices come from the same number, in the seed. */
+  const chakalaka = plateMenus[0].groups.find((g) => g.id === 'veg').items.find((i) => i.id === 'chakalaka');
+  const chakalakaSide = sides.find((x) => x.id === 'side-chakalaka');
+  assert.ok(chakalakaSide, 'chakalaka is sold by the bowl');
+  assert.equal(chakalaka.extraPrice, chakalakaSide.price, 'an extra portion costs the same as the bowl');
+});
+
+test('every starch and every side carries the extra-portion rule', () => {
+  /*
+   * Both menus, every choice. One forgotten side is a side where a second
+   * helping arrives free — and it would be the least-tested one, so the sweep
+   * matters more than the spot check above.
+   */
+  for (const plate of plateMenus) {
+    for (const id of ['starch', 'veg']) {
+      const g = plate.groups.find((x) => x.id === id);
+      assert.ok(g, `${plate.id} has a ${id} group`);
+      for (const item of g.items) {
+        assert.equal(item.extraAfter, 1, `${plate.id}/${id}/${item.id} includes one portion`);
+        assert.ok(item.extraPrice > 0, `${plate.id}/${id}/${item.id} charges for a second`);
+        assert.ok(item.max > 1, `${plate.id}/${id}/${item.id} offers a stepper`);
+      }
+    }
+  }
+});
+
+test('the dish-card choices carry the same rule as the plate builder', () => {
+  /*
+   * The same starch is sold two ways — inside the plate builder and on a dish
+   * card — and the two must price an extra portion identically. They are
+   * different shapes (`groups[].items` vs `options[].choices`), which is exactly
+   * how one of them ends up free.
+   */
+  const card = menu.find((m) => m.plateId);
+  const starchOpt = card.options.find((o) => o.id === 'starch');
+  assert.ok(starchOpt, 'the dish card offers a starch');
+  const pap = starchOpt.choices.find((c) => c.id === 'pap');
+  const platePap = plateMenus[0].groups.find((g) => g.id === 'starch').items.find((i) => i.id === 'pap');
+  assert.equal(pap.extraPrice, platePap.extraPrice);
+  assert.equal(pap.extraAfter, platePap.extraAfter);
+  assert.equal(portionCost(pap, 2), portionCost(platePap, 2));
 });
 
 test('the multi-select groups are the same shape on both menus', () => {

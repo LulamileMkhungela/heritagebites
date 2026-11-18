@@ -13,7 +13,17 @@
  */
 
 /** Bumped whenever the catalogue changes shape, so stored data is re-seeded. */
-export const SEED_VERSION = 14;
+/*
+ * Bumped with the extra-portion rule below.
+ *
+ * The catalogue is seeded into the store once and then read from there, so a
+ * change to `seed.js` alone never reaches a running server: the choices in the
+ * store have no `extraPrice`, and a second pap would quietly cost nothing. The
+ * version is what makes the stored catalogue be replaced.
+ *
+ * 15 — starches and vegetable sides carry `extraAfter` / `extraPrice` / `max`.
+ */
+export const SEED_VERSION = 15;
 
 const img = (name) => `/img/${name}.jpg`;
 /*
@@ -33,39 +43,123 @@ const img = (name) => `/img/${name}.jpg`;
  * vegetable side — and are priced per plate, not per component. Every option
  * carries a zero price delta because the plate price already includes it.
  */
+/**
+ * The sides, sold on their own.
+ *
+ * Owner, 17 Nov 2026: "some sides & relishes must have prices and details when
+ * clicked" and, when asked whether a side can actually be bought: "they can add
+ * to cart but be unable to checkout if items are less than 100".
+ *
+ * So a side is a real product: its own price, its own portion sentence, its own
+ * photograph, addable to the basket. The R100 minimum is what stops somebody
+ * ordering one R30 bowl of chakalaka on its own — the same gate a small order
+ * already meets, not a special rule for sides.
+ *
+ * PRICE IS A GUESS — the owner has the number. R30 a portion is the placeholder,
+ * and every surface reads this one constant, so one edit moves the menu, the
+ * basket and the till together.
+ *
+ * "Inside a plate" is a different thing and stays true: every side here is also
+ * chosen *within* the R100/R130 plate, where it costs nothing extra. The card
+ * says both, in that order, because the price is for the bowl.
+ */
+const SIDE_PORTION_PRICE = 30;
+
+/*
+ * What a SECOND portion of a starch or a vegetable side costs.
+ *
+ * Owner, 19 Nov 2026: "on choose a starch, choose vegetables, can we have
+ * similar functionality like we have on add soft drink so the user can set if
+ * they want more than 1 pap, etc but when they add more than 1 pap or any the
+ * price goes up".
+ *
+ * The first portion of each is included in the plate price — that is what the
+ * plate price buys, and it is why these choices carry a zero delta. A further
+ * portion is food the kitchen has to cook and pack separately, so it is charged
+ * at the same amount as a side sold on its own: R30.
+ *
+ * It is deliberately tied to SIDE_PORTION_PRICE rather than being its own
+ * number. A customer can buy a bowl of pap for R30 in the sides section; being
+ * charged a different amount for the identical second bowl inside a plate would
+ * be a price the menu contradicts.
+ *
+ * PRICE IS A GUESS — the owner has the number.
+ *
+ * Declared with `SIDE_PORTION_PRICE`, above the lists that use it — a `const` is
+ * not hoisted, so reading it from a list further up the file throws before the
+ * menu ever loads.
+ */
+const EXTRA_PORTION_PRICE = SIDE_PORTION_PRICE;
+
+/**
+ * A starch or side choice, with the quantity rule both kinds share.
+ *
+ * `extraAfter: 1` is the whole rule in one word: the first portion is free, and
+ * anything after it is priced at `extraPrice`. The server and the builder both
+ * read these two fields, so the stepper cannot offer something the till refuses.
+ */
+const portioned = (choice) => ({
+  ...choice,
+  extraAfter: 1,
+  extraPrice: EXTRA_PORTION_PRICE,
+  max: 4,
+});
+
+/**
+ * A starch or side as a plate *item*, keeping the quantity rule.
+ *
+ * The groups carry `items`, not `choices`, and the mapping to an item used to
+ * copy only `id`, `label` and `price` — which silently dropped the extra-portion
+ * rule on the floor. The builder then saw a choice that could never be taken
+ * twice and a second pap that cost nothing, whatever the seed above it said.
+ * Copying the rule across is the whole point of this function, so the fields
+ * travel with the item instead of being remembered in two places.
+ *
+ * `price` stays at the plate price: an item inside a plate is already paid for,
+ * and the amount is only meaningful for the `priced` extras like the drink.
+ */
+const plateItem = (choice, platePrice) => ({
+  id: choice.id,
+  label: choice.label,
+  price: platePrice,
+  extraAfter: choice.extraAfter,
+  extraPrice: choice.extraPrice,
+  max: choice.max,
+});
+
 const traditionalStarches = [
-  { id: 'pap', label: 'Pap', priceDelta: 0 },
-  { id: 'mabele', label: 'Mabele (sorghum)', priceDelta: 0 },
-  { id: 'samp', label: 'Samp', priceDelta: 0 },
-  { id: 'dumpling', label: 'Dumpling', priceDelta: 0 },
+  portioned({ id: 'pap', label: 'Pap', priceDelta: 0 }),
+  portioned({ id: 'mabele', label: 'Mabele (sorghum)', priceDelta: 0 }),
+  portioned({ id: 'samp', label: 'Samp', priceDelta: 0 }),
+  portioned({ id: 'dumpling', label: 'Dumpling', priceDelta: 0 }),
 ];
 
 const traditionalSides = [
-  { id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 },
-  { id: 'spinach', label: 'Spinach', priceDelta: 0 },
-  { id: 'morogo', label: 'Morogo', priceDelta: 0 },
-  { id: 'salsa', label: 'Salsa', priceDelta: 0 },
+  portioned({ id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 }),
+  portioned({ id: 'spinach', label: 'Spinach', priceDelta: 0 }),
+  portioned({ id: 'morogo', label: 'Morogo', priceDelta: 0 }),
+  portioned({ id: 'salsa', label: 'Salsa', priceDelta: 0 }),
   /* Added on the owner's instruction (14 Nov 2026). Included in the plate price. */
-  { id: 'chakalaka', label: 'Chakalaka', priceDelta: 0 },
-  { id: 'atchaar', label: 'Atchaar', priceDelta: 0 },
-  { id: 'green-salad', label: 'Green salad', priceDelta: 0 },
+  portioned({ id: 'chakalaka', label: 'Chakalaka', priceDelta: 0 }),
+  portioned({ id: 'atchaar', label: 'Atchaar', priceDelta: 0 }),
+  portioned({ id: 'green-salad', label: 'Green salad', priceDelta: 0 }),
 ];
 
 const contemporaryStarches = [
-  { id: 'potato-mash', label: 'Potato mash', priceDelta: 0 },
-  { id: 'savoury-rice', label: 'Savoury rice', priceDelta: 0 },
-  { id: 'baby-potatoes', label: 'Baby potatoes', priceDelta: 0 },
-  { id: 'cous-cous', label: 'Cous cous', priceDelta: 0 },
-  { id: 'garlic-bread', label: 'Garlic bread', priceDelta: 0 },
+  portioned({ id: 'potato-mash', label: 'Potato mash', priceDelta: 0 }),
+  portioned({ id: 'savoury-rice', label: 'Savoury rice', priceDelta: 0 }),
+  portioned({ id: 'baby-potatoes', label: 'Baby potatoes', priceDelta: 0 }),
+  portioned({ id: 'cous-cous', label: 'Cous cous', priceDelta: 0 }),
+  portioned({ id: 'garlic-bread', label: 'Garlic bread', priceDelta: 0 }),
 ];
 
 const contemporarySides = [
-  { id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 },
-  { id: 'spinach', label: 'Spinach', priceDelta: 0 },
-  { id: 'salsa', label: 'Salsa', priceDelta: 0 },
-  { id: 'green-salad', label: 'Green salad', priceDelta: 0 },
-  { id: 'corn-ribs', label: 'Corn ribs', priceDelta: 0 },
-  { id: 'glazed-carrots', label: 'Glazed carrots', priceDelta: 0 },
+  portioned({ id: 'braised-cabbage', label: 'Braised cabbage', priceDelta: 0 }),
+  portioned({ id: 'spinach', label: 'Spinach', priceDelta: 0 }),
+  portioned({ id: 'salsa', label: 'Salsa', priceDelta: 0 }),
+  portioned({ id: 'green-salad', label: 'Green salad', priceDelta: 0 }),
+  portioned({ id: 'corn-ribs', label: 'Corn ribs', priceDelta: 0 }),
+  portioned({ id: 'glazed-carrots', label: 'Glazed carrots', priceDelta: 0 }),
 ];
 
 /*
@@ -97,6 +191,14 @@ const sideGroup = (choices, id = 'veg') => ({
   max: 3,
   choices,
 });
+
+/*
+ * `max: 3` above counts *selections* — up to three different starches — and has
+ * nothing to do with portions. The portion cap and the extra-portion price live
+ * on each choice (`extraAfter`, `extraPrice`, and the choice's own `max`), which
+ * is what turns a row into a stepper. Reading the group's `max` as a portion cap
+ * is how three helpings of pap would once have slipped through for free.
+ */
 
 /**
  * The soft drink, offered after the vegetable side.
@@ -176,7 +278,7 @@ export const plateMenus = [
     name: 'Traditional Plate',
     price: 100,
     blurb:
-      'One protein, and as many starches and vegetable sides as you like (up to three of each), from the traditional kitchen.',
+      'One protein, and up to three starches and three vegetable sides — the first of each is included, and an extra portion is charged, from the traditional kitchen.',
     image: img('plate-mogodu'),
     groups: [
       {
@@ -200,8 +302,8 @@ export const plateMenus = [
        * R100 meal. The items stay at `price: 100` (the plate price) because
        * every component is already inside it; the amount means nothing.
        */
-      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: traditionalStarches.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
-      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: traditionalSides.map((c) => ({ id: c.id, label: c.label, price: 100 })) },
+      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: traditionalStarches.map((c) => plateItem(c, 100)) },
+      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: traditionalSides.map((c) => plateItem(c, 100)) },
       drinksGroup(),
     ],
   },
@@ -210,7 +312,7 @@ export const plateMenus = [
     name: 'Contemporary Plate',
     price: 130,
     blurb:
-      'One protein, and as many starches and vegetable sides as you like (up to three of each), from the contemporary kitchen.',
+      'One protein, and up to three starches and three vegetable sides — the first of each is included, and an extra portion is charged, from the contemporary kitchen.',
     image: img('plate-short-rib'),
     groups: [
       {
@@ -222,8 +324,8 @@ export const plateMenus = [
         ],
       },
       /* Multi-select, same rule and same cap as the traditional plate. */
-      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: contemporaryStarches.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
-      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: contemporarySides.map((c) => ({ id: c.id, label: c.label, price: 130 })) },
+      { id: 'starch', label: 'Choose your starch', required: true, max: 3, items: contemporaryStarches.map((c) => plateItem(c, 130)) },
+      { id: 'veg', label: 'Choose your vegetable side', required: true, max: 3, items: contemporarySides.map((c) => plateItem(c, 130)) },
       drinksGroup(),
     ],
   },
@@ -320,27 +422,11 @@ function sideImage(id) {
   );
 }
 
-/**
- * The sides, sold on their own.
- *
- * Owner, 17 Nov 2026: "some sides & relishes must have prices and details when
- * clicked" and, when asked whether a side can actually be bought: "they can add
- * to cart but be unable to checkout if items are less than 100".
- *
- * So a side is a real product: its own price, its own portion sentence, its own
- * photograph, addable to the basket. The R100 minimum is what stops somebody
- * ordering one R30 bowl of chakalaka on its own — the same gate a small order
- * already meets, not a special rule for sides.
- *
- * PRICE IS A GUESS — the owner has the number. R30 a portion is the placeholder,
- * and every surface reads this one constant, so one edit moves the menu, the
- * basket and the till together.
- *
- * "Inside a plate" is a different thing and stays true: every side here is also
- * chosen *within* the R100/R130 plate, where it costs nothing extra. The card
- * says both, in that order, because the price is for the bowl.
- */
-const SIDE_PORTION_PRICE = 30;
+
+
+
+
+
 
 /** How much one portion is, in the words a customer would ask for it. */
 function sidePortion(id) {

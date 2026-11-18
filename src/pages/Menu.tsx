@@ -9,7 +9,7 @@ import { ItemModal, MealCard } from '../components/MealCard';
 import type { ComingSoonItem, MenuItem, PlateGroup, PlateMenu } from '../lib/types';
 import { menuJsonLd } from '../../shared/seo.js';
 import { DELIVERY_ZONES } from '../../shared/address.js';
-import { extraCost, maxPerExtra } from '../../shared/service.js';
+import { extraCost, maxPerExtra, maxPortions, portionCost } from '../../shared/service.js';
 import { currentSiteUrl, usePageSeo } from '../lib/seo';
 import { asset } from '../lib/assets';
 
@@ -739,12 +739,18 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
    */
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   /*
-   * How many of a priced extra, keyed by "groupId:itemId".
+   * How many portions of a choice, keyed by "groupId:itemId".
    *
    * Kept apart from `picked` because `picked` is a map of *which* choice fills a
-   * slot, and a slot holds one. The bottle count is a second question — how many
-   * of the thing in the slot — and mixing the two would mean a vegetable side
+   * slot, and a slot holds one. The portion count is a second question — how
+   * many of the thing in the slot — and mixing the two would mean a protein
    * could claim a count it has no business having.
+   *
+   * Two different things end up in here: the soft drink (a `priced` extra,
+   * charged from the first bottle) and the starch and vegetable sides (which
+   * include their first portion and charge only the portions after it). The
+   * arithmetic differs, so which rule applies is a property of the choice, not
+   * of this map.
    */
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [qty, setQty] = useState(1);
@@ -782,23 +788,47 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       return { ...prev, [group.id]: [...current, itemId] };
     });
 
+  /*
+   * What one extra portion of anything in this group costs.
+   *
+   * Read off the choices rather than a constant, so the label above the group
+   * and the amount the till charges can never drift apart. Zero means the group
+   * has no extra-portion rule and every choice in it is simply included.
+   */
+  const extraPortionPrice = (g: PlateGroup) => {
+    const priced = g.items.map((i) => Number((i as { extraPrice?: number }).extraPrice) || 0);
+    return Math.max(0, ...priced);
+  };
+
   const missing = plate.groups.filter((g) => g.required && (picked[g.id]?.length ?? 0) === 0);
   const missingLabel = missing[0]?.label.replace(/^choose your\s+/i, '') ?? '';
 
   /*
-   * The drink is the only choice that adds money (owner, 14 Nov 2026 — ginger
-   * gemere, 500 ml, after the vegetable side). Every other group is included in
-   * the plate price, so `extras` is a sum over `priced` groups only and the
-   * total is the plate price plus whatever was chosen there.
+   * What the plate costs, and what has been added to it.
+   *
+   * Two rules, priced per choice so a group can no longer be described by a
+   * single flag:
+   *
+   *   - a `priced` extra — the soft drink — is sold *alongside* the plate, so
+   *     every bottle is charged at its own price;
+   *   - a starch or a vegetable side includes its first portion in the plate
+   *     price, and only the portions past the first are charged. Owner,
+   *     19 Nov 2026: "when they add more than 1 pap or any the price goes up."
+   *     Two pap is one extra portion; three pap is two.
+   *
+   * `portionCost` returns 0 for a choice with no extra-portion rule, so a
+   * protein contributes nothing here whatever its count.
    */
   const extras = plate.groups.reduce((sum, g) => {
-    if (!g.priced) return sum;
-    const it = g.items.find((i) => i.id === (picked[g.id] ?? [])[0]);
-    if (!it) return sum;
-    /* Price × how many. The clamp is the catalogue's, so the button cannot add a
-       fifth bottle the server would refuse. */
-    const count = Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
-    return sum + extraCost(Number(it.price) || 0, count);
+    return sum + (picked[g.id] ?? []).reduce((groupSum, id) => {
+      const it = g.items.find((i) => i.id === id);
+      if (!it) return groupSum;
+      /* The clamp is the catalogue's, so the buttons cannot add a portion the
+         server would refuse. */
+      const cap = g.priced ? maxPerExtra(g, it) : maxPortions(it);
+      const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
+      return groupSum + (g.priced ? extraCost(Number(it.price) || 0, count) : portionCost(it, count));
+    }, 0);
   }, 0);
   const total = Math.round((plate.price + extras) * 100) / 100;
 
@@ -813,14 +843,20 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
       return (picked[g.id] ?? []).flatMap((id) => {
         const it = g.items.find((i) => i.id === id);
         if (!it) return [];
-        /* A priced group carries its amount, so the basket line explains the
-           difference between the plate price and what is being charged. */
-        const count = g.priced ? Math.min(maxPerExtra(g, it), Math.max(1, counts[`${g.id}:${it.id}`] ?? 1)) : 1;
+        /*
+         * A choice that adds money carries its amount, so the cart line
+         * explains the difference between the plate price and what is being
+         * charged. The same rule as the running total above — two pap shows
+         * `2 × Pap` against R30, so the customer can see what the second bowl
+         * cost without doing the subtraction themselves.
+         */
+        const cap = g.priced ? maxPerExtra(g, it) : maxPortions(it);
+        const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
         return [{
           optionId: g.id,
           choiceId: `${g.id}:${id}`,
           label: it.label,
-          priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : 0,
+          priceDelta: g.priced ? extraCost(Number(it.price) || 0, count) : portionCost(it, count),
           ...(count > 1 ? { qty: count } : {}),
         }];
       });
@@ -873,6 +909,14 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                   {!g.priced && Number(g.max) > 1 && (
                     <span className="ml-2 text-xs font-normal text-theme-muted">
                       pick up to {Number(g.max)}
+                      {/*
+                        Say what a second portion costs *here*, before it is
+                        tapped. A stepper that only reveals the price after the
+                        customer has pressed + is a price they agreed to without
+                        reading it; the owner's rule is that the price goes up
+                        when you ask for more, so that has to be legible first.
+                      */}
+                      {extraPortionPrice(g) > 0 && <> · extra portion + {zar(extraPortionPrice(g))}</>}
                     </span>
                   )}
                 </legend>
@@ -886,12 +930,17 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                      * plain toggle. Starch and vegetable side now hold several, so a
                      * second tick adds rather than replaces.
                      */
-                    const cap = maxPerExtra(g, it);
+                    const cap = g.priced ? maxPerExtra(g, it) : maxPortions(it);
                     const count = Math.min(cap, Math.max(1, counts[`${g.id}:${it.id}`] ?? 1));
                     const setCount = (next: number) =>
                       setCounts((prev) => ({ ...prev, [`${g.id}:${it.id}`]: Math.min(cap, Math.max(1, next)) }));
+                    /* Removing the last choice from a required group would leave
+                       the plate incomplete, so the minus button sits dead at 1
+                       instead of quietly doing nothing when pressed. */
+                    const canRemove = !g.required || (picked[g.id] ?? []).length > 1;
+                    const delta = g.priced ? extraCost(Number(it.price) || 0, count) : portionCost(it, count);
 
-                    if (g.priced && cap > 1 && on) {
+                    if (cap > 1 && on) {
                       return (
                         <div
                           key={it.id}
@@ -900,15 +949,26 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                           <span className="min-w-0">
                             <span className="block truncate font-semibold">{it.label}</span>
                             <span className="font-mono text-xs text-theme-soft">
-                              + {zar(extraCost(Number(it.price) || 0, count))}
-                              {count > 1 && <span className="text-theme-muted"> · {zar(Number(it.price) || 0)} each</span>}
+                              {count === 1 ? (
+                                /* The first portion is inside the plate price,
+                                   so R0 would be a strange thing to print. */
+                                g.priced ? `+ ${zar(0)}` : 'Included'
+                              ) : (
+                                <>
+                                  + {zar(delta)}
+                                  <span className="text-theme-muted">
+                                    {' '}· {zar(g.priced ? Number(it.price) || 0 : extraPortionPrice(g))} each
+                                  </span>
+                                </>
+                              )}
                             </span>
                           </span>
                           <span className="inline-flex shrink-0 items-center rounded-full border-2 border-theme/20 bg-surface">
                             <button
                               type="button"
                               onClick={() => (count <= 1 ? toggle(g, it.id) : setCount(count - 1))}
-                              className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone"
+                              disabled={count <= 1 && !canRemove}
+                              className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink hover:text-bone disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-inherit"
                               aria-label={count <= 1 ? `Remove ${it.label}` : `One fewer ${it.label}`}
                             >
                               −
@@ -960,6 +1020,14 @@ function PlateBuilder({ plate, onClose }: { plate: PlateMenu; onClose: () => voi
                         </span>
                         <span className={`shrink-0 font-mono text-xs ${g.priced ? 'font-semibold text-theme-soft' : 'text-theme-muted'}`}>
                           {g.priced ? `+ ${zar(Number(it.price) || 0)}` : 'Included'}
+                          {/*
+                            A second one costs money, so "Included" on its own
+                            would read as "all of it is free". The + shows what
+                            the tap that follows will cost.
+                          */}
+                          {!g.priced && extraPortionPrice(g) > 0 && (
+                            <span className="text-theme-muted"> · 2nd + {zar(extraPortionPrice(g))}</span>
+                          )}
                         </span>
                       </button>
                     );

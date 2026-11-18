@@ -109,6 +109,61 @@ describe('reorderLines — rebuilding a plate', () => {
     assert.equal(line.key, 'plate::traditional::protein=protein:mogodu|starch=starch:pap|veg=veg:chakalaka');
   });
 
+  test('a second portion of a starch or a side is re-priced, not replayed', () => {
+    /*
+     * Round 24: starch and vegetable side carry an extra-portion rule — the first
+     * portion is inside the plate price, each one after it is charged. A reorder
+     * has to price that the same way the builder does, or a customer who comes
+     * back for the same plate with two pap is charged for one and the kitchen
+     * cooks two.
+     *
+     * The catalogue below is a fixture, so the rule is added to it here rather
+     * than depended on from the seed.
+     */
+    const withPortions = {
+      ...catalog,
+      plateMenus: catalog.plateMenus.map((plate) => ({
+        ...plate,
+        groups: plate.groups.map((g) =>
+          g.id !== 'starch'
+            ? g
+            : {
+                ...g,
+                items: g.items.map((i) => ({ ...i, extraAfter: 1, extraPrice: 30, max: 4 })),
+              },
+        ),
+      })),
+    };
+
+    const order = plateOrder({
+      options: [
+        { id: 'mogodu', label: 'Mogodu (beef tripe)' },
+        { id: 'pap', label: '3 × Pap', qty: 3 },
+        { id: 'chakalaka', label: 'Chakalaka' },
+      ],
+    });
+    const { lines, missing } = reorderLines([order], withPortions);
+    assert.equal(missing.length, 0);
+    const pap = lines[0].picks.find((p) => p.choiceId === 'starch:pap');
+    assert.equal(pap.qty, 3, 'the three portions are kept');
+    assert.equal(pap.priceDelta, 60, 'three portions is two extra bowls at R30');
+    assert.equal(lines[0].unitPrice, 160, 'R100 plate + R60 of pap');
+
+    /* Two portions is one extra bowl. */
+    const two = reorderLines([plateOrder({ options: [
+      { id: 'mogodu', label: 'Mogodu (beef tripe)' },
+      { id: 'pap', label: '2 × Pap', qty: 2 },
+      { id: 'chakalaka', label: 'Chakalaka' },
+    ] })], withPortions);
+    assert.equal(two.lines[0].picks.find((p) => p.choiceId === 'starch:pap').priceDelta, 30);
+    assert.equal(two.lines[0].unitPrice, 130);
+
+    /* One portion is still free — the plate already paid for it. */
+    const one = reorderLines([plateOrder()], withPortions);
+    assert.equal(one.lines[0].picks.find((p) => p.choiceId === 'starch:pap').priceDelta, 0);
+    assert.equal(one.lines[0].unitPrice, 100);
+  });
+
   test('a priced extra keeps the count the customer actually ordered', () => {
     const order = plateOrder({
       unitPrice: 150,

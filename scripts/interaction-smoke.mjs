@@ -219,6 +219,19 @@ function boot(path, { seedCart, offline } = {}) {
   const text = () => doc.body.textContent ?? '';
   const all = () => [...doc.querySelectorAll('*')];
   const byText = (sel, re) => all().filter((el) => el.matches?.(sel) && re.test(el.textContent ?? ''));
+  /*
+   * The *label* of an option row, without the price copy beside it.
+   *
+   * A row used to read "Pap Included"; now a starch or a side reads
+   * "Pap Included · 2nd + R30,00" and, once ticked, becomes a stepper reading
+   * "Pap Included − 1 +". Matching on `textContent` therefore stopped finding
+   * "Pap" and started finding the whole row — so the name is read off the label
+   * span, which is the only part that is actually the dish's name.
+   */
+  const optionLabel = (el) =>
+    (el.querySelector('span.flex.min-w-0 > span.min-w-0')?.textContent ?? el.textContent ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
   /** Matches on aria-label, which for icon cards is NOT in textContent. */
   const byLabel = (sel, re) => all().filter((el) => el.matches?.(sel) && re.test(el.getAttribute('aria-label') ?? ''));
   const click = (el) => {
@@ -255,7 +268,7 @@ function boot(path, { seedCart, offline } = {}) {
     return d ? d.contains(doc.activeElement) : false;
   };
 
-  return { w, doc, text, all, byText, byLabel, click, waitFor, setInput, scrolls, press, dialogs, focusInsideDialog, errors, seedCart, close: () => w.close() };
+  return { w, doc, text, all, byText, byLabel, optionLabel, click, waitFor, setInput, scrolls, press, dialogs, focusInsideDialog, errors, seedCart, close: () => w.close() };
 }
 
 /* ------------------------------------------------------------------ */
@@ -939,7 +952,7 @@ await step('every vegetable side a plate offers is also sold on Sides & Relishes
     .find((el) => /Choose your vegetable side/i.test(el.querySelector('legend')?.textContent ?? ''));
   if (!group) throw new Error('the plate builder has no vegetable-side group');
   const options = [...group.querySelectorAll('button[role="checkbox"]')]
-    .map((el) => (el.textContent ?? '').replace(/\s*Included\s*$/i, '').replace(/\s+/g, ' ').trim())
+    .map((el) => arch.optionLabel(el))
     .filter(Boolean);
   if (options.length < 5) throw new Error(`expected the vegetable sides, saw ${options.length}: ${options.slice(0, 6)}`);
 
@@ -1071,7 +1084,11 @@ await step('choosing required options then adding puts the line in the basket', 
    * expose aria-checked. Accept either attribute: the payment-method buttons are
    * still toggles and this helper is used for both.
    */
-  await s1.waitFor(() => s1.byText('button[aria-checked], button[aria-pressed]', /^Pap$/)[0], 'the starch options to mount', 15000);
+  await s1.waitFor(
+    () => s1.all().find((el) => el.matches?.('button[aria-checked], button[aria-pressed]') && /^Pap$/.test(s1.optionLabel(el))),
+    'the starch options to mount',
+    15000,
+  );
   const groups = [...s1.doc.querySelectorAll('[role="dialog"] fieldset')];
   let chosen = 0;
   for (const fs of groups) {
@@ -2819,19 +2836,50 @@ await step('starch and vegetable side take more than one; the drink is an add-on
   /* Two starches, held at once. The plate price must not move: a starch is
      inside the plate price, not an extra on top of it. */
   const groupFor = (needle) => fieldsets.find((fs) => needle.test(fs.querySelector('legend')?.textContent ?? ''));
+  /*
+   * Rows that can be *ticked* — a plain checkbox or radio. Once ticked, a
+   * starch or a side becomes a stepper and drops `aria-checked` for its − / +
+   * controls, so a query restricted to `button[aria-checked]` no longer sees the
+   * rows it just turned into steppers. The group is read whole and the steppers
+   * count as ticked below.
+   */
   const options = (fs) => [...(fs?.querySelectorAll('button[aria-checked]') ?? [])];
+  /*
+   * A ticked starch or side is no longer a button: the row becomes a stepper — a
+   * div holding "One fewer …" and "One more …". Counting the "One more" controls
+   * is the only way to see how many starches the customer actually holds.
+   */
+  const steppers = (fs) =>
+    [...(fs?.querySelectorAll('button') ?? [])].filter((b) => /^One more /i.test(b.getAttribute('aria-label') ?? ''));
 
-  const starchGroup = groupFor(/starch/i);
-  const [firstStarch, secondStarch] = options(starchGroup);
-  if (!firstStarch || !secondStarch) throw new Error('the starch group does not offer two options');
-  firstStarch.click();
-  await sleep(120);
-  secondStarch.click();
-  await sleep(160);
+  /*
+   * Re-query the group before every click.
+   *
+   * Ticking a starch now turns its row into a stepper, so the node captured
+   * before the first click is gone by the time the second is wanted — clicking
+   * it does nothing and the count reads zero. Reading the group fresh each time
+   * is what the drink test below already does for the same reason.
+   */
+  const starchGroup = () => groupFor(/starch/i);
+  const unticked = () =>
+    options(starchGroup()).filter((b) => b.getAttribute('aria-checked') !== 'true' && b.querySelector('span.min-w-0'));
 
-  const ticked = options(starchGroup).filter((b) => b.getAttribute('aria-checked') === 'true');
-  if (ticked.length !== 2) {
-    throw new Error(`two starches should be ticked at once, found ${ticked.length}: ${ticked.map((b) => b.textContent).join(', ')}`);
+  /*
+   * Earlier steps in this run have already ticked one starch, so the assertion
+   * is about the *increase*, not an absolute count: two more ticks must leave two
+   * more steppers standing. Ticking a second starch must add it beside the first
+   * rather than replacing it — that is the whole behaviour under test.
+   */
+  const before = steppers(starchGroup()).length;
+  if (unticked().length < 2) throw new Error('the starch group does not offer two options');
+  s5.click(unticked()[0]);
+  await sleep(200);
+  s5.click(unticked()[0]);
+  await sleep(200);
+
+  const ticked = steppers(starchGroup());
+  if (ticked.length !== before + 2) {
+    throw new Error(`two more starches should join the first, found ${ticked.length - before} more: ${ticked.map((b) => b.getAttribute('aria-label')).join(', ')}`);
   }
   const price = (builderAdd()?.textContent ?? '').match(/R\s?([\d\s]+[.,]\d{2})/)?.[1]?.replace(/\s/g, '').replace(',', '.');
   if (Number(price) > 200) throw new Error(`two starches changed the plate price to R${price}`);
@@ -2896,6 +2944,73 @@ await step('the soft drink takes a quantity, and prices per bottle', async () =>
   s5.click(findMinus());
   await s5.waitFor(() => priceOn() === before + 50, 'two bottles', 6000);
   return `R${before} plate, +R25 per bottle, capped at four`;
+});
+
+await step('a second portion of pap costs money, the first does not', async () => {
+  /*
+   * Owner, 19 Nov 2026: "on choose a starch, choose vegetables, can we have
+   * similar functionality like we have on add soft drink so the user can set if
+   * they want more than 1 pap, etc but when they add more than 1 pap or any the
+   * price goes up".
+   *
+   * The starch and the vegetable side now behave like the drink, with one
+   * difference that matters: their first portion is already inside the plate
+   * price, so only the portions *after* the first are charged. Charging from the
+   * first would bill the customer for the pap the R100 plate is supposed to
+   * include — the bug this step exists to prevent.
+   *
+   * The price is read from the Add-plate button, which is the number the customer
+   * pays, not from a running total somewhere in the modal.
+   */
+  const priceOn = () => {
+    const label = builderAdd()?.textContent ?? '';
+    return Number((label.match(/R\s?([\d\s]+)[.,](\d{2})/) ?? [])[1]?.replace(/\s/g, ''));
+  };
+  const plusFor = (name) =>
+    [...(builderDialog()?.querySelectorAll('button') ?? [])].find((b) =>
+      new RegExp(`One more ${name}`, 'i').test(b.getAttribute('aria-label') ?? ''),
+    );
+
+  /* Pap is already ticked by an earlier step. */
+  if (!plusFor('Pap')) throw new Error('the ticked starch row has no stepper');
+
+  const before = priceOn();
+  s5.click(plusFor('Pap'));
+  await s5.waitFor(() => priceOn() === before + 30, 'the second portion to be priced', 6000);
+
+  /*
+   * A second portion costs the same as the bowl sold on its own in Sides &
+   * Relishes — a menu that charged one price for a bowl and another for the
+   * identical second bowl inside a plate would be contradicting itself.
+   */
+  const afterSecond = priceOn();
+
+  /* The vegetable side follows the same rule. */
+  const vegPlus = [...(builderDialog()?.querySelectorAll('button') ?? [])].find((b) =>
+    /One more (Braised cabbage|Spinach|Morogo|Salsa|Chakalaka|Atchaar|Green salad)/i.test(b.getAttribute('aria-label') ?? ''),
+  );
+  if (!vegPlus) throw new Error('the ticked vegetable side has no stepper');
+  s5.click(vegPlus);
+  await s5.waitFor(() => priceOn() === afterSecond + 30, 'the second vegetable portion to be priced', 6000);
+
+  /* And the label says so before anything is tapped. */
+  const legends = [...(builderDialog()?.querySelectorAll('legend') ?? [])].map((l) => l.textContent ?? '');
+  const perGroup = legends.filter((l) => /extra portion\s*\+\s*R\s?30/i.test(l));
+  if (perGroup.length < 2) {
+    throw new Error(`starch and side should both state the extra-portion price, found ${perGroup.length}`);
+  }
+
+  /* Back to one of each, so the steps after this one start where they expect. */
+  const minusFor = (name) =>
+    [...(builderDialog()?.querySelectorAll('button') ?? [])].find((b) =>
+      new RegExp(`One fewer ${name}`, 'i').test(b.getAttribute('aria-label') ?? ''),
+    );
+  s5.click(minusFor('Pap'));
+  await sleep(140);
+  s5.click(minusFor(vegPlus.getAttribute('aria-label').replace(/^One more /i, '')));
+  await s5.waitFor(() => priceOn() === before, 'the plate back at its base price', 6000);
+
+  return `first portion included, each one after it +R30 — starch and side both`;
 });
 
 await step('a configured plate lands in the basket at the fixed plate price', async () => {
