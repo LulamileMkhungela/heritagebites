@@ -56,6 +56,31 @@
   --color-morogo: #b77e23; /* legacy accent alias; no green in the brand UI */
   --color-sky: #0c2441; /* legacy navy alias */
 
+  /*
+   * The gold buttons are a gradient: pale antique gold at the top-left falling to
+   * the sampled ochre at the bottom-right, as though the pill were catching the
+   * light. Done with a token rather than per-button so every primary control in
+   * the app moves together.
+   *
+   * Both stops are chosen for contrast, not just looks. The label is ink, so
+   * every stop has to clear 4.5:1 against #001938: #e2b463 is 9.2, #d9a24a is
+   * 7.7, #c98a2e is 6.0, and the sampled #b77e23 is 5.0. Anything darker —
+   * --color-ochre-deep is 3.1 — fails, so the gradient never dips that far.
+   * The hover state flips to bone text, which needs the darker ramp.
+   */
+  /*
+   * The navy is the "primary" colour in the token file, so the large navy
+   * surfaces — header, footer, page heroes — carry a gradient of their own,
+   * just a restrained one: two degrees of the same midnight, deepest at the top
+   * and lifted at the bottom, which stops a full-bleed navy band reading as flat
+   * printer's ink on a phone screen. It is deliberately too subtle to notice as
+   * decoration; the point is depth, not effect.
+   */
+  --hb-ink-gradient: linear-gradient(180deg, #001530 0%, #001938 45%, #0c2441 100%);
+
+  --hb-gold-gradient: linear-gradient(135deg, #e2b463 0%, #d9a24a 34%, #c98a2e 68%, #b77e23 100%);
+  --hb-gold-gradient-hover: linear-gradient(135deg, #8a5d14 0%, #7d5411 55%, #6f4a0f 100%);
+
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
   --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
@@ -100,6 +125,62 @@
 }
 
 @layer utilities {
+  /*
+   * The gold pill. A utility rather than four `bg-linear-*` classes at each call
+   * site: the gradient, the hover ramp and the flat fallback have to stay in
+   * step, and a button that drifted from the others would be the kind of thing
+   * nobody notices until it ships.
+   *
+   * `background-image` is used, not `background`, so the existing `bg-ochre`
+   * stays underneath as the colour for the moment before the gradient paints —
+   * and so `hover:` utilities can still swap the image without fighting a
+   * background-color.
+   */
+  .hb-gold {
+    background-image: var(--hb-gold-gradient);
+    background-color: var(--color-ochre);
+    /* Ink on the pale gold: 9.2:1 at the lightest stop, 5.0:1 at the deepest. */
+    color: var(--color-ink);
+    /* The light sits on the top edge of the pill. */
+    box-shadow: 0 2px 0 0 var(--color-ink), inset 0 1px 0 0 rgb(255 255 255 / 0.35);
+  }
+
+  /*
+   * The label flips to bone on hover, and it has to flip *with* the surface.
+   *
+   * Tailwind's `hover:` utilities are wrapped in `@media (hover: hover)`, so
+   * `hover:text-bone` never applies on a touch screen — but the gradient below
+   * is not media-gated, and iOS leaves `:hover` stuck on after a tap. The result
+   * was a dark pill with a navy label at 2.2:1: invisible exactly where the
+   * customer is trying to tap. Keeping both in one rule makes that impossible.
+   *
+   * Bone on the hover ramp is 5.2:1 at its start and 7.2:1 at its darkest stop.
+   */
+  .hb-gold:hover {
+    background-image: var(--hb-gold-gradient-hover);
+    background-color: var(--color-ochre-deep);
+    color: var(--color-bone);
+    box-shadow: 0 2px 0 0 var(--color-ink), inset 0 1px 0 0 rgb(255 255 255 / 0.12);
+  }
+
+  @media (forced-colors: active) {
+    .hb-gold {
+      background-image: none;
+      box-shadow: none;
+      border: 1px solid ButtonText;
+    }
+  }
+
+  /*
+   * The navy primary surface. Only the gradient is overridden — the navy
+   * text colour and everything else come from the utilities already on the
+   * element, so this can be added to a header or a footer without touching the
+   * rest of its styling.
+   */
+  .hb-ink-surface {
+    background-image: var(--hb-ink-gradient);
+  }
+
   /* Ndebele-inspired geometric band used as section dividers */
   .hb-pattern {
     background-image:

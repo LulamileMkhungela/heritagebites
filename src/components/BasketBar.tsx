@@ -158,7 +158,7 @@ export function BasketBar() {
               })}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-ochre px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full hb-gold px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink"
             >
               <WhatsAppIcon className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Can you cook it?</span>
@@ -186,7 +186,7 @@ export function BasketBar() {
             ) : (
               <Link
                 to="/checkout"
-                className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-ochre px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
+                className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full hb-gold px-5 py-2 text-xs font-bold uppercase tracking-wide text-ink"
               >
                 Checkout
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

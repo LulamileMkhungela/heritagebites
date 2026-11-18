@@ -16,14 +16,23 @@ type Variant = 'primary' | 'ghost' | 'outline' | 'dark' | 'whatsapp' | 'onDark' 
  * on a dark hero, and the ink won. Add a variant instead of overriding.
  */
 const variants: Record<Variant, string> = {
-  primary: 'bg-ochre text-ink hover:bg-ochre-deep hover:text-bone shadow-[0_2px_0_0_var(--color-ink)]',
+  /*
+   * Gold gradient pill. The surface lives in `.hb-gold` (index.css) so the
+   * gradient, the hover ramp and the flat fallback stay in step across the whole
+   * app; the label colour is here because it has to flip with the ramp.
+   *
+   * Label colours live with the surface in `.hb-gold`, not here: the flip has
+   * to happen on the same selector as the darkening, or a touch device that
+   * leaves `:hover` stuck after a tap shows a dark pill with a navy label.
+   */
+  primary: 'hb-gold',
   dark: 'bg-ink text-bone hover:bg-ink-3 border border-ink',
   outline: 'border-2 border-ink text-ink hover:bg-ink hover:text-bone',
   ghost: 'text-ink hover:bg-ink/5',
   /* For heroes and cards that are already ink — never for a light background. */
   onDark: 'border border-bone/30 text-bone hover:bg-bone/10',
   danger: 'border-2 border-chili text-chili hover:bg-chili hover:text-bone',
-  whatsapp: 'bg-ochre text-ink hover:bg-ochre-deep hover:text-bone',
+  whatsapp: 'hb-gold',
 };
 
 interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {

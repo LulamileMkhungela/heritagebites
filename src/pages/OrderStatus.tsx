@@ -382,7 +382,7 @@ export default function OrderStatus() {
               href={updateRequest}
               target="_blank"
               rel="noreferrer"
-              className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-ochre px-4 py-2.5 text-xs font-semibold text-ink hover:bg-ochre-deep hover:text-bone"
+              className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full hb-gold px-4 py-2.5 text-xs font-semibold text-ink"
             >
               Request WhatsApp updates
             </a>

@@ -79,7 +79,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-bone">
       {/* Main navigation */}
-      <header ref={headerRef} className="sticky top-0 z-50 border-b border-bone/15 bg-ink text-bone backdrop-blur">
+      <header ref={headerRef} className="sticky top-0 z-50 border-b border-bone/15 bg-ink hb-ink-surface text-bone backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-4 sm:px-4 sm:py-3">
           <Link
             to="/"
@@ -122,7 +122,7 @@ export default function Layout() {
                 to={n.to}
                 end={n.end}
                 className={({ isActive }) =>
-                  `rounded-full px-3 py-2 text-[13px] font-semibold transition-colors ${isActive ? 'bg-ochre text-ink' : 'text-bone/75 hover:bg-bone/10 hover:text-bone'}`
+                  `rounded-full px-3 py-2 text-[13px] font-semibold transition-colors ${isActive ? 'hb-gold' : 'text-bone/75 hover:bg-bone/10 hover:text-bone'}`
                 }
               >
                 {n.label}
@@ -201,7 +201,7 @@ export default function Layout() {
                   /* Tapping the route you are already on does not change the URL,
                      so the location effect never fires — close it here instead. */
                   onClick={() => setMenuOpen(false)}
-                  className={({ isActive }) => `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-ochre text-ink' : 'text-bone/75 hover:bg-bone/10'}`}
+                  className={({ isActive }) => `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'hb-gold' : 'text-bone/75 hover:bg-bone/10'}`}
                 >
                   {n.label}
                 </NavLink>
@@ -334,7 +334,7 @@ function Footer() {
         : 'Closed now · message us to arrange a day';
 
   return (
-    <footer className="mt-24 bg-ink text-bone">
+    <footer className="mt-24 bg-ink hb-ink-surface text-bone">
       <HeritageBand className="h-5 w-full" width={1440} on="ink" />
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-4">
         <div className="md:col-span-2">
@@ -692,7 +692,7 @@ function CartDrawerPanel() {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setOpen(false)}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] transition-colors hover:bg-ochre-deep hover:text-bone"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full hb-gold px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink transition-colors"
                 >
                   <WhatsAppIcon className="h-4 w-4" />
                   Ask if we can cook it
@@ -718,7 +718,7 @@ function CartDrawerPanel() {
                 <Link
                   to="/checkout"
                   onClick={() => setOpen(false)}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ochre px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] transition-colors hover:bg-ochre-deep hover:text-bone"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full hb-gold px-5 py-3.5 text-sm font-bold uppercase tracking-wide text-ink transition-colors"
                 >
                   Checkout
                 </Link>

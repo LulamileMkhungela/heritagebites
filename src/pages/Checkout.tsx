@@ -615,7 +615,7 @@ function LiveCheckout() {
         </p>
         <a
           href={redirect.url}
-          className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone"
+          className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full hb-gold px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink"
         >
           Continue to Yoco payment
         </a>
@@ -660,7 +660,7 @@ function LiveCheckout() {
           {zar(Number(settings?.minDeliveryOrder ?? 100))}.
         </p>
         <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link to="/menu" className="inline-flex min-h-11 items-center rounded-full bg-ochre px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink shadow-[0_2px_0_0_var(--color-ink)] hover:bg-ochre-deep hover:text-bone">
+          <Link to="/menu" className="inline-flex min-h-11 items-center rounded-full hb-gold px-6 py-3 text-sm font-bold uppercase tracking-wide text-ink">
             Browse the menu
           </Link>
           <a
