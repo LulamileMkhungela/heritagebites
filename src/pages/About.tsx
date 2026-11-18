@@ -17,7 +17,8 @@ export default function About() {
           <SectionLabel onDark>Our story</SectionLabel>
           <h1 className="font-display text-5xl font-semibold leading-tight md:text-7xl">Every bite tells a story</h1>
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-bone/75">
-            Heritage Bites shares South African meals and the stories behind them. We bring familiar, much-loved dishes into an easy-to-browse menu and make ordering simple.
+            Every great meal begins with love. For us it started around the Sunday table, and in the lunch boxes packed
+            with care — because food has always been how we bring people together.
           </p>
         </div>
       </header>
@@ -27,16 +28,25 @@ export default function About() {
         <div className="grid gap-12 md:grid-cols-2 md:items-center">
           <Reveal>
             <SectionLabel>How we started</SectionLabel>
-            <h2 className="font-display text-4xl font-semibold md:text-5xl">It began in a family kitchen, not a boardroom</h2>
+            <h2 className="font-display text-4xl font-semibold md:text-5xl">A mother, a daughter, and a Sunday table</h2>
             <div className="mt-6 space-y-4 text-[15px] leading-relaxed text-theme-soft">
               <p>
-                Heritage Bites was officially established in {s?.established ?? 2025}, but the cooking started long before that. It started in family kitchens where the pot went on early, where mogodu was judged by how long it had been given, and where feeding people properly was not a service — it was the whole point.
+                Heritage Bites is the dream of a mother and daughter, Keneilwe and Regomoditswe Moremedi. Together they
+                bring years of experience in catering and running a food and pub business, a deep love of cooking, and an
+                instinct for how ingredients come together. That combination is the heart of everything we do.
               </p>
               <p>
-                We saw how easily meaningful meals and the stories behind them can be lost in a fast-moving food world. We wanted to make these dishes easier to discover and order, while keeping their names, memories and traditions in view.
+                We want to share the taste of traditional Setswana food with you, served alongside modern, contemporary
+                dishes. It is the food of our heritage, made for the way you live today.
               </p>
               <p>
-                Heritage Bites began with a clear menu, recipes shared through generations, and a belief that every dish deserves its own story. We’re building a simple way to explore the food, choose a meal and keep your order details close at hand.
+                We started because we love to cook, and because we saw people who needed us: busy professionals with
+                little time to cook, and a growing weariness with the same old canteen meals. We wanted to offer
+                something better — a home-cooked meal that tastes like it was made just for you.
+              </p>
+              <p>
+                Heritage Bites officially opened its doors in {s?.established ?? 2025}, and is a proudly registered
+                private company (CIPC).
               </p>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -71,16 +81,18 @@ export default function About() {
           <Reveal>
             <div id="vision" className="scroll-mt-28">
               <SectionLabel onDark>Vision</SectionLabel>
-              <h2 className="font-display text-4xl font-semibold md:text-5xl">South African food, taken seriously</h2>
+              <h2 className="font-display text-4xl font-semibold md:text-5xl">South Africa’s most loved traditional kitchen</h2>
               <p className="mt-5 text-[15px] leading-relaxed text-bone/70">
-                We want South African food to be celebrated, understood and easy to enjoy — without losing the care, skill and memories that make each dish special.
+                To become South Africa’s most loved brand in traditional cuisine.
               </p>
               <p className="mt-4 text-[15px] leading-relaxed text-bone/70">
-                Our long-term vision is to share regional dishes from across South Africa and keep the food stories behind them alive for the next generation.
+                We are looking for a place to call home — a stable location where you can always find us. From there we
+                will take our frozen Tshotlo and Mogodu to homes across the country, while continuing to serve daily
+                traditional meals to everyone who needs a good plate of food, from the office to the worksite.
               </p>
               <p className="mt-4 text-[15px] leading-relaxed text-bone/70">
-                Today we operate as a shadow kitchen, cooking on Thursdays and Fridays, with delivery in Rosebank and
-                Sandton and up to 15 km from the kitchen. Any cooking day ahead can be booked in advance.
+                Today we cook on Thursdays and Fridays from a shadow kitchen, with delivery in Rosebank and Sandton and
+                up to {s?.maxDeliveryKm ?? 10} km from the kitchen. Any cooking day ahead can be booked in advance.
               </p>
             </div>
           </Reveal>
@@ -88,13 +100,12 @@ export default function About() {
           <Reveal delay={120}>
             <div id="mission" className="scroll-mt-28">
               <SectionLabel onDark>Mission</SectionLabel>
-              <h2 className="font-display text-4xl font-semibold md:text-5xl">Four things we hold to, daily</h2>
+              <h2 className="font-display text-4xl font-semibold md:text-5xl">Three things we hold to</h2>
               <ul className="mt-5 space-y-4">
                 {[
-                  { n: '01', t: 'Cook it properly', d: 'Nothing is rushed. Tripe gets four hours. If a dish cannot be made well today, it comes off the counter rather than going out half-done.' },
-                  { n: '02', t: 'Share the story', d: 'We honour each dish by sharing its name, language and the story carried with it.' },
-                  { n: '03', t: 'Keep it accessible', d: 'Generous portions at prices that work for students, shift workers and families — not just for weekends.' },
-                  { n: '04', t: 'Make ordering painless', d: 'Explore the menu, place your order online, and contact us directly to confirm the delivery details.' },
+                  { n: '01', t: 'Preserve and share our heritage', d: 'To bring authentic, high-quality traditional African meals to your table, fresh or frozen, in a way that is convenient and easy to enjoy.' },
+                  { n: '02', t: 'Celebrate African cuisine', d: 'To serve meals rich in culture, flavour and story.' },
+                  { n: '03', t: 'Grow with our community', d: 'To create jobs and build lasting partnerships with local suppliers.' },
                 ].map((m) => (
                   <li key={m.n} className="flex gap-4">
                     <span className="font-mono text-sm font-bold text-accent-on-ink">{m.n}</span>

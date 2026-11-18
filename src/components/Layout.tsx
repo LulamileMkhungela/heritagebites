@@ -368,7 +368,7 @@ function Footer() {
             </Link>
           </div>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-bone/65">
-            South African plates cooked with care, Thursdays and Fridays. Delivered in Sandton and Rosebank, and anywhere else within 15km.
+            South African plates cooked with care, Thursdays and Fridays. Delivered in Sandton and Rosebank, and anywhere else within 10km.
           </p>
           {/*
             Two words each, on purpose: "Call us" and "Email us" are the whole

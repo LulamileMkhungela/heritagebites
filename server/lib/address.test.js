@@ -41,10 +41,11 @@ const settings = { deliveryAreas: ['Rosebank', 'Sandton'] };
 const inBox14 = (b, lat, lng) => lat >= b.minLat && lat <= b.maxLat && lng >= b.minLon && lng <= b.maxLon;
 /*
  * The third option, spelled the way the site now shows it (owner, 16 Nov 2026:
- * "remove Outside Sandton & Rosebank"). The old long label is still recognised,
- * which the last test in this group checks, so a cached bundle keeps working.
+ * "remove Outside Sandton & Rosebank"; radius cut to 10 km on 19 Nov 2026). The
+ * old long label is still recognised, which the last test in this group checks,
+ * so a cached bundle keeps working.
  */
-const OUTSIDE = 'Another area — within 15 km';
+const OUTSIDE = 'Another area — within 10 km';
 const OUTSIDE_LEGACY = 'Other — outside Sandton & Rosebank';
 
 /* ------------------------- The delivery radius -------------------------- */
@@ -461,7 +462,14 @@ test('the search envelope is derived from the radius, never written down', () =>
       lat >= b15.minLat && lat <= b15.maxLat && lng >= b15.minLon && lng <= b15.maxLon,
       `a point 15 km ${bearing}° out fell outside the box`,
     );
-    assert.equal(deliveryZoneFor(lat, lng).zone !== 'refused', true, 'and it is deliverable');
+    /*
+     * At 15 km out the order is now REFUSED — the limit is 10 km — so this asserts
+     * the box can still *find* the address, which is the point of the envelope.
+     * A box that hid the address would leave the customer with no distance and no
+     * explanation; one that returns it lets the checkout say "15 km away, we
+     * deliver within 10 km".
+     */
+    assert.equal(deliveryZoneFor(lat, lng).zone, 'refused', 'the envelope is wider than the limit, on purpose');
   }
 
   /* The query parameter is the same box, in Photon's order. */
@@ -492,7 +500,7 @@ test('the area select offers the two suburbs and "another area"', () => {
    * as a wall is the closed-list reading the radius replaced.
    */
   assert.doesNotMatch(options[2], /outside/i);
-  assert.match(options[2], /15 km/);
+  assert.match(options[2], /10 km/);
   assert.equal(isOutsideAreaChoice(options[2]), true, 'the third option is the elsewhere choice');
   /* The old long label still counts as it, so a cached client is not stranded. */
   assert.equal(isOutsideAreaChoice(OUTSIDE_LEGACY), true);
@@ -524,15 +532,20 @@ test('radius mode keeps a suggestion the suburb list would have thrown away', ()
 
 /* ------------- No surface may write the radius down as prose ------------ */
 
-test('the settings carry the 15 km limit, and the seeds agree with the default', () => {
+test('the settings carry the 10 km limit, and the seeds agree with the default', () => {
   /*
-   * Owner, 15 Nov 2026: 15 km, not 50.
+   * Owner, 19 Nov 2026: 10 km, at a flat R50 outside the included ring — not the
+   * 15 km it was, not the 30 km the agency proposed, and not the 50 km before
+   * that. The reason given was economics: "30km is way too far and will be
+   * uneconomical pricing wise".
    *
    * This is the test that would have caught the last drift: the rule changed,
    * the copy did not, and the site spent a release telling customers it would
-   * drive 50 km while the checkout refused anything past 15.
+   * drive 50 km while the checkout refused anything past 15. It compares the seed
+   * to the shared default, so those two can never disagree.
    */
-  assert.equal(seedSettings.maxDeliveryKm, 15);
+  assert.equal(seedSettings.maxDeliveryKm, 10);
+  assert.equal(seedSettings.outsideFee, 50, 'and the outer ring is a flat R50');
   assert.equal(seedSettings.maxDeliveryKm, DELIVERY_ZONES.maxKm, 'the seed and the shared default must be the same number');
   /* The included ring sits inside the limit, or the fee ring would not exist. */
   assert.ok(seedSettings.includedRadiusKm < seedSettings.maxDeliveryKm);

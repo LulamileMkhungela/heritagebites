@@ -107,19 +107,24 @@ export const DELIVERY_ZONES = {
   /**
    * Beyond the included ring, up to the hard limit, a fee applies.
    *
-   * Owner, 15 Nov 2026: 15 km, not 50. The kitchen cooks one service and drives
-   * every order itself, so the boundary is how far a plate still arrives hot —
-   * which is a morning's run, not a province.
+   * Owner, 19 Nov 2026: 10 km, not 15 — and emphatically not the 30 km the agency
+   * proposed, nor the 50 km before that. "30km is way too far and will be
+   * uneconomical pricing wise." The kitchen cooks one service and drives every
+   * order itself, so the boundary is where a plate still arrives hot AND the run
+   * still pays for itself.
    */
-  maxKm: 15,
+  maxKm: 10,
   /**
-   * GUESSED FEE — the owner has not given a number yet.
+   * CONFIRMED FEE (19 Nov 2026): a FLAT R50 for the outer ring.
    *
-   * R30 for the 6–15 km trip. It is NOT confirmed. Every surface that prints it
-   * reads `settings.outsideFee`, so changing the seed value changes the whole
-   * site at once.
+   * Flat, not tiered: the owner chose one price for the whole 6–10 km band rather
+   * than a rate that climbs with distance. An address at 9.9 km pays the same as
+   * one at 6.5 km, and nobody has to explain a tier at the door.
+   *
+   * Every surface that prints it reads `settings.outsideFee`, so this is the
+   * default and the seed is the source of truth.
    */
-  fee: 30,
+  fee: 50,
 };
 
 /**
@@ -140,7 +145,7 @@ export function radiusBbox(maxKm = DELIVERY_ZONES.maxKm, origin = KITCHEN_ORIGIN
   /*
    * 1° of latitude is 111.32 km everywhere; 1° of longitude is that times
    * cos(latitude), so at Johannesburg's −26.1° a degree of longitude is about
-   * 100 km. A 15 km radius therefore needs ~0.135° of latitude and ~0.15° of
+   * 100 km. A 10 km radius therefore needs ~0.09° of latitude and ~0.10° of
    * longitude — the margin covers the square-versus-circle corner.
    */
   const latDeg = Math.abs(Number(maxKm) || 0) / 111.32;
@@ -650,7 +655,7 @@ export function mapPhotonReverse(body, settings) {
  *
  * It is a *fixture*, never a delivery origin. The order is still measured from
  * `KITCHEN_ORIGIN`; this only proves that the edge of Rosebank is comfortably
- * inside the free ring and well inside the 15 km limit.
+ * inside the free ring and well inside the limit.
  */
 export const REFERENCE_FAR_ADDRESS = {
   line: '33 Baker Street, Rosebank, Johannesburg',

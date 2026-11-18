@@ -466,7 +466,7 @@ function ServiceRules() {
     ['Service days', settings.hours.filter((h) => !h.closed).map((h) => h.label).join(' and ')],
     /*
      * Owner, 15 Nov 2026: "Delivery areas — Rosebank, Sandton and other areas
-     * within 15km radius". The two names alone read as a closed list, which is
+     * within 10km radius". The two names alone read as a closed list, which is
      * the misconception that made a Bryanston customer think they could not
      * order at all. The radius is part of the answer.
      */

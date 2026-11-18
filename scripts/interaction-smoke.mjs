@@ -1601,7 +1601,15 @@ await step('a Bryanston address is offered, sets the area to "Other", and is pri
   /* 8.8 km: outside the included ring, so the fee must be stated on screen. */
   const said = [...s7.doc.querySelectorAll('[role="status"]')].map((el) => el.textContent ?? '').join(' ');
   if (!/8\.8 km/.test(said)) throw new Error(`the distance is not shown: ${said}`);
-  if (!/R30,00 delivery fee (added|applies)/i.test(said)) throw new Error(`the fee is not stated: ${said}`);
+  /*
+   * The fee is the kitchen's, read from settings — a flat R50 out to 10 km since
+   * 19 Nov 2026, not the R30 placeholder this step used to hardcode. Asserting the
+   * class of thing (a rand amount, stated as a fee) rather than one number is what
+   * keeps this test about the behaviour when the owner changes their price.
+   */
+  if (!/R\s?\d[\d\s]*[.,]\d{2} delivery fee (added|applies)/i.test(said)) {
+    throw new Error(`the fee is not stated: ${said}`);
+  }
   return `Bryanston offered, area set to "another area", 8.8 km with a fee`;
 });
 
@@ -2982,9 +2990,14 @@ await step('a second portion of pap costs money, the first does not', async () =
   /* Pap is already ticked by an earlier step. */
   if (!plusFor('Pap')) throw new Error('the ticked starch row has no stepper');
 
+  /*
+   * The rate card, sent by the kitchen on 19 Nov 2026: a starch portion is R20 and
+   * a vegetable side R15. The site charged a single R30 placeholder for both until
+   * then, which overcharged the two cheapest things on the menu.
+   */
   const before = priceOn();
   s5.click(plusFor('Pap'));
-  await s5.waitFor(() => priceOn() === before + 30, 'the second portion to be priced', 6000);
+  await s5.waitFor(() => priceOn() === before + 20, 'the second starch portion to be priced at R20', 6000);
 
   /*
    * A second portion costs the same as the bowl sold on its own in Sides &
@@ -2999,11 +3012,11 @@ await step('a second portion of pap costs money, the first does not', async () =
   );
   if (!vegPlus) throw new Error('the ticked vegetable side has no stepper');
   s5.click(vegPlus);
-  await s5.waitFor(() => priceOn() === afterSecond + 30, 'the second vegetable portion to be priced', 6000);
+  await s5.waitFor(() => priceOn() === afterSecond + 15, 'the second vegetable portion to be priced at R15', 6000);
 
   /* And the label says so before anything is tapped. */
   const legends = [...(builderDialog()?.querySelectorAll('legend') ?? [])].map((l) => l.textContent ?? '');
-  const perGroup = legends.filter((l) => /extra portion\s*\+\s*R\s?30/i.test(l));
+  const perGroup = legends.filter((l) => /extra portion\s*\+\s*R\s?\d/i.test(l));
   if (perGroup.length < 2) {
     throw new Error(`starch and side should both state the extra-portion price, found ${perGroup.length}`);
   }
@@ -3018,7 +3031,7 @@ await step('a second portion of pap costs money, the first does not', async () =
   s5.click(minusFor(vegPlus.getAttribute('aria-label').replace(/^One more /i, '')));
   await s5.waitFor(() => priceOn() === before, 'the plate back at its base price', 6000);
 
-  return `first portion included, each one after it +R30 — starch and side both`;
+  return `first portion included, +R20 a starch and +R15 a side after that`;
 });
 
 await step('anything selected can be deselected, in every group', async () => {
