@@ -8,7 +8,7 @@
 # variable below. Nothing about heritagebites.co.za changes — the Pretoria
 # WordPress site on that domain is untouched; this lives on its own address.
 #
-# To deploy (step by step: docs/render-deploy.md):
+# To deploy the preview:
 #
 #   dashboard.render.com → New + → Blueprint → pick this repository
 #
@@ -18,7 +18,7 @@
 #   HB_VAPID_PRIVATE_KEY    signs every Web Push notification
 #   HB_OWNER_PUSH_KEY       the enrolment password for the /alerts page
 #
-# Expectations on the free plan (also in docs/render-deploy.md): the service
+# Expectations on the free plan: the service
 # sleeps after ~15 minutes of inactivity and wakes in about a minute, and the
 # filesystem is wiped on every deploy — orders do not survive a redeploy, which
 # is acceptable for testing and is not acceptable for the real service window
