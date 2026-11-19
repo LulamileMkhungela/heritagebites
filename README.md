@@ -18,11 +18,25 @@ Open `http://localhost:4000` and check `/api/health`. Use `npm run dev` for the 
 
 1. Use a separate HTTPS subdomain such as `order.heritagebites.co.za`. Keep WordPress and email unchanged. Clone `main` into a private folder **outside** the web document roots, or keep the existing clone.
 2. Set `HB_PUBLIC_URL` and `HB_SITE_URL` to that HTTPS origin. Set `HB_DATA_DIR` to an absolute, private, writable directory outside the clone so it survives updates. Use one app instance for the JSON store. Keep these settings in a restricted `.env` in the app folder or in the host's private settings. If the app already holds orders, back up and migrate them before changing the data directory.
-3. Build before starting or restarting the app. Keep **Automatic Pull & Deploy** disabled and choose **Git Version Control → Actions → Pull & Deploy** on the clone. SPanel's `.autodeploy` hook runs `npm ci --include=dev` and builds `dist/` without an SSH login. Check **Actions → Manage** for `[SPanel] Frontend ready`. The hook uses `HB_SITE_URL` (or `HB_PUBLIC_URL`) from the environment or `.env`, defaulting to `https://order.heritagebites.co.za`. It does not restart the app or change any server settings.
+3. Choose **Git Version Control → Actions → Pull & Deploy** on the existing clone, or wait for its scheduled pull. The production `dist/` is checked in so SPanel can deploy it without running Vite. Confirm `dist/index.html` and `dist/assets/` exist in the app folder. `.autodeploy` checks the committed bundle and reports `[SPanel] Frontend ready: dist/index.html (prebuilt)` in its output. It does not restart the app. If a previous manual `dist/` upload blocks Git from pulling, move only that folder outside the clone and retry.
 4. In **NodeJS Manager → Custom**, use the existing clone folder containing `package.json`; the start command is `npm start`. Use a compatible Node version. Check the app's assigned internal port in NodeJS Manager. If the panel does not pass that number as `PORT`, set `PORT` to the same number in the app's private `.env`. `4000` is only the local default. Keep the port behind the HTTPS proxy. Set `HB_TRUST_PROXY=1` only if the app sits behind a single trusted proxy and the Node port is not directly reachable.
-5. If the app is already deployed, use **NodeJS Manager → Restart** after the build; no need to clone or redeploy it. Open `/api/health` on the new HTTPS subdomain, then the home page. If both show SPanel's **The application failed to start**, compare the port in the latest *Output* log with the port in NodeJS Manager and check the *Error* log. If health shows `ok: true` but the home page says **Frontend not built yet**, check that `dist/index.html` exists in the clone and restart from that folder.
+5. Once the bundle is present, use **NodeJS Manager → Restart**; no need to clone or redeploy the app. Open `/api/health` on the HTTPS subdomain, then the home page. If both show SPanel's **The application failed to start**, compare the port in the latest *Output* log with the port in NodeJS Manager and check the *Error* log. If health shows `ok: true` but the home page says **Frontend not built yet**, confirm the app is starting from the clone that contains `dist/`.
 
-If the Git hook does not have access to Node.js and npm, ask the host to enable them for the hook, or build elsewhere and upload the app files **with** `dist/` into the private app folder. Do not upload `web/`, `node_modules`, or a filled-in `.env` from another machine. Test on a controlled staging deployment; disabling card payments alone does not disable orders. `render.yaml` remains the blueprint for the separate Render preview.
+On revisions that do not include `dist/`, `.autodeploy` still tries to build from source. That path needs Node.js and npm in the Git deploy environment and uses `HB_SITE_URL` (or `HB_PUBLIC_URL`) from the environment or `.env`, defaulting to `https://order.heritagebites.co.za`. Keep production and preview builds separate. Test on a controlled staging deployment; disabling card payments alone does not disable orders. `render.yaml` remains the blueprint for the separate Render preview.
+
+### Refresh the SPanel bundle
+
+When a change affects the production frontend, rebuild and commit `dist/` with that change so SPanel doesn't serve an old bundle. Build off the host with a compatible Node version; running `npm run build` on the SPanel checkout rewrites tracked files and can block later pulls.
+
+```sh
+npm ci --include=dev
+site=https://order.heritagebites.co.za
+NODE_ENV=production HB_SITE_URL="$site" VITE_SITE_URL="$site" \
+  VITE_BASE=/ VITE_API_BASE='' VITE_STATIC_PREVIEW=0 npm run build
+git add -A -f -- dist/
+```
+
+Verify the generated `dist/index.html` and assets with `npm start` before committing. The force-add is intentional: `dist/` stays ignored for local builds and Tailwind source scanning. Commit the bundle files, not the ZIP, `node_modules/`, or `.env`.
 
 ## Before taking orders
 
