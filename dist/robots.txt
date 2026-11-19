@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Order tracking, the checkout and owner alerts are per-customer screens with
+# nothing to read until they are in use.
+Disallow: /checkout
+Disallow: /order/
+Disallow: /alerts
+
+Sitemap: https://order.heritagebites.co.za/sitemap.xml

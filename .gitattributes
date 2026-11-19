@@ -1,0 +1,2 @@
+# Keep the checked-in SPanel bundle separate from source in code review.
+/dist/** linguist-generated=true
