@@ -12,7 +12,7 @@
  *
  * Run with the API listening on :4000, after `npm run build`:
  *   node scripts/mobile-audit.mjs
- * Add HB_MOBILE_SHOTS=1 to write docs/screens/mobile-*.png for a visual check.
+ * Add HB_MOBILE_SHOTS=1 to write ignored screenshots to artifacts/mobile-audit/.
  */
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -21,10 +21,9 @@ import { prepareRuntime } from './lib/chromium-runtime.mjs';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const root = join(here, '..');
 const BASE = process.env.HB_BASE ?? 'http://127.0.0.1:4000';
 const SHOTS = process.env.HB_MOBILE_SHOTS === '1';
+const SHOT_DIR = fileURLToPath(new URL('../artifacts/mobile-audit/', import.meta.url));
 
 /* The widths people actually hold: iPhone SE, common Android, iPhone 12–15, Plus. */
 const WIDTHS = [320, 360, 390, 414];
@@ -118,7 +117,7 @@ let microLabels = 0;
 let inlineLinks = 0;
 let checked = 0;
 
-if (SHOTS) mkdirSync(join(root, 'docs', 'screens'), { recursive: true });
+if (SHOTS) mkdirSync(SHOT_DIR, { recursive: true });
 
 try {
   for (const route of ROUTES) {
@@ -284,7 +283,7 @@ try {
         const full = await page.evaluate(() => document.documentElement.scrollHeight);
         await page.setViewport({ width, height: Math.min(full + 40, 3000), deviceScaleFactor: 1, isMobile: true, hasTouch: true });
         await new Promise((r) => setTimeout(r, 250));
-        await page.screenshot({ path: join(root, 'docs', 'screens', `mobile-${route.shot}.png`) });
+        await page.screenshot({ path: join(SHOT_DIR, `mobile-${route.shot}.png`) });
         await page.setViewport({ width, height: HEIGHT, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
       }
     }

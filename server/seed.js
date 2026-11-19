@@ -28,13 +28,6 @@
 export const SEED_VERSION = 16;
 
 const img = (name) => `/img/${name}.jpg`;
-/*
- * No PLACEHOLDER any more. Every plate and every side has a photograph: the last
- * two (Tlhakwana and Smiley) were filled on 18 Nov 2026. The SVG stays on disk
- * for the share card and as the fallback a future dish can point at, but nothing
- * in the catalogue references it, so a missing photo is now a build error rather
- * than a panel a customer has to look at.
- */
 
 /* --------------------------------------------------------------------- */
 /* Menu structure                                                         */
@@ -502,40 +495,8 @@ function sideBlurb(id) {
  *     search it or put it in a basket.
  */
 export const comingSoon = [
-  /*
-   * Heritage Pots is hidden at the owner's request (14 Nov 2026). Commented out
-   * rather than deleted, so the signed-off copy can come back with one uncomment
-   * if she changes her mind.
-   *
-   * {
-   *   id: 'heritage-pots',
-   *   name: 'Heritage Pots',
-   *   tagline: 'Slow-cooked the way grandmothers taught us',
-   *   blurb: 'Samp, beans and grains — the pots that carry memory.',
-   *   accent: 'chili',
-   *   items: [
-   *     {
-   *       id: 'archive-isistambu', name: 'Isistambu — Samp & Beans', price: 100, image: img('samp-beans'),
-   *       description: 'Samp and sugar beans slow-cooked until creamy, finished with a little butter.',
-   *       status: 'coming-soon',
-   *     },
-   *     {
-   *       id: 'archive-dombolo', name: 'Dombolo', price: 100, image: img('dumplings'),
-   *       description: 'Steamed bread, soft in the middle, made to soak up the gravy on the plate.',
-   *       status: 'coming-soon',
-   *     },
-   *     {
-   *       id: 'archive-motogo', name: 'Motogo wa Mabele', price: 100, image: img('mabele'),
-   *       description: 'Sorghum porridge cooked the old way and served warm, the way it is made at home.',
-   *       status: 'coming-soon',
-   *     },
-   *     // Tlhakwana only ever had a short-rib photo to sit on, and a photo of the
-   *     // wrong dish is worse than no card. It is already on the Traditional menu
-   *     // as a protein, so nothing is lost by leaving it out here.
-   *     // { id: 'archive-tlhakwana', name: 'Tlhakwana', image: img('short-ribs'), status: 'coming-soon' },
-   *   ],
-   * },
-   */
+  // Heritage Pots is hidden at the owner's request. Its old copy and photos
+  // are available in Git history if the owner approves bringing it back.
   {
     id: 'kasi-fast-food',
     name: 'Kasi Fast Food',
@@ -922,21 +883,8 @@ export const settings = {
   email: 'heritagebitesfood@gmail.com',
   established: 2025,
 
-  /*
-   * Delivery: included in the plate price, Rosebank and Sandton only.
-   *
-   * This is the rule the owner signed off (`docs/regomoditswe-answers-2026-10.md`:
-   * "Delivery fee: None — delivery is included in the plate price", and the plate
-   * lines that read "R100 a plate (delivery included)").
-   *
-   * The two fee fields stay in the schema because the pricing code reads them:
-   * `deliveryFeeCents` returns zero when the free-delivery threshold is zero, so
-   * `freeDeliveryAbove: 0` is what makes delivery free rather than a separate
-   * branch in the maths. A zero flat fee is the same statement in the other
-   * field, and it keeps any surface that still prints `deliveryFlat` honest.
-   *
-   * The R100 minimum still applies — it is a floor on the order, not a fee.
-   */
+  // Legacy delivery fields for the catalogue and pricing schema. The ordering
+  // API applies the address-specific delivery rules from shared/address.js.
   deliveryIncluded: true,
   deliveryFlat: 0,
   freeDeliveryAbove: 0,

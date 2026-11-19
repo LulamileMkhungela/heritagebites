@@ -18,8 +18,8 @@
  * and giving away food.
  *
  * What this cannot prove is that payments.yoco.com behaves as documented; that
- * needs one real test-mode payment with an `sk_test_` key. See
- * docs/production-payments-yoco.md.
+ * needs one real test-mode payment with an `sk_test_` key. See the launch checks
+ * in README.md.
  */
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';

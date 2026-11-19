@@ -1,5 +1,5 @@
 /*
- * Headless Chromium for this sandbox, shared by the screenshot and PDF scripts.
+ * Headless Chromium for the browser-based storefront checks.
  *
  * @sparticuz/chromium unpacks the browser and a set of libs to /tmp, but the
  * al2023 bundle it extracts on this host lacks the NSS libs the shell binary
