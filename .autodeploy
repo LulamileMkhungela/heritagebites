@@ -1,0 +1,42 @@
+#!/bin/bash
+# SPanel runs this after Pull & Deploy. NodeJS Manager still owns the app process.
+set -euo pipefail
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+
+if ! command -v node >/dev/null || ! command -v npm >/dev/null; then
+  echo '[SPanel] The Git deploy hook needs Node.js and npm on its PATH. Ask the host to enable them for this account.' >&2
+  exit 1
+fi
+
+# Read the private .env as data, not shell commands. The host environment takes
+# precedence. A deployment at a different HTTPS origin can set HB_SITE_URL.
+env_file=()
+if [[ -f .env ]]; then
+  env_file+=(--env-file=.env)
+fi
+site_url=$(node "${env_file[@]}" --input-type=module <<'JS'
+import { normaliseSiteUrl } from './shared/seo.js';
+const configured = process.env.HB_SITE_URL?.trim() ||
+  process.env.HB_PUBLIC_URL?.trim() || 'https://order.heritagebites.co.za';
+let site;
+try { site = new URL(configured); } catch { /* Report a configuration error below. */ }
+if (!site || site.protocol !== 'https:' || site.pathname !== '/' ||
+    site.username || site.password || site.search || site.hash || !normaliseSiteUrl(site.origin)) {
+  console.error('[SPanel] Set HB_SITE_URL to the app’s public HTTPS origin, without a path, query or credentials.');
+  process.exit(1);
+}
+process.stdout.write(site.origin);
+JS
+)
+
+printf '[SPanel] Building with Node %s.\n' "$(node -v)"
+# The hook can inherit NODE_ENV=production. Vite and TypeScript are dev dependencies.
+npm ci --include=dev --no-audit --no-fund
+NODE_ENV=production HB_SITE_URL="$site_url" VITE_SITE_URL="$site_url" \
+  VITE_BASE=/ VITE_API_BASE='' VITE_STATIC_PREVIEW=0 npm run build
+
+if [[ ! -s dist/index.html ]]; then
+  echo '[SPanel] The production build did not create dist/index.html.' >&2
+  exit 1
+fi
+printf '[SPanel] Frontend ready: dist/index.html. Restart this app in NodeJS Manager, then check /api/health and /.\n'
