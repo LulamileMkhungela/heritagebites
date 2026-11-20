@@ -227,15 +227,22 @@ export function serviceStatus(settings, now = new Date()) {
   const window = windowLabel(settings);
 
   /*
-   * Three different closed states, and they must not read the same.
+   * Two ways the site reads when the kitchen is not cooking, and they must not
+   * read the same:
    *
-   *   - outside the window on a cooking day (early morning, after lunch),
+   *   - outside the window on a cooking day (early morning, before the pots),
    *   - a day we never cook on at all (Monday to Wednesday, weekends).
    *
    * Telling someone on a Wednesday that "we are closed right now" reads like a
    * temporary glitch; they need to know the kitchen simply is not open today,
    * when it will be, and that the plan is to trade every day. The wording stays
    * warm without promising a date the business has not given us.
+   *
+   * After the window on a cooking day there is no third reading: the owner's
+   * instruction (20 Nov 2026) is that once the pots are done the site says what
+   * any rest day says — "{Day} is a rest day" and the scheduling note — instead
+   * of the old "Today's window has closed / Next cooking day: …" closure notice.
+   * The same-day order rule is unchanged; only the words are.
    */
   const isServiceDay = Boolean(today);
   /*
@@ -261,20 +268,16 @@ export function serviceStatus(settings, now = new Date()) {
       ? `Today is a special opening. The pots go on at ${today.open}. Place your order now and it goes in first — today's window is ${today.open}–${today.close}.`
       : `The pots go on at ${today.open}. Place your order now and it goes in first — today's window is ${today.open}–${today.close}.`;
     shortMessage = `Pots go on at ${today.open} — order now and you are first in the queue.`;
-  } else if (isServiceDay) {
-    headline = "Today's window has closed";
-    message = nextWindowLabel
-      ? `Today's ${today.open}–${today.close} ${isSpecial ? 'special opening' : 'window'} has closed. The next one is ${nextWindowLabel} — ordering opens again shortly before it. If you need food today, message us and we will tell you whether the kitchen can still help.`
-      : `Today's ${today.open}–${today.close} window has closed. Please contact us on WhatsApp to arrange an order.`;
-    /*
-     * The strip prints `headline` and then this line, so this one carries only
-     * what the headline does not already say. It used to open with "Today's
-     * window has closed" directly beside a headline reading exactly that.
-     */
-    shortMessage = nextWindowLabel
-      ? `Next cooking day: ${nextWindowLabel}. Ordering opens again shortly before it.`
-      : 'Please message us to arrange the next one.';
   } else {
+    /*
+     * A rest day — and, since 20 Nov 2026, also a cooking day whose window has
+     * gone by. The kitchen is not cooking now, and both states say exactly the
+     * same thing: which days it does cook, when the next one is, that ordering
+     * ahead is open, and the notice the kitchen needs. The day name in the
+     * headline is today's own, so Thursday evening reads "Thursday is a rest
+     * day" — from the customer's side the kitchen is done for the day, which
+     * is the same fact.
+     */
     headline = `${at.dayLabel} is a rest day`;
     /*
      * What a rest day actually means for the customer, in their terms.
