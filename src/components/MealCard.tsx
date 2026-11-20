@@ -41,19 +41,22 @@ export function MealCard({
    *
    * Owner, 17 Nov 2026: "the plate text must be far to the right in the card",
    * having been the left. In grid view it now sits at the right end of the row
-   * under the photo, price first and the unit after it; in list view it is the
-   * rightmost thing on the row, level with the dish name, so a column of cards
-   * reads as a price column.
+   * under the photo; in list view it is the rightmost thing on the row, level
+   * with the dish name, so a column of cards reads as a price column.
    *
-   * The unit is "plate" or "portion" from the item itself — a bowl of chakalaka
-   * is not a plate, and printing "plate" beside R30 would be a small lie repeated
-   * on nine cards.
+   * Owner, 20 Nov 2026: drop the "PLATE" unit word. The section heading above
+   * the cards already names the category ("Traditional Plates · 10 plates",
+   * "This week's plates"), so the word repeated itself down the grid — the
+   * price stands on its own. Sides keep "PORTION": their heading says "Sides &
+   * Relishes", not portions, and a bowl of chakalaka sold by the portion is
+   * the one place the word still carries weight.
    */
-  const unit = item.portion ? 'portion' : 'plate';
   const priceBlock = (
     <span className={`flex shrink-0 items-baseline gap-1 font-mono font-bold ${isList ? 'text-xl' : 'text-lg'}`}>
       {zar(item.price)}
-      <span className="font-sans text-[11px] font-normal uppercase tracking-wider text-theme-muted">{unit}</span>
+      {item.portion && (
+        <span className="font-sans text-[11px] font-normal uppercase tracking-wider text-theme-muted">portion</span>
+      )}
     </span>
   );
 
