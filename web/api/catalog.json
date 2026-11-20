@@ -2032,16 +2032,16 @@
   },
   "service": {
     "open": false,
-    "orderingClosed": false,
-    "isServiceDay": false,
+    "orderingClosed": true,
+    "isServiceDay": true,
     "specialToday": false,
     "timeZone": "Africa/Johannesburg",
-    "dayLabel": "Wednesday",
-    "timeLabel": "20:26",
+    "dayLabel": "Friday",
+    "timeLabel": "21:03",
     "windowLabel": "12:00–13:30",
-    "todayLabel": "Wednesday: closed",
+    "todayLabel": "Friday 12:00–13:30",
     "nextWindowLabel": "Thursday 12:00–13:30",
-    "headline": "Wednesday is a rest day",
+    "headline": "Friday is a rest day",
     "message": "We are not cooking today. The kitchen cooks on Thursdays and Fridays, 12:00–13:30. The next one is Thursday 12:00–13:30. You can still order — nothing is blocked. Pick any cooking day ahead when you check out, and schedule as far forward as you like. Please order a day or two before the day you want, and at least 24 hours ahead, so the kitchen has time to buy and prep. Catering for an event? Ask us on WhatsApp.",
     "shortMessage": "Not cooking today — the kitchen cooks Thursdays and Fridays, 12:00–13:30. You can still schedule any cooking day ahead; please order at least 24 hours before it. Catering? Ask us on WhatsApp.",
     "serviceDays": [
@@ -2050,26 +2050,6 @@
     ]
   },
   "bookableDates": [
-    {
-      "date": "2026-11-19",
-      "dayLabel": "Thursday",
-      "label": "Thursday 19 Nov",
-      "shortLabel": "Thursday 19 Nov",
-      "open": "12:00",
-      "close": "13:30",
-      "isToday": false,
-      "special": false
-    },
-    {
-      "date": "2026-11-20",
-      "dayLabel": "Friday",
-      "label": "Friday 20 Nov",
-      "shortLabel": "Friday 20 Nov",
-      "open": "12:00",
-      "close": "13:30",
-      "isToday": false,
-      "special": false
-    },
     {
       "date": "2026-11-26",
       "dayLabel": "Thursday",
@@ -2209,6 +2189,26 @@
       "close": "13:30",
       "isToday": false,
       "special": false
+    },
+    {
+      "date": "2027-01-14",
+      "dayLabel": "Thursday",
+      "label": "Thursday 14 Jan",
+      "shortLabel": "Thursday 14 Jan",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
+    },
+    {
+      "date": "2027-01-15",
+      "dayLabel": "Friday",
+      "label": "Friday 15 Jan",
+      "shortLabel": "Friday 15 Jan",
+      "open": "12:00",
+      "close": "13:30",
+      "isToday": false,
+      "special": false
     }
   ],
   "payments": {
@@ -2225,5 +2225,5 @@
   "notifications": {
     "push": false
   },
-  "today": 3
+  "today": 5
 }

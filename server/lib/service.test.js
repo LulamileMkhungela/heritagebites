@@ -111,16 +111,24 @@ describe('service window', () => {
     assert.match(monday.message, /^We are not cooking today/);
   });
 
-  test('a cooking day outside the window reads differently from a rest day', () => {
+  test('a cooking day outside the window: before the pots it reads its own way, after them like a rest day', () => {
     const early = serviceStatus(settings, sast('2026-10-29', '08:00'));
     assert.equal(early.isServiceDay, true);
     assert.equal(early.headline, 'Not cooking yet');
     assert.match(early.message, /pots go on at 12:00/);
 
+    // Owner's instruction (20 Nov 2026): once the window has gone by the
+    // kitchen is simply not cooking, so the site says what any rest day says
+    // instead of a closure notice. The wording changed, not the order rule —
+    // same-day orders still wait for a booked cooking day.
     const late = serviceStatus(settings, sast('2026-10-29', '15:00'));
     assert.equal(late.isServiceDay, true);
-    assert.equal(late.headline, "Today's window has closed");
-    assert.match(late.message, /Friday 12:00–13:30/);
+    assert.equal(late.headline, 'Thursday is a rest day');
+    assert.match(late.message, /^We are not cooking today/);
+    assert.match(late.message, /Friday 12:00–13:30/, 'the next window is still named');
+    assert.match(late.shortMessage, /^Not cooking today/);
+    assert.match(late.shortMessage, /24 hours/);
+    assert.equal(late.orderingClosed, true, 'wording only — same-day orders still need a booked day');
   });
 
   test('an open kitchen states the closing time and the days it trades', () => {
